@@ -1,0 +1,7 @@
+/target
+node_modules
+*.db
+*.db-journal
+packages/web/dist
+.sqlx
+.claude/

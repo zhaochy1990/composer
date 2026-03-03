@@ -1,0 +1,154 @@
+use composer_api_types::*;
+use sqlx::SqlitePool;
+use uuid::Uuid;
+
+#[derive(sqlx::FromRow)]
+struct TaskRow {
+    id: String,
+    title: String,
+    description: Option<String>,
+    status: String,
+    priority: i32,
+    assigned_agent_id: Option<String>,
+    position: f64,
+    created_at: String,
+    updated_at: String,
+}
+
+impl TryFrom<TaskRow> for Task {
+    type Error = anyhow::Error;
+
+    fn try_from(row: TaskRow) -> Result<Self, Self::Error> {
+        Ok(Task {
+            id: row.id.parse()?,
+            title: row.title,
+            description: row.description,
+            status: serde_json::from_value(serde_json::Value::String(row.status))?,
+            priority: row.priority,
+            assigned_agent_id: row.assigned_agent_id.map(|s| s.parse()).transpose()?,
+            position: row.position,
+            created_at: row.created_at.parse()?,
+            updated_at: row.updated_at.parse()?,
+        })
+    }
+}
+
+pub async fn create(
+    pool: &SqlitePool,
+    title: &str,
+    description: Option<&str>,
+    priority: Option<i32>,
+    status: Option<&TaskStatus>,
+) -> anyhow::Result<Task> {
+    let id = Uuid::new_v4().to_string();
+    let priority = priority.unwrap_or(0);
+    let status_str = status
+        .map(|s| serde_json::to_value(s).ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string())))
+        .flatten()
+        .unwrap_or_else(|| "backlog".to_string());
+
+    // Get next position for the target column
+    let max_pos: Option<(f64,)> = sqlx::query_as(
+        "SELECT COALESCE(MAX(position), 0.0) FROM tasks WHERE status = ?"
+    )
+    .bind(&status_str)
+    .fetch_optional(pool)
+    .await?;
+    let position = max_pos.map(|r| r.0).unwrap_or(0.0) + 1.0;
+
+    sqlx::query(
+        "INSERT INTO tasks (id, title, description, status, priority, position) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&id)
+    .bind(title)
+    .bind(description)
+    .bind(&status_str)
+    .bind(priority)
+    .bind(position)
+    .execute(pool)
+    .await?;
+
+    find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
+}
+
+pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Task>> {
+    let row = sqlx::query_as::<_, TaskRow>("SELECT * FROM tasks WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    row.map(Task::try_from).transpose()
+}
+
+pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Task>> {
+    let rows = sqlx::query_as::<_, TaskRow>("SELECT * FROM tasks ORDER BY position ASC")
+        .fetch_all(pool)
+        .await?;
+    rows.into_iter().map(Task::try_from).collect()
+}
+
+pub async fn list_by_status(pool: &SqlitePool, status: &TaskStatus) -> anyhow::Result<Vec<Task>> {
+    let status_str = serde_json::to_value(status)?
+        .as_str().unwrap_or("backlog").to_string();
+    let rows = sqlx::query_as::<_, TaskRow>(
+        "SELECT * FROM tasks WHERE status = ? ORDER BY position ASC"
+    )
+    .bind(&status_str)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(Task::try_from).collect()
+}
+
+pub async fn update(
+    pool: &SqlitePool,
+    id: &str,
+    title: Option<&str>,
+    description: Option<&str>,
+    priority: Option<i32>,
+    status: Option<&TaskStatus>,
+    position: Option<f64>,
+) -> anyhow::Result<Task> {
+    if let Some(title) = title {
+        sqlx::query("UPDATE tasks SET title = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+            .bind(title).bind(id).execute(pool).await?;
+    }
+    if let Some(desc) = description {
+        sqlx::query("UPDATE tasks SET description = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+            .bind(desc).bind(id).execute(pool).await?;
+    }
+    if let Some(pri) = priority {
+        sqlx::query("UPDATE tasks SET priority = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+            .bind(pri).bind(id).execute(pool).await?;
+    }
+    if let Some(status) = status {
+        let status_str = serde_json::to_value(status)?
+            .as_str().unwrap_or("backlog").to_string();
+        sqlx::query("UPDATE tasks SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+            .bind(&status_str).bind(id).execute(pool).await?;
+    }
+    if let Some(pos) = position {
+        sqlx::query("UPDATE tasks SET position = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+            .bind(pos).bind(id).execute(pool).await?;
+    }
+    find_by_id(pool, id).await?.ok_or_else(|| anyhow::anyhow!("Task not found"))
+}
+
+pub async fn update_status(pool: &SqlitePool, id: &str, status: &TaskStatus) -> anyhow::Result<()> {
+    let status_str = serde_json::to_value(status)?
+        .as_str().unwrap_or("backlog").to_string();
+    sqlx::query("UPDATE tasks SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(&status_str).bind(id).execute(pool).await?;
+    Ok(())
+}
+
+pub async fn update_assigned_agent(pool: &SqlitePool, id: &str, agent_id: Option<&str>) -> anyhow::Result<()> {
+    sqlx::query("UPDATE tasks SET assigned_agent_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(agent_id).bind(id).execute(pool).await?;
+    Ok(())
+}
+
+pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM tasks WHERE id = ?")
+        .bind(id).execute(pool).await?;
+    Ok(())
+}

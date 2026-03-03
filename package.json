@@ -1,0 +1,21 @@
+{
+    "name": "composer",
+    "version": "0.1.0",
+    "private": true,
+    "packageManager": "pnpm@9.15.0",
+    "engines": { "node": ">=20" },
+    "scripts": {
+        "dev": "concurrently \"pnpm run dev:web\" \"pnpm run dev:server\"",
+        "dev:web": "cd packages/web && pnpm run dev",
+        "dev:server": "cargo watch -w crates -x \"run --bin composer-server\"",
+        "build:web": "cd packages/web && pnpm run build",
+        "build:server": "cargo build --release --bin composer-server",
+        "build": "pnpm run build:web && pnpm run build:server",
+        "generate-types": "cargo test --package composer-api-types -- export_bindings",
+        "lint": "cd packages/web && pnpm run lint",
+        "format": "cargo fmt --all && cd packages/web && pnpm run format"
+    },
+    "devDependencies": {
+        "concurrently": "^9.0.0"
+    }
+}

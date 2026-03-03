@@ -1,0 +1,18 @@
+[package]
+name = "composer-services"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+composer-api-types = { path = "../api-types" }
+composer-db = { path = "../db" }
+composer-executors = { path = "../executors" }
+composer-git = { path = "../git" }
