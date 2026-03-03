@@ -36,21 +36,41 @@ impl AgentService {
         let discovered = discovery::discover_agents().await;
         let mut agents = Vec::new();
         for d in discovered {
-            let agent = composer_db::models::agent::create(
-                &self.db.pool,
-                &d.name,
-                &d.agent_type,
-                Some(&d.executable_path),
-            )
-            .await?;
-            if d.is_authenticated {
-                composer_db::models::agent::update_auth_status(
+            // Check if an agent of this type already exists — avoid duplicates
+            let agent = if let Some(existing) =
+                composer_db::models::agent::find_by_agent_type(&self.db.pool, &d.agent_type).await?
+            {
+                // Update executable path in case it changed
+                composer_db::models::agent::update_executable_path(
                     &self.db.pool,
-                    &agent.id.to_string(),
-                    &AuthStatus::Authenticated,
+                    &existing.id.to_string(),
+                    &d.executable_path,
                 )
                 .await?;
-            }
+                existing
+            } else {
+                composer_db::models::agent::create(
+                    &self.db.pool,
+                    &d.name,
+                    &d.agent_type,
+                    Some(&d.executable_path),
+                )
+                .await?
+            };
+
+            // Always refresh auth status on discover
+            let auth_status = if d.is_authenticated {
+                AuthStatus::Authenticated
+            } else {
+                AuthStatus::Unauthenticated
+            };
+            composer_db::models::agent::update_auth_status(
+                &self.db.pool,
+                &agent.id.to_string(),
+                &auth_status,
+            )
+            .await?;
+
             let updated =
                 composer_db::models::agent::find_by_id(&self.db.pool, &agent.id.to_string())
                     .await?

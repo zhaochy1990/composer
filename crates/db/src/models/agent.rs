@@ -64,6 +64,25 @@ pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Ag
     row.map(Agent::try_from).transpose()
 }
 
+pub async fn find_by_agent_type(pool: &SqlitePool, agent_type: &AgentType) -> anyhow::Result<Option<Agent>> {
+    let type_str = serde_json::to_value(agent_type)?
+        .as_str().unwrap_or("claude_code").to_string();
+    let row = sqlx::query_as::<_, AgentRow>("SELECT * FROM agents WHERE agent_type = ? LIMIT 1")
+        .bind(&type_str)
+        .fetch_optional(pool)
+        .await?;
+    row.map(Agent::try_from).transpose()
+}
+
+pub async fn update_executable_path(pool: &SqlitePool, id: &str, executable_path: &str) -> anyhow::Result<()> {
+    sqlx::query("UPDATE agents SET executable_path = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(executable_path)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Agent>> {
     let rows = sqlx::query_as::<_, AgentRow>("SELECT * FROM agents ORDER BY created_at DESC")
         .fetch_all(pool)

@@ -135,15 +135,19 @@ impl AgentProcessManager {
         });
 
         // Monitor: wait for completion or cancellation
+        // Move child into the monitor task so kill_on_drop doesn't fire prematurely
         let monitor_handle = tokio::spawn(async move {
             tokio::select! {
                 _ = cancel_clone.cancelled() => {
-                    tracing::info!("Session {} cancelled", session_id);
+                    tracing::info!("Session {} cancelled, killing process", session_id);
+                    let _ = child.kill().await;
                 }
                 _ = stdout_handle => {
-                    tracing::info!("Session {} stdout closed", session_id);
+                    tracing::info!("Session {} stdout closed, waiting for process exit", session_id);
                 }
             }
+            // Wait for the process to fully exit (prevents zombies)
+            let _ = child.wait().await;
             let _ = stderr_handle.await;
             processes.remove(&session_id);
         });

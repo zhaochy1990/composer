@@ -37,7 +37,15 @@ impl SessionService {
         let db = self.db.clone();
 
         tokio::spawn(async move {
-            while let Ok(event) = rx.recv().await {
+            loop {
+                let event = match rx.recv().await {
+                    Ok(event) => event,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!("Event listener lagged, dropped {} events", n);
+                        continue;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                };
                 match event {
                     WsEvent::SessionOutput { session_id, log_type, ref content } => {
                         let session_id_str = session_id.to_string();
@@ -106,7 +114,7 @@ impl SessionService {
                     }
                     _ => {}
                 }
-            }
+            } // end loop
         });
     }
 

@@ -98,28 +98,29 @@ pub async fn list_by_task(pool: &SqlitePool, task_id: &str) -> anyhow::Result<Ve
 }
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &SessionStatus) -> anyhow::Result<()> {
-    let status_str = serde_json::to_value(status)?
-        .as_str().unwrap_or("created").to_string();
-    let now = chrono::Utc::now().to_rfc3339();
-
-    let started_update = match status {
-        SessionStatus::Running => format!(", started_at = '{}'", now),
-        _ => String::new(),
-    };
-    let completed_update = match status {
-        SessionStatus::Completed | SessionStatus::Failed => format!(", completed_at = '{}'", now),
-        _ => String::new(),
+    let status_str = match status {
+        SessionStatus::Created => "created",
+        SessionStatus::Running => "running",
+        SessionStatus::Paused => "paused",
+        SessionStatus::Completed => "completed",
+        SessionStatus::Failed => "failed",
     };
 
-    let sql = format!(
-        "UPDATE sessions SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'){}{} WHERE id = ?",
-        started_update, completed_update
-    );
-    sqlx::query(&sql)
-        .bind(&status_str)
-        .bind(id)
-        .execute(pool)
-        .await?;
+    // Use a single parameterized query with CASE expressions to conditionally set timestamps
+    sqlx::query(
+        "UPDATE sessions SET \
+         status = ?, \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), \
+         started_at = CASE WHEN ? = 'running' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE started_at END, \
+         completed_at = CASE WHEN ? IN ('completed', 'failed') THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE completed_at END \
+         WHERE id = ?"
+    )
+    .bind(status_str)
+    .bind(status_str)
+    .bind(status_str)
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 

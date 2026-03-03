@@ -25,7 +25,15 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
     // Forward events to WebSocket client
     let send_task = tokio::spawn(async move {
-        while let Ok(event) = event_rx.recv().await {
+        loop {
+            let event = match event_rx.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!("WebSocket client lagged, dropped {} events", n);
+                    continue;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
             if let Ok(json) = serde_json::to_string(&event) {
                 if sender.send(Message::Text(json.into())).await.is_err() {
                     break;
