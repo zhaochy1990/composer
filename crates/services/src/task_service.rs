@@ -2,25 +2,30 @@ use std::sync::Arc;
 use composer_api_types::*;
 use composer_db::Database;
 use crate::event_bus::EventBus;
+use crate::session_service::SessionService;
 
 #[derive(Clone)]
 pub struct TaskService {
     db: Arc<Database>,
     event_bus: EventBus,
+    session_service: SessionService,
 }
 
 impl TaskService {
-    pub fn new(db: Arc<Database>, event_bus: EventBus) -> Self {
-        Self { db, event_bus }
+    pub fn new(db: Arc<Database>, event_bus: EventBus, session_service: SessionService) -> Self {
+        Self { db, event_bus, session_service }
     }
 
     pub async fn create(&self, req: CreateTaskRequest) -> anyhow::Result<Task> {
+        let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
         let task = composer_db::models::task::create(
             &self.db.pool,
             &req.title,
             req.description.as_deref(),
             req.priority,
             req.status.as_ref(),
+            assigned_agent_id_str.as_deref(),
+            req.repo_path.as_deref(),
         )
         .await?;
         self.event_bus.broadcast(WsEvent::TaskCreated(task.clone()));
@@ -36,6 +41,7 @@ impl TaskService {
     }
 
     pub async fn update(&self, id: &str, req: UpdateTaskRequest) -> anyhow::Result<Task> {
+        let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
         let task = composer_db::models::task::update(
             &self.db.pool,
             id,
@@ -44,6 +50,8 @@ impl TaskService {
             req.priority,
             req.status.as_ref(),
             req.position,
+            assigned_agent_id_str.as_deref(),
+            req.repo_path.as_deref(),
         )
         .await?;
         self.event_bus.broadcast(WsEvent::TaskUpdated(task.clone()));
@@ -75,7 +83,7 @@ impl TaskService {
         let from_status = old_task.status.clone();
         composer_db::models::task::update_status(&self.db.pool, id, &req.status).await?;
         if let Some(pos) = req.position {
-            composer_db::models::task::update(&self.db.pool, id, None, None, None, None, Some(pos))
+            composer_db::models::task::update(&self.db.pool, id, None, None, None, None, Some(pos), None, None)
                 .await?;
         }
         let task = composer_db::models::task::find_by_id(&self.db.pool, id)
@@ -87,5 +95,48 @@ impl TaskService {
             to_status: req.status,
         });
         Ok(task)
+    }
+
+    pub async fn start_task(&self, task_id: &str) -> anyhow::Result<StartTaskResponse> {
+        let task = composer_db::models::task::find_by_id(&self.db.pool, task_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+
+        // Validate task is in backlog
+        if !matches!(task.status, TaskStatus::Backlog) {
+            return Err(anyhow::anyhow!("Task must be in backlog to start"));
+        }
+
+        let agent_id = task.assigned_agent_id
+            .ok_or_else(|| anyhow::anyhow!("Task has no assigned agent"))?;
+        let repo_path = task.repo_path.clone()
+            .ok_or_else(|| anyhow::anyhow!("Task has no repo_path configured"))?;
+
+        // Build prompt from title + description
+        // Use " - " separator instead of newlines because Windows npx.cmd
+        // cannot handle newlines in batch file arguments
+        let prompt = if let Some(ref desc) = task.description {
+            format!("{} - {}", task.title, desc)
+        } else {
+            task.title.clone()
+        };
+
+        let session = self.session_service.create_session(CreateSessionRequest {
+            agent_id,
+            task_id: task.id,
+            prompt,
+            repo_path,
+            auto_approve: Some(task.auto_approve),
+        }).await?;
+
+        // Re-fetch task after session creation (status changed to in_progress)
+        let updated_task = composer_db::models::task::find_by_id(&self.db.pool, task_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+
+        Ok(StartTaskResponse {
+            task: updated_task,
+            session,
+        })
     }
 }

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Plus } from 'lucide-react';
 import type { TaskStatus } from '@/types/generated';
 import { useCreateTask } from '@/hooks/use-tasks';
+import { useAgents } from '@/hooks/use-agents';
 
 interface TaskCreateDialogProps {
     isOpen: boolean;
@@ -14,8 +15,18 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [priority, setPriority] = useState(0);
+    const [assignedAgentId, setAssignedAgentId] = useState('');
+    const [repoPath, setRepoPath] = useState('');
 
     const createTask = useCreateTask();
+    const { data: agents } = useAgents();
+
+    // Default to first available agent (Claude Code)
+    useEffect(() => {
+        if (agents?.length && !assignedAgentId) {
+            setAssignedAgentId(agents[0].id);
+        }
+    }, [agents, assignedAgentId]);
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -27,12 +38,16 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                 description: description.trim() || undefined,
                 priority,
                 status: defaultStatus,
+                assigned_agent_id: assignedAgentId || undefined,
+                repo_path: repoPath.trim() || undefined,
             },
             {
                 onSuccess: () => {
                     setTitle('');
                     setDescription('');
                     setPriority(0);
+                    setAssignedAgentId(agents?.[0]?.id ?? '');
+                    setRepoPath('');
                     onClose();
                 },
             },
@@ -40,7 +55,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
     }
 
     return (
-        <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) { setTitle(''); setDescription(''); setPriority(0); onClose(); } }}>
+        <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) { setTitle(''); setDescription(''); setPriority(0); setAssignedAgentId(agents?.[0]?.id ?? ''); setRepoPath(''); onClose(); } }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
                 <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6">
@@ -103,6 +118,37 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                 <option value={2}>Medium</option>
                                 <option value={3}>High</option>
                             </select>
+                        </div>
+
+                        <div>
+                            <label htmlFor="create-agent" className="block text-sm font-medium text-gray-300 mb-1">
+                                Agent
+                            </label>
+                            <select
+                                id="create-agent"
+                                value={assignedAgentId}
+                                onChange={e => setAssignedAgentId(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            >
+                                <option value="">None</option>
+                                {agents?.map(agent => (
+                                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label htmlFor="create-repo-path" className="block text-sm font-medium text-gray-300 mb-1">
+                                Repo Path
+                            </label>
+                            <input
+                                id="create-repo-path"
+                                type="text"
+                                value={repoPath}
+                                onChange={e => setRepoPath(e.target.value)}
+                                placeholder="e.g. C:\projects\my-repo"
+                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            />
                         </div>
 
                         <p className="text-xs text-gray-500">

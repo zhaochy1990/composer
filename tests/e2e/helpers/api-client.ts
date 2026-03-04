@@ -6,6 +6,9 @@ interface Task {
   description: string | null;
   priority: number;
   status: string;
+  assigned_agent_id: string | null;
+  repo_path: string | null;
+  auto_approve: boolean;
 }
 
 interface Agent {
@@ -38,7 +41,7 @@ export class ApiClient {
 
   // --- Tasks ---
 
-  async createTask(data: { title: string; description?: string; priority?: number; status?: string }): Promise<Task> {
+  async createTask(data: { title: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string; repo_path?: string }): Promise<Task> {
     return this.fetch<Task>('/tasks', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -91,10 +94,16 @@ export class ApiClient {
     return this.fetch<Task>(`/tasks/${id}`);
   }
 
-  async updateTask(id: string, data: Partial<{ title: string; description: string; priority: number; status: string; position: number }>): Promise<Task> {
+  async updateTask(id: string, data: Partial<{ title: string; description: string; priority: number; status: string; position: number; assigned_agent_id: string; repo_path: string }>): Promise<Task> {
     return this.fetch<Task>(`/tasks/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  async startTask(id: string): Promise<{ task: Task; session: Session }> {
+    return this.fetch<{ task: Task; session: Session }>(`/tasks/${id}/start`, {
+      method: 'POST',
     });
   }
 

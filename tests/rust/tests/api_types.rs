@@ -177,6 +177,8 @@ fn ws_event_tagged_serialization_task_created() {
         status: TaskStatus::Backlog,
         priority: 0,
         assigned_agent_id: None,
+        repo_path: None,
+        auto_approve: true,
         position: 1.0,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),

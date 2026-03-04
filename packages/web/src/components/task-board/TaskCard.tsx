@@ -1,4 +1,4 @@
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Play } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { shortId } from '@/lib/utils';
 
@@ -13,15 +13,21 @@ interface TaskCardProps {
     task: Task;
     onClick: (task: Task) => void;
     agentNameMap?: Record<string, string>;
+    onStart?: (taskId: string) => void;
+    startingTaskId?: string | null;
 }
 
-export function TaskCard({ task, onClick, agentNameMap }: TaskCardProps) {
+export function TaskCard({ task, onClick, agentNameMap, onStart, startingTaskId }: TaskCardProps) {
     const priority = priorityConfig[task.priority] ?? priorityConfig[0];
+    const canStart = task.status === 'backlog' && !!task.assigned_agent_id && !!task.repo_path;
+    const isStarting = startingTaskId === task.id;
 
     return (
-        <button
-            type="button"
+        <div
+            role="button"
+            tabIndex={0}
             onClick={() => onClick(task)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(task); }}
             className="w-full text-left bg-gray-800 border border-gray-700 rounded-md p-3 hover:border-gray-500 transition-colors cursor-pointer group"
         >
             <div className="flex items-start gap-2">
@@ -46,9 +52,20 @@ export function TaskCard({ task, onClick, agentNameMap }: TaskCardProps) {
                                 {agentNameMap?.[task.assigned_agent_id] ?? shortId(task.assigned_agent_id)}
                             </span>
                         )}
+                        {canStart && onStart && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onStart(task.id); }}
+                                disabled={isStarting}
+                                className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50"
+                            >
+                                <Play className="w-3 h-3" />
+                                {isStarting ? 'Starting...' : 'Start'}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
-        </button>
+        </div>
     );
 }

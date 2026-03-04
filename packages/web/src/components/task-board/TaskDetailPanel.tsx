@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Trash2, Plus, Square, Play } from 'lucide-react';
+import { X, Trash2, Square, Play } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
-import { useUpdateTask, useDeleteTask } from '@/hooks/use-tasks';
+import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession } from '@/hooks/use-sessions';
 import { useAgents } from '@/hooks/use-agents';
-import { SessionCreateDialog } from '@/components/sessions/SessionCreateDialog';
 import { SessionOutput } from '@/components/sessions/SessionOutput';
 import { StatusBadge } from '@/components/sessions/StatusBadge';
 import { shortId, formatDuration, formatTime } from '@/lib/utils';
@@ -21,6 +20,8 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const [description, setDescription] = useState(task.description ?? '');
     const [priority, setPriority] = useState(task.priority);
     const [status, setStatus] = useState<TaskStatus>(task.status);
+    const [assignedAgentId, setAssignedAgentId] = useState(task.assigned_agent_id ?? '');
+    const [repoPath, setRepoPath] = useState(task.repo_path ?? '');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => {
@@ -28,20 +29,29 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
         setDescription(task.description ?? '');
         setPriority(task.priority);
         setStatus(task.status);
+        setAssignedAgentId(task.assigned_agent_id ?? '');
+        setRepoPath(task.repo_path ?? '');
         setShowDeleteConfirm(false);
     }, [task.id, task.updated_at]);
 
     const updateTask = useUpdateTask();
     const deleteTask = useDeleteTask();
+    const startTask = useStartTask();
 
     // --- Sessions ---
     const { data: sessions } = useTaskSessions(task.id);
     const { data: agents } = useAgents();
-    const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
     const interruptMutation = useInterruptSession();
     const resumeMutation = useResumeSession();
+
+    // Default to first available agent if not set
+    useEffect(() => {
+        if (agents?.length && !assignedAgentId) {
+            setAssignedAgentId(agents[0].id);
+        }
+    }, [agents, assignedAgentId]);
 
     // Build agent name map
     const agentNameMap = useMemo(() => {
@@ -82,6 +92,11 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
 
     const { data: selectedSession, isLoading: selectedSessionLoading } = useSession(selectedSessionId ?? undefined);
 
+    const [saved, setSaved] = useState(false);
+
+    // Clear saved indicator when task data refreshes
+    useEffect(() => { setSaved(false); }, [task.updated_at]);
+
     // --- Handlers ---
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -94,8 +109,10 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                 description: description.trim() || undefined,
                 priority,
                 status,
+                assigned_agent_id: assignedAgentId || undefined,
+                repo_path: repoPath.trim() || undefined,
             },
-            { onSuccess: () => onClose() },
+            { onSuccess: () => setSaved(true) },
         );
     }
 
@@ -108,10 +125,10 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
 
     return (
         <>
-            {/* Backdrop — ignore clicks while session dialog is open */}
+            {/* Backdrop */}
             <div
                 className="fixed inset-0 bg-black/40 z-40"
-                onMouseDown={(e) => { if (!createDialogOpen && e.target === e.currentTarget) onClose(); }}
+                onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
             />
 
             {/* Panel */}
@@ -197,6 +214,39 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                 </div>
                             </div>
 
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor="edit-agent" className="block text-sm font-medium text-gray-300 mb-1">
+                                        Agent
+                                    </label>
+                                    <select
+                                        id="edit-agent"
+                                        value={assignedAgentId}
+                                        onChange={e => setAssignedAgentId(e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    >
+                                        <option value="">None</option>
+                                        {agents?.map(agent => (
+                                            <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="edit-repo-path" className="block text-sm font-medium text-gray-300 mb-1">
+                                        Repo Path
+                                    </label>
+                                    <input
+                                        id="edit-repo-path"
+                                        type="text"
+                                        value={repoPath}
+                                        onChange={e => setRepoPath(e.target.value)}
+                                        placeholder="e.g. C:\projects\my-repo"
+                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+                            </div>
+
                             <div className="text-xs text-gray-500">
                                 Created {new Date(task.created_at).toLocaleString()}
                                 {task.updated_at !== task.created_at && (
@@ -246,9 +296,9 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                     <button
                                         type="submit"
                                         disabled={!title.trim() || updateTask.isPending}
-                                        className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className={`px-4 py-2 text-sm text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${saved ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'}`}
                                     >
-                                        {updateTask.isPending ? 'Saving...' : 'Save'}
+                                        {updateTask.isPending ? 'Saving...' : saved ? 'Saved' : 'Save'}
                                     </button>
                                 </div>
                             </div>
@@ -259,19 +309,24 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                     <div className="px-6 py-4 border-b border-gray-800">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Sessions</h3>
-                            <button
-                                type="button"
-                                onClick={() => setCreateDialogOpen(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors"
-                            >
-                                <Plus className="w-3.5 h-3.5" />
-                                Run Session
-                            </button>
+                            {task.status === 'backlog' && task.assigned_agent_id && task.repo_path && (
+                                <button
+                                    type="button"
+                                    onClick={() => startTask.mutate(task.id, {
+                                        onSuccess: (data) => setSelectedSessionId(data.session.id),
+                                    })}
+                                    disabled={startTask.isPending}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50"
+                                >
+                                    <Play className="w-3.5 h-3.5" />
+                                    {startTask.isPending ? 'Starting...' : 'Start'}
+                                </button>
+                            )}
                         </div>
 
                         {sortedSessions.length === 0 ? (
                             <p className="text-sm text-gray-500 py-4 text-center">
-                                No sessions yet — click Run Session to start one
+                                No sessions yet{task.status === 'backlog' && task.assigned_agent_id && task.repo_path ? ' — click Start to begin' : ' — assign an agent and repo path first'}
                             </p>
                         ) : (
                             <div className="flex flex-col gap-1">
@@ -366,13 +421,6 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                 </div>
             </div>
 
-            {/* Session create dialog */}
-            <SessionCreateDialog
-                open={createDialogOpen}
-                onOpenChange={setCreateDialogOpen}
-                taskId={task.id}
-                onSessionCreated={(id) => setSelectedSessionId(id)}
-            />
         </>
     );
 }

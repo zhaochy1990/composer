@@ -65,10 +65,7 @@ impl AgentProcessManager {
             args.push(resume_id.clone());
         }
 
-        // Use -- to separate flags from the prompt value, preventing
-        // user-supplied prompts starting with "--" from being parsed as CLI flags
         args.push("-p".to_string());
-        args.push("--".to_string());
         args.push(opts.prompt.clone());
 
         let mut child = Command::new(npx_cmd)

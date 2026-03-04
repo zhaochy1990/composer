@@ -10,6 +10,8 @@ struct TaskRow {
     status: String,
     priority: i32,
     assigned_agent_id: Option<String>,
+    repo_path: Option<String>,
+    auto_approve: bool,
     position: f64,
     created_at: String,
     updated_at: String,
@@ -26,6 +28,8 @@ impl TryFrom<TaskRow> for Task {
             status: serde_json::from_value(serde_json::Value::String(row.status))?,
             priority: row.priority,
             assigned_agent_id: row.assigned_agent_id.map(|s| s.parse()).transpose()?,
+            repo_path: row.repo_path,
+            auto_approve: row.auto_approve,
             position: row.position,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
@@ -39,6 +43,8 @@ pub async fn create(
     description: Option<&str>,
     priority: Option<i32>,
     status: Option<&TaskStatus>,
+    assigned_agent_id: Option<&str>,
+    repo_path: Option<&str>,
 ) -> anyhow::Result<Task> {
     let id = Uuid::new_v4().to_string();
     let priority = priority.unwrap_or(0);
@@ -60,7 +66,7 @@ pub async fn create(
     let position = max_pos.map(|r| r.0).unwrap_or(0.0) + 1.0;
 
     sqlx::query(
-        "INSERT INTO tasks (id, title, description, status, priority, position) VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, title, description, status, priority, position, assigned_agent_id, repo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(title)
@@ -68,6 +74,8 @@ pub async fn create(
     .bind(&status_str)
     .bind(priority)
     .bind(position)
+    .bind(assigned_agent_id)
+    .bind(repo_path)
     .execute(&mut *tx)
     .await?;
 
@@ -112,6 +120,8 @@ pub async fn update(
     priority: Option<i32>,
     status: Option<&TaskStatus>,
     position: Option<f64>,
+    assigned_agent_id: Option<&str>,
+    repo_path: Option<&str>,
 ) -> anyhow::Result<Task> {
     let status_str: Option<String> = status
         .map(|s| serde_json::to_value(s).ok()
@@ -125,6 +135,8 @@ pub async fn update(
          priority = COALESCE(?, priority), \
          status = COALESCE(?, status), \
          position = COALESCE(?, position), \
+         assigned_agent_id = COALESCE(?, assigned_agent_id), \
+         repo_path = COALESCE(?, repo_path), \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE id = ?"
     )
@@ -133,6 +145,8 @@ pub async fn update(
     .bind(priority)
     .bind(status_str.as_deref())
     .bind(position)
+    .bind(assigned_agent_id)
+    .bind(repo_path)
     .bind(id)
     .execute(pool)
     .await?;

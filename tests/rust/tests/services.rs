@@ -23,6 +23,8 @@ mod event_bus_tests {
             status: TaskStatus::Backlog,
             priority: 0,
             assigned_agent_id: None,
+            repo_path: None,
+            auto_approve: true,
             position: 1.0,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -68,7 +70,10 @@ mod task_service_tests {
         db.run_migrations().await.unwrap();
         let event_bus = EventBus::new();
         let rx = event_bus.subscribe();
-        let svc = TaskService::new(Arc::new(db), event_bus);
+        let db = Arc::new(db);
+        let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let session_service = SessionService::new(db.clone(), event_bus.clone(), process_manager);
+        let svc = TaskService::new(db, event_bus, session_service);
         (svc, rx)
     }
 
@@ -81,6 +86,8 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                assigned_agent_id: None,
+                repo_path: None,
             })
             .await
             .unwrap();
@@ -105,6 +112,8 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                assigned_agent_id: None,
+                repo_path: None,
             })
             .await
             .unwrap();
@@ -131,6 +140,8 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                assigned_agent_id: None,
+                repo_path: None,
             })
             .await
             .unwrap();
@@ -145,6 +156,8 @@ mod task_service_tests {
                     priority: None,
                     status: None,
                     position: None,
+                    assigned_agent_id: None,
+                    repo_path: None,
                 },
             )
             .await
@@ -163,6 +176,8 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                assigned_agent_id: None,
+                repo_path: None,
             })
             .await
             .unwrap();
@@ -182,6 +197,8 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                assigned_agent_id: None,
+                repo_path: None,
             })
             .await
             .unwrap();

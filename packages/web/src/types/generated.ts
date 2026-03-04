@@ -36,6 +36,8 @@ export interface Task {
     status: TaskStatus;
     priority: number;
     assigned_agent_id?: string;
+    repo_path?: string;
+    auto_approve: boolean;
     position: number;
     created_at: string;
     updated_at: string;
@@ -85,6 +87,8 @@ export interface CreateTaskRequest {
     description?: string;
     priority?: number;
     status?: TaskStatus;
+    assigned_agent_id?: string;
+    repo_path?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -93,6 +97,8 @@ export interface UpdateTaskRequest {
     priority?: number;
     status?: TaskStatus;
     position?: number;
+    assigned_agent_id?: string;
+    repo_path?: string;
 }
 
 export interface AssignTaskRequest {
@@ -130,6 +136,11 @@ export interface AgentHealth {
     is_installed: boolean;
     is_authenticated: boolean;
     version?: string;
+}
+
+export interface StartTaskResponse {
+    task: Task;
+    session: Session;
 }
 
 // ---------------------------------------------------------------------------

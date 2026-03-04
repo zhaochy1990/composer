@@ -19,10 +19,11 @@ pub struct ServiceContainer {
 impl ServiceContainer {
     pub fn new(db: Arc<Database>, event_bus: EventBus) -> Self {
         let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let sessions = session_service::SessionService::new(db.clone(), event_bus.clone(), process_manager.clone());
         Self {
-            tasks: task_service::TaskService::new(db.clone(), event_bus.clone()),
-            agents: agent_service::AgentService::new(db.clone(), event_bus.clone(), process_manager.clone()),
-            sessions: session_service::SessionService::new(db.clone(), event_bus.clone(), process_manager),
+            tasks: task_service::TaskService::new(db.clone(), event_bus.clone(), sessions.clone()),
+            agents: agent_service::AgentService::new(db.clone(), event_bus.clone(), process_manager),
+            sessions,
             worktrees: worktree_service::WorktreeService::new(db.clone()),
         }
     }

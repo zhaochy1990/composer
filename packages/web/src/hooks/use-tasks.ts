@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import type { Task } from '@/types/generated';
+import type { Task, StartTaskResponse } from '@/types/generated';
 
 export function useTasks() {
     return useQuery({
@@ -12,7 +12,7 @@ export function useTasks() {
 export function useCreateTask() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (data: { title: string; description?: string; priority?: number; status?: string }) =>
+        mutationFn: (data: { title: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string; repo_path?: string }) =>
             apiFetch<Task>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     });
@@ -21,9 +21,21 @@ export function useCreateTask() {
 export function useUpdateTask() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, ...data }: { id: string; title?: string; description?: string; priority?: number; status?: string }) =>
+        mutationFn: ({ id, ...data }: { id: string; title?: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string; repo_path?: string }) =>
             apiFetch<Task>(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    });
+}
+
+export function useStartTask() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (taskId: string) =>
+            apiFetch<StartTaskResponse>(`/tasks/${taskId}/start`, { method: 'POST' }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        },
     });
 }
 

@@ -104,6 +104,8 @@ pub struct Task {
     pub status: TaskStatus,
     pub priority: i32,
     pub assigned_agent_id: Option<Uuid>,
+    pub repo_path: Option<String>,
+    pub auto_approve: bool,
     pub position: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -161,6 +163,8 @@ pub struct CreateTaskRequest {
     pub description: Option<String>,
     pub priority: Option<i32>,
     pub status: Option<TaskStatus>,
+    pub assigned_agent_id: Option<Uuid>,
+    pub repo_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -171,6 +175,8 @@ pub struct UpdateTaskRequest {
     pub priority: Option<i32>,
     pub status: Option<TaskStatus>,
     pub position: Option<f64>,
+    pub assigned_agent_id: Option<Uuid>,
+    pub repo_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -220,4 +226,11 @@ pub struct AgentHealth {
     pub is_installed: bool,
     pub is_authenticated: bool,
     pub version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StartTaskResponse {
+    pub task: Task,
+    pub session: Session,
 }

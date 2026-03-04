@@ -12,6 +12,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         status: 'backlog',
         priority: 0,
         assigned_agent_id: null,
+        repo_path: null,
+        auto_approve: true,
         position: 1.0,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
@@ -68,5 +70,46 @@ describe('TaskCard', () => {
             />,
         );
         expect(screen.getByText('Claude')).toBeInTheDocument();
+    });
+
+    it('shows Start button when task is backlog with agent and repo_path', () => {
+        const task = makeTask({ assigned_agent_id: 'agent-1', repo_path: '/tmp/repo' });
+        const onStart = vi.fn();
+        render(<TaskCard task={task} onClick={() => {}} onStart={onStart} />);
+        expect(screen.getByText('Start')).toBeInTheDocument();
+    });
+
+    it('hides Start button when no agent assigned', () => {
+        const task = makeTask({ repo_path: '/tmp/repo' });
+        render(<TaskCard task={task} onClick={() => {}} onStart={() => {}} />);
+        expect(screen.queryByText('Start')).not.toBeInTheDocument();
+    });
+
+    it('hides Start button when no repo_path', () => {
+        const task = makeTask({ assigned_agent_id: 'agent-1' });
+        render(<TaskCard task={task} onClick={() => {}} onStart={() => {}} />);
+        expect(screen.queryByText('Start')).not.toBeInTheDocument();
+    });
+
+    it('hides Start button when not backlog', () => {
+        const task = makeTask({ status: 'in_progress', assigned_agent_id: 'agent-1', repo_path: '/tmp/repo' });
+        render(<TaskCard task={task} onClick={() => {}} onStart={() => {}} />);
+        expect(screen.queryByText('Start')).not.toBeInTheDocument();
+    });
+
+    it('calls onStart when Start button clicked', async () => {
+        const task = makeTask({ assigned_agent_id: 'agent-1', repo_path: '/tmp/repo' });
+        const onStart = vi.fn();
+        const onClick = vi.fn();
+        render(<TaskCard task={task} onClick={onClick} onStart={onStart} />);
+        await userEvent.click(screen.getByText('Start'));
+        expect(onStart).toHaveBeenCalledWith(task.id);
+        expect(onClick).not.toHaveBeenCalled(); // stopPropagation
+    });
+
+    it('shows Starting... when startingTaskId matches', () => {
+        const task = makeTask({ assigned_agent_id: 'agent-1', repo_path: '/tmp/repo' });
+        render(<TaskCard task={task} onClick={() => {}} onStart={() => {}} startingTaskId={task.id} />);
+        expect(screen.getByText('Starting...')).toBeInTheDocument();
     });
 });

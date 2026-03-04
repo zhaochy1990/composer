@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
-import { useTasks } from '@/hooks/use-tasks';
+import { useTasks, useStartTask } from '@/hooks/use-tasks';
 import { useAgents } from '@/hooks/use-agents';
 import { TaskColumn } from './TaskColumn';
 import { TaskCreateDialog } from './TaskCreateDialog';
@@ -17,10 +17,22 @@ const columns: { status: TaskStatus; title: string }[] = [
 export function TaskBoard() {
     const { data: tasks, isLoading, isError, error, refetch } = useTasks();
     const { data: agents } = useAgents();
+    const startTask = useStartTask();
 
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>('backlog');
     const [editingTask, setEditingTask] = useState<Task | null>(null);
+    const [startingTaskId, setStartingTaskId] = useState<string | null>(null);
+
+    // Keep editingTask in sync with latest query data
+    useEffect(() => {
+        if (editingTask && tasks) {
+            const updated = tasks.find(t => t.id === editingTask.id);
+            if (updated && updated.updated_at !== editingTask.updated_at) {
+                setEditingTask(updated);
+            }
+        }
+    }, [tasks, editingTask]);
 
     // Build agent ID → name map for display in task cards
     const agentNameMap = useMemo(() => {
@@ -62,6 +74,13 @@ export function TaskBoard() {
 
     function handleEditTask(task: Task) {
         setEditingTask(task);
+    }
+
+    function handleStartTask(taskId: string) {
+        setStartingTaskId(taskId);
+        startTask.mutate(taskId, {
+            onSettled: () => setStartingTaskId(null),
+        });
     }
 
     return (
@@ -129,6 +148,8 @@ export function TaskBoard() {
                                 onCreateTask={handleCreateTask}
                                 onEditTask={handleEditTask}
                                 agentNameMap={agentNameMap}
+                                onStartTask={handleStartTask}
+                                startingTaskId={startingTaskId}
                             />
                         ))}
                     </div>

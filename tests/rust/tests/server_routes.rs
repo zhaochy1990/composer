@@ -282,6 +282,61 @@ async fn task_assign() {
 }
 
 #[tokio::test]
+async fn task_create_with_repo_path() {
+    let app = setup_app().await;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"title":"With Repo","repo_path":"/tmp/repo"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp.into_body()).await;
+    assert_eq!(json["title"], "With Repo");
+    assert_eq!(json["repo_path"], "/tmp/repo");
+    assert_eq!(json["auto_approve"], true);
+}
+
+#[tokio::test]
+async fn task_start_requires_agent_and_repo() {
+    let app = setup_app().await;
+
+    // Create task without agent/repo
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"title":"No Config"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let task = body_json(resp.into_body()).await;
+    let task_id = task["id"].as_str().unwrap();
+
+    // Try to start — should fail with 400 (no agent assigned)
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/tasks/{}/start", task_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn task_list_sessions_for_nonexistent() {
     let app = setup_app().await;
     let resp = app

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
-import { useTasks, useCreateTask, useDeleteTask, useMoveTask, useAssignTask } from '@/hooks/use-tasks';
+import { useTasks, useCreateTask, useUpdateTask, useDeleteTask, useMoveTask, useAssignTask, useStartTask } from '@/hooks/use-tasks';
 
 // Mock apiFetch
 vi.mock('@/lib/api', () => ({
@@ -83,6 +83,21 @@ describe('useMoveTask', () => {
     });
 });
 
+describe('useUpdateTask', () => {
+    it('PUTs to /tasks/:id with new fields', async () => {
+        mockApiFetch.mockResolvedValueOnce({ id: '1', title: 'Updated', repo_path: '/tmp' });
+
+        const { result } = renderHook(() => useUpdateTask(), { wrapper: createWrapper() });
+        result.current.mutate({ id: '1', title: 'Updated', repo_path: '/tmp', assigned_agent_id: 'agent-1' });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(mockApiFetch).toHaveBeenCalledWith('/tasks/1', expect.objectContaining({
+            method: 'PUT',
+            body: expect.stringContaining('repo_path'),
+        }));
+    });
+});
+
 describe('useAssignTask', () => {
     it('POSTs assign payload', async () => {
         mockApiFetch.mockResolvedValueOnce({ id: '1', assigned_agent_id: 'agent-1' });
@@ -94,6 +109,20 @@ describe('useAssignTask', () => {
         expect(mockApiFetch).toHaveBeenCalledWith('/tasks/1/assign', expect.objectContaining({
             method: 'POST',
             body: expect.stringContaining('agent-1'),
+        }));
+    });
+});
+
+describe('useStartTask', () => {
+    it('POSTs to /tasks/:id/start', async () => {
+        mockApiFetch.mockResolvedValueOnce({ task: { id: '1', status: 'in_progress' }, session: { id: 's1' } });
+
+        const { result } = renderHook(() => useStartTask(), { wrapper: createWrapper() });
+        result.current.mutate('task-1');
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(mockApiFetch).toHaveBeenCalledWith('/tasks/task-1/start', expect.objectContaining({
+            method: 'POST',
         }));
     });
 });
