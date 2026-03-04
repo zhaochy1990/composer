@@ -54,8 +54,9 @@ pnpm run generate-types     # Export Rust types → packages/web/src/types/gener
 ## Architecture
 
 ### Monorepo Structure
-- **Cargo workspace** (`crates/`): 6 Rust crates
+- **Cargo workspace** (`crates/`): 6 Rust crates + 1 test crate (`tests/rust/`)
 - **pnpm workspace** (`packages/`): 1 React/TypeScript package
+- **Tests** (`tests/`): All test code lives here, separated from production code
 
 ### Rust Crates (dependency order)
 1. **api-types** — Shared structs/enums with `#[derive(TS)]` for TypeScript codegen via ts-rs
@@ -106,6 +107,9 @@ When adding a new feature, the typical flow is:
 6. Run `pnpm run generate-types` to sync types to frontend
 7. Build React components in `packages/web/src/components/`
 8. Add TanStack Query hooks in `packages/web/src/hooks/`
+9. Add tests in `tests/` (Rust tests in `tests/rust/tests/`, frontend tests in `tests/web/`)
+
+**Important:** Do not add `#[cfg(test)]` blocks in `crates/` source files or `__tests__/` directories in `packages/web/src/`. All tests belong in the `tests/` directory.
 
 ## E2E Tests
 
