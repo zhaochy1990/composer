@@ -21,7 +21,6 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const [priority, setPriority] = useState(task.priority);
     const [status, setStatus] = useState<TaskStatus>(task.status);
     const [assignedAgentId, setAssignedAgentId] = useState(task.assigned_agent_id ?? '');
-    const [repoPath, setRepoPath] = useState(task.repo_path ?? '');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => {
@@ -30,7 +29,6 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
         setPriority(task.priority);
         setStatus(task.status);
         setAssignedAgentId(task.assigned_agent_id ?? '');
-        setRepoPath(task.repo_path ?? '');
         setShowDeleteConfirm(false);
     }, [task.id, task.updated_at]);
 
@@ -110,7 +108,6 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                 priority,
                 status,
                 assigned_agent_id: assignedAgentId || undefined,
-                repo_path: repoPath.trim() || undefined,
             },
             { onSuccess: () => setSaved(true) },
         );
@@ -232,19 +229,6 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                     </select>
                                 </div>
 
-                                <div>
-                                    <label htmlFor="edit-repo-path" className="block text-sm font-medium text-gray-300 mb-1">
-                                        Repo Path
-                                    </label>
-                                    <input
-                                        id="edit-repo-path"
-                                        type="text"
-                                        value={repoPath}
-                                        onChange={e => setRepoPath(e.target.value)}
-                                        placeholder="e.g. C:\projects\my-repo"
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    />
-                                </div>
                             </div>
 
                             <div className="text-xs text-gray-500">
@@ -309,7 +293,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                     <div className="px-6 py-4 border-b border-gray-800">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Sessions</h3>
-                            {task.status === 'backlog' && task.assigned_agent_id && task.repo_path && (
+                            {task.status === 'backlog' && (
                                 <button
                                     type="button"
                                     onClick={() => startTask.mutate(task.id, {
@@ -326,7 +310,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
 
                         {sortedSessions.length === 0 ? (
                             <p className="text-sm text-gray-500 py-4 text-center">
-                                No sessions yet{task.status === 'backlog' && task.assigned_agent_id && task.repo_path ? ' — click Start to begin' : ' — assign an agent and repo path first'}
+                                No sessions yet{task.status === 'backlog' ? ' — click Start to begin' : ''}
                             </p>
                         ) : (
                             <div className="flex flex-col gap-1">

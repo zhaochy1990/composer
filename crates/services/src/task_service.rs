@@ -17,6 +17,7 @@ impl TaskService {
     }
 
     pub async fn create(&self, req: CreateTaskRequest) -> anyhow::Result<Task> {
+        let project_id_str = req.project_id.map(|id| id.to_string());
         let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
         let task = composer_db::models::task::create(
             &self.db.pool,
@@ -24,8 +25,8 @@ impl TaskService {
             req.description.as_deref(),
             req.priority,
             req.status.as_ref(),
+            project_id_str.as_deref(),
             assigned_agent_id_str.as_deref(),
-            req.repo_path.as_deref(),
         )
         .await?;
         self.event_bus.broadcast(WsEvent::TaskCreated(task.clone()));
@@ -41,6 +42,7 @@ impl TaskService {
     }
 
     pub async fn update(&self, id: &str, req: UpdateTaskRequest) -> anyhow::Result<Task> {
+        let project_id_str = req.project_id.map(|id| id.to_string());
         let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
         let task = composer_db::models::task::update(
             &self.db.pool,
@@ -50,8 +52,8 @@ impl TaskService {
             req.priority,
             req.status.as_ref(),
             req.position,
+            project_id_str.as_deref(),
             assigned_agent_id_str.as_deref(),
-            req.repo_path.as_deref(),
         )
         .await?;
         self.event_bus.broadcast(WsEvent::TaskUpdated(task.clone()));
@@ -109,8 +111,19 @@ impl TaskService {
 
         let agent_id = task.assigned_agent_id
             .ok_or_else(|| anyhow::anyhow!("Task has no assigned agent"))?;
-        let repo_path = task.repo_path.clone()
-            .ok_or_else(|| anyhow::anyhow!("Task has no repo_path configured"))?;
+
+        // Derive repo_path from the project's primary repository
+        let project_id = task.project_id
+            .ok_or_else(|| anyhow::anyhow!("Task has no project assigned"))?;
+        let repos = composer_db::models::project_repository::list_by_project(
+            &self.db.pool,
+            &project_id.to_string(),
+        ).await?;
+        let primary_repo = repos.iter()
+            .find(|r| r.role == RepositoryRole::Primary)
+            .or_else(|| repos.first())
+            .ok_or_else(|| anyhow::anyhow!("Project has no repositories configured"))?;
+        let repo_path = primary_repo.local_path.clone();
 
         // Build prompt from title + description
         // Use " - " separator instead of newlines because Windows npx.cmd

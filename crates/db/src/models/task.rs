@@ -10,7 +10,7 @@ struct TaskRow {
     status: String,
     priority: i32,
     assigned_agent_id: Option<String>,
-    repo_path: Option<String>,
+    project_id: Option<String>,
     auto_approve: bool,
     position: f64,
     created_at: String,
@@ -28,7 +28,7 @@ impl TryFrom<TaskRow> for Task {
             status: serde_json::from_value(serde_json::Value::String(row.status))?,
             priority: row.priority,
             assigned_agent_id: row.assigned_agent_id.map(|s| s.parse()).transpose()?,
-            repo_path: row.repo_path,
+            project_id: row.project_id.map(|s| s.parse()).transpose()?,
             auto_approve: row.auto_approve,
             position: row.position,
             created_at: row.created_at.parse()?,
@@ -43,8 +43,8 @@ pub async fn create(
     description: Option<&str>,
     priority: Option<i32>,
     status: Option<&TaskStatus>,
+    project_id: Option<&str>,
     assigned_agent_id: Option<&str>,
-    repo_path: Option<&str>,
 ) -> anyhow::Result<Task> {
     let id = Uuid::new_v4().to_string();
     let priority = priority.unwrap_or(0);
@@ -66,7 +66,7 @@ pub async fn create(
     let position = max_pos.map(|r| r.0).unwrap_or(0.0) + 1.0;
 
     sqlx::query(
-        "INSERT INTO tasks (id, title, description, status, priority, position, assigned_agent_id, repo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, title, description, status, priority, position, project_id, assigned_agent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(title)
@@ -74,8 +74,8 @@ pub async fn create(
     .bind(&status_str)
     .bind(priority)
     .bind(position)
+    .bind(project_id)
     .bind(assigned_agent_id)
-    .bind(repo_path)
     .execute(&mut *tx)
     .await?;
 
@@ -84,8 +84,10 @@ pub async fn create(
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
 }
 
+const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, created_at, updated_at";
+
 pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Task>> {
-    let row = sqlx::query_as::<_, TaskRow>("SELECT * FROM tasks WHERE id = ?")
+    let row = sqlx::query_as::<_, TaskRow>(&format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id = ?"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
@@ -93,7 +95,7 @@ pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Ta
 }
 
 pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Task>> {
-    let rows = sqlx::query_as::<_, TaskRow>("SELECT * FROM tasks ORDER BY position ASC")
+    let rows = sqlx::query_as::<_, TaskRow>(&format!("SELECT {TASK_COLUMNS} FROM tasks ORDER BY position ASC"))
         .fetch_all(pool)
         .await?;
     rows.into_iter().map(Task::try_from).collect()
@@ -103,7 +105,7 @@ pub async fn list_by_status(pool: &SqlitePool, status: &TaskStatus) -> anyhow::R
     let status_str = serde_json::to_value(status)?
         .as_str().unwrap_or("backlog").to_string();
     let rows = sqlx::query_as::<_, TaskRow>(
-        "SELECT * FROM tasks WHERE status = ? ORDER BY position ASC"
+        &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE status = ? ORDER BY position ASC")
     )
     .bind(&status_str)
     .fetch_all(pool)
@@ -120,8 +122,8 @@ pub async fn update(
     priority: Option<i32>,
     status: Option<&TaskStatus>,
     position: Option<f64>,
+    project_id: Option<&str>,
     assigned_agent_id: Option<&str>,
-    repo_path: Option<&str>,
 ) -> anyhow::Result<Task> {
     let status_str: Option<String> = status
         .map(|s| serde_json::to_value(s).ok()
@@ -135,8 +137,8 @@ pub async fn update(
          priority = COALESCE(?, priority), \
          status = COALESCE(?, status), \
          position = COALESCE(?, position), \
+         project_id = COALESCE(?, project_id), \
          assigned_agent_id = COALESCE(?, assigned_agent_id), \
-         repo_path = COALESCE(?, repo_path), \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE id = ?"
     )
@@ -145,8 +147,8 @@ pub async fn update(
     .bind(priority)
     .bind(status_str.as_deref())
     .bind(position)
+    .bind(project_id)
     .bind(assigned_agent_id)
-    .bind(repo_path)
     .bind(id)
     .execute(pool)
     .await?;
@@ -166,6 +168,16 @@ pub async fn update_assigned_agent(pool: &SqlitePool, id: &str, agent_id: Option
     sqlx::query("UPDATE tasks SET assigned_agent_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
         .bind(agent_id).bind(id).execute(pool).await?;
     Ok(())
+}
+
+pub async fn list_by_project(pool: &SqlitePool, project_id: &str) -> anyhow::Result<Vec<Task>> {
+    let rows = sqlx::query_as::<_, TaskRow>(
+        &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = ? ORDER BY position ASC")
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(Task::try_from).collect()
 }
 
 pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {

@@ -3,6 +3,7 @@ pub mod task_service;
 pub mod agent_service;
 pub mod session_service;
 pub mod worktree_service;
+pub mod project_service;
 
 use std::sync::Arc;
 use composer_db::Database;
@@ -14,6 +15,7 @@ pub struct ServiceContainer {
     pub agents: agent_service::AgentService,
     pub sessions: session_service::SessionService,
     pub worktrees: worktree_service::WorktreeService,
+    pub projects: project_service::ProjectService,
 }
 
 impl ServiceContainer {
@@ -25,6 +27,7 @@ impl ServiceContainer {
             agents: agent_service::AgentService::new(db.clone(), event_bus.clone(), process_manager),
             sessions,
             worktrees: worktree_service::WorktreeService::new(db.clone()),
+            projects: project_service::ProjectService::new(db.clone(), event_bus.clone()),
         }
     }
 }

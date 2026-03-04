@@ -85,15 +85,15 @@ describe('useMoveTask', () => {
 
 describe('useUpdateTask', () => {
     it('PUTs to /tasks/:id with new fields', async () => {
-        mockApiFetch.mockResolvedValueOnce({ id: '1', title: 'Updated', repo_path: '/tmp' });
+        mockApiFetch.mockResolvedValueOnce({ id: '1', title: 'Updated' });
 
         const { result } = renderHook(() => useUpdateTask(), { wrapper: createWrapper() });
-        result.current.mutate({ id: '1', title: 'Updated', repo_path: '/tmp', assigned_agent_id: 'agent-1' });
+        result.current.mutate({ id: '1', title: 'Updated', assigned_agent_id: 'agent-1' });
 
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(mockApiFetch).toHaveBeenCalledWith('/tasks/1', expect.objectContaining({
             method: 'PUT',
-            body: expect.stringContaining('repo_path'),
+            body: expect.stringContaining('Updated'),
         }));
     });
 });

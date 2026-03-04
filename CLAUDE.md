@@ -2,10 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-IMPORTANT RULES
-
-- always do testing after any changes
-- add testing once implemented new features
+PRD doc "FHL project.md"
 
 ## Project Overview
 
@@ -29,21 +26,12 @@ pnpm run build:server       # Cargo release build → target/release/composer-se
 ```
 
 ### Test
-
-All tests live in the `tests/` directory at the project root:
-
 ```bash
-cargo test --workspace      # All Rust tests (from tests/rust/)
-cd packages/web && pnpm run test          # Frontend unit tests (Vitest, from tests/web/)
-cd packages/web && pnpm run test:e2e      # Playwright E2E tests (from tests/e2e/)
-cd packages/web && pnpm run test:e2e:ui   # Playwright with UI
-cd packages/web && pnpm run test:e2e:headed # Playwright with visible browser
+pnpm run test:e2e           # Playwright E2E tests (headless)
+pnpm run test:e2e:ui        # Playwright with UI
+pnpm run test:e2e:headed    # Playwright with visible browser
+cargo test                  # Rust unit tests
 ```
-
-**Test directory structure:**
-- `tests/rust/` — Cargo crate (`composer-tests`) with integration tests for all Rust crates
-- `tests/web/` — Vitest unit tests for React components, hooks, stores, and utilities
-- `tests/e2e/` — Playwright E2E tests with fixtures and API helpers
 
 ### Lint & Format
 ```bash
@@ -59,18 +47,16 @@ pnpm run generate-types     # Export Rust types → packages/web/src/types/gener
 ## Architecture
 
 ### Monorepo Structure
-- **Cargo workspace** (`crates/`): 7 Rust crates + 1 test crate (`tests/rust/`)
+- **Cargo workspace** (`crates/`): 6 Rust crates
 - **pnpm workspace** (`packages/`): 1 React/TypeScript package
-- **Tests** (`tests/`): All test code lives here, separated from production code
 
 ### Rust Crates (dependency order)
 1. **api-types** — Shared structs/enums with `#[derive(TS)]` for TypeScript codegen via ts-rs
-2. **config** — User configuration from `~/.composer/config.toml`, credentials, and path management
-3. **db** — SQLx + SQLite layer (WAL mode). Migrations in `crates/db/migrations/`
-4. **git** — Git worktree management for agent isolation (creates under `.composer/worktrees/`)
-5. **executors** — Spawns Claude Code CLI processes, parses stream-JSON protocol, emits events
-6. **services** — Business logic: TaskService, AgentService, SessionService, WorktreeService, EventBus
-7. **server** — Axum HTTP server (port 3000), WebSocket hub, route handlers, embedded SPA serving
+2. **db** — SQLx + SQLite layer (WAL mode). Migrations in `crates/db/migrations/`
+3. **git** — Git worktree management for agent isolation (creates under `.composer/worktrees/`)
+4. **executors** — Spawns Claude Code CLI processes, parses stream-JSON protocol, emits events
+5. **services** — Business logic: TaskService, AgentService, SessionService, WorktreeService, EventBus
+6. **server** — Axum HTTP server (port 3000), WebSocket hub, route handlers, embedded SPA serving
 
 ### Frontend (`packages/web/`)
 - **React 18** with **TanStack Router** and **TanStack Query** for data fetching
@@ -116,13 +102,11 @@ Composer uses a layered configuration system. Precedence: **env var > `~/.compos
 - `logging.level` = "composer=debug,tower_http=debug", `logging.log_to_file` = false
 - `cors.origins` = [localhost:5173, localhost:3000 variants]
 
+
 ### Environment Variables
-- `DATABASE_URL` — overrides `database.url_pattern`
-- `CORS_ORIGINS` — overrides `cors.origins` (comma-separated)
-- `RUST_LOG` — overrides `logging.level`
-- `ANTHROPIC_API_KEY` — overrides `credentials.anthropic_api_key`
-- `COMPOSER_PORT` — overrides `server.port`
-- `COMPOSER_BIND_ADDRESS` — overrides `server.bind_address`
+- `DATABASE_URL` — default: `sqlite:composer.db?mode=rwc`
+- `CORS_ORIGINS` — default: localhost origins for ports 5173 and 3000
+- `RUST_LOG` — default: `composer=debug,tower_http=debug`
 
 ## Development Workflow
 
@@ -135,10 +119,7 @@ When adding a new feature, the typical flow is:
 6. Run `pnpm run generate-types` to sync types to frontend
 7. Build React components in `packages/web/src/components/`
 8. Add TanStack Query hooks in `packages/web/src/hooks/`
-9. Add tests in `tests/` (Rust tests in `tests/rust/tests/`, frontend tests in `tests/web/`)
-
-**Important:** Do not add `#[cfg(test)]` blocks in `crates/` source files or `__tests__/` directories in `packages/web/src/`. All tests belong in the `tests/` directory.
 
 ## E2E Tests
 
-Located in `tests/e2e/tests/`. Uses Playwright with a test-specific DB (`sqlite:composer_test.db`). Tests run sequentially (1 worker). The Playwright config (`packages/web/playwright.config.ts`) auto-starts both the Cargo server and Vite dev server.
+Located in `packages/web/e2e/tests/`. Uses Playwright with a test-specific DB (`sqlite:composer_test.db`). Tests run sequentially (1 worker). The Playwright config auto-starts both the Cargo server and Vite dev server.

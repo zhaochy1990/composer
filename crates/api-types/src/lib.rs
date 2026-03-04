@@ -61,6 +61,14 @@ pub enum SessionStatus {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
+pub enum RepositoryRole {
+    Primary,
+    Dependency,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
 pub enum WorktreeStatus {
     Active,
     Stale,
@@ -104,7 +112,7 @@ pub struct Task {
     pub status: TaskStatus,
     pub priority: i32,
     pub assigned_agent_id: Option<Uuid>,
-    pub repo_path: Option<String>,
+    pub project_id: Option<Uuid>,
     pub auto_approve: bool,
     pub position: f64,
     pub created_at: DateTime<Utc>,
@@ -144,6 +152,29 @@ pub struct Worktree {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct Project {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProjectRepository {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub local_path: String,
+    pub remote_url: Option<String>,
+    pub role: RepositoryRole,
+    pub display_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct SessionLog {
     pub id: i64,
     pub session_id: Uuid,
@@ -163,8 +194,8 @@ pub struct CreateTaskRequest {
     pub description: Option<String>,
     pub priority: Option<i32>,
     pub status: Option<TaskStatus>,
+    pub project_id: Option<Uuid>,
     pub assigned_agent_id: Option<Uuid>,
-    pub repo_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -175,8 +206,8 @@ pub struct UpdateTaskRequest {
     pub priority: Option<i32>,
     pub status: Option<TaskStatus>,
     pub position: Option<f64>,
+    pub project_id: Option<Uuid>,
     pub assigned_agent_id: Option<Uuid>,
-    pub repo_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -215,6 +246,38 @@ pub struct ResumeSessionRequest {
     pub prompt: Option<String>,
 }
 
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct CreateProjectRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateProjectRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct AddProjectRepositoryRequest {
+    pub local_path: String,
+    pub remote_url: Option<String>,
+    pub role: Option<RepositoryRole>,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateProjectRepositoryRequest {
+    pub local_path: Option<String>,
+    pub remote_url: Option<String>,
+    pub role: Option<RepositoryRole>,
+    pub display_name: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
@@ -233,4 +296,20 @@ pub struct AgentHealth {
 pub struct StartTaskResponse {
     pub task: Task,
     pub session: Session,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DirEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BrowseResponse {
+    pub current_path: String,
+    pub parent: Option<String>,
+    pub entries: Vec<DirEntry>,
 }

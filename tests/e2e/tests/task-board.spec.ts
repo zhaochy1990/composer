@@ -87,4 +87,38 @@ test.describe('Task Board', () => {
     await expect(page.getByRole('button', { name: /run session/i })).toBeVisible();
     await expect(page.getByText(/no sessions yet/i)).toBeVisible();
   });
+
+  test('create dialog shows project selector when projects exist', async ({ apiClient, page }) => {
+    await apiClient.createProject({ name: 'Selector Test Project' });
+    await page.reload();
+
+    await page.getByRole('button', { name: /new task/i }).click();
+
+    // Project selector should be visible
+    const projectSelect = page.locator('#create-project');
+    await expect(projectSelect).toBeVisible({ timeout: 5000 });
+
+    // Should have "No project" option and the created project
+    await expect(projectSelect.locator('option', { hasText: 'No project' })).toBeAttached();
+    await expect(projectSelect.locator('option', { hasText: 'Selector Test Project' })).toBeAttached();
+  });
+
+  test('create dialog hides project selector when no projects exist', async ({ page }) => {
+    await page.getByRole('button', { name: /new task/i }).click();
+
+    // Project selector should not be visible
+    await expect(page.locator('#create-project')).not.toBeVisible();
+  });
+
+  test('create task with project selected', async ({ apiClient, page }) => {
+    await apiClient.createProject({ name: 'Task Project' });
+    await page.reload();
+
+    await page.getByRole('button', { name: /new task/i }).click();
+    await page.locator('#create-title').fill('Task With Project');
+    await page.locator('#create-project').selectOption({ label: 'Task Project' });
+    await page.getByRole('button', { name: /create task/i }).click();
+
+    await expect(page.getByText('Task With Project')).toBeVisible({ timeout: 5000 });
+  });
 });

@@ -19,7 +19,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task, onClick, agentNameMap, onStart, startingTaskId }: TaskCardProps) {
     const priority = priorityConfig[task.priority] ?? priorityConfig[0];
-    const canStart = task.status === 'backlog' && !!task.assigned_agent_id && !!task.repo_path;
+    const canStart = task.status === 'backlog';
     const isStarting = startingTaskId === task.id;
 
     return (

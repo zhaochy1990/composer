@@ -23,7 +23,8 @@ mod event_bus_tests {
             status: TaskStatus::Backlog,
             priority: 0,
             assigned_agent_id: None,
-            repo_path: None,
+            project_id: None,
+
             auto_approve: true,
             position: 1.0,
             created_at: chrono::Utc::now(),
@@ -86,8 +87,9 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                project_id: None,
                 assigned_agent_id: None,
-                repo_path: None,
+
             })
             .await
             .unwrap();
@@ -112,8 +114,9 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                project_id: None,
                 assigned_agent_id: None,
-                repo_path: None,
+
             })
             .await
             .unwrap();
@@ -140,8 +143,9 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                project_id: None,
                 assigned_agent_id: None,
-                repo_path: None,
+
             })
             .await
             .unwrap();
@@ -156,8 +160,9 @@ mod task_service_tests {
                     priority: None,
                     status: None,
                     position: None,
+                    project_id: None,
                     assigned_agent_id: None,
-                    repo_path: None,
+    
                 },
             )
             .await
@@ -176,8 +181,9 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                project_id: None,
                 assigned_agent_id: None,
-                repo_path: None,
+
             })
             .await
             .unwrap();
@@ -197,8 +203,9 @@ mod task_service_tests {
                 description: None,
                 priority: None,
                 status: None,
+                project_id: None,
                 assigned_agent_id: None,
-                repo_path: None,
+
             })
             .await
             .unwrap();

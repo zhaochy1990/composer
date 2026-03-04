@@ -105,6 +105,26 @@ export function useWebSocket() {
                     break;
                 }
 
+                // Project events
+                case 'ProjectCreated':
+                case 'ProjectUpdated': {
+                    queryClient.invalidateQueries({ queryKey: ['projects'] });
+                    break;
+                }
+
+                case 'ProjectDeleted': {
+                    queryClient.invalidateQueries({ queryKey: ['projects'] });
+                    break;
+                }
+
+                case 'ProjectRepositoryAdded':
+                case 'ProjectRepositoryRemoved': {
+                    queryClient.invalidateQueries({
+                        queryKey: ['projects', parsed.payload.project_id, 'repositories'],
+                    });
+                    break;
+                }
+
                 default:
                     break;
             }

@@ -29,4 +29,5 @@ composer-config = { path = "../config" }
 composer-db = { path = "../db" }
 composer-services = { path = "../services" }
 tracing-appender = { workspace = true }
+dirs = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }

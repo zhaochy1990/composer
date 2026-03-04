@@ -282,7 +282,7 @@ async fn task_assign() {
 }
 
 #[tokio::test]
-async fn task_create_with_repo_path() {
+async fn task_create_with_auto_approve() {
     let app = setup_app().await;
     let resp = app
         .oneshot(
@@ -290,23 +290,22 @@ async fn task_create_with_repo_path() {
                 .method("POST")
                 .uri("/api/tasks")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"title":"With Repo","repo_path":"/tmp/repo"}"#))
+                .body(Body::from(r#"{"title":"With Auto Approve"}"#))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp.into_body()).await;
-    assert_eq!(json["title"], "With Repo");
-    assert_eq!(json["repo_path"], "/tmp/repo");
+    assert_eq!(json["title"], "With Auto Approve");
     assert_eq!(json["auto_approve"], true);
 }
 
 #[tokio::test]
-async fn task_start_requires_agent_and_repo() {
+async fn task_start_requires_agent_and_project() {
     let app = setup_app().await;
 
-    // Create task without agent/repo
+    // Create task without agent/project
     let resp = app
         .clone()
         .oneshot(

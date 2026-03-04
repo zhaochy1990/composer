@@ -3,7 +3,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
-    AgentHealth, AgentStatus, LogType, Task, TaskStatus, Worktree,
+    AgentHealth, AgentStatus, LogType, Project, ProjectRepository, Task, TaskStatus, Worktree,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -23,6 +23,11 @@ pub enum WsEvent {
     SessionOutput { session_id: Uuid, log_type: LogType, content: String },
     WorktreeCreated(Worktree),
     WorktreeDeleted { worktree_id: Uuid },
+    ProjectCreated(Project),
+    ProjectUpdated(Project),
+    ProjectDeleted { project_id: Uuid },
+    ProjectRepositoryAdded { project_id: Uuid, repository: ProjectRepository },
+    ProjectRepositoryRemoved { project_id: Uuid, repository_id: Uuid },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

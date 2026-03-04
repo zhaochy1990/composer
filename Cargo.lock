@@ -272,6 +272,7 @@ dependencies = [
  "composer-config",
  "composer-db",
  "composer-services",
+ "dirs",
  "futures-util",
  "mime_guess",
  "rust-embed",

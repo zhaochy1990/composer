@@ -64,8 +64,8 @@ async fn start_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) 
     if task.assigned_agent_id.is_none() {
         return Err(ServiceError::BadRequest("Task has no assigned agent".into()));
     }
-    if task.repo_path.is_none() {
-        return Err(ServiceError::BadRequest("Task has no repo_path configured".into()));
+    if task.project_id.is_none() {
+        return Err(ServiceError::BadRequest("Task has no project assigned".into()));
     }
 
     let response = state.services.tasks.start_task(&id).await?;

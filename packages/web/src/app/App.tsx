@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskBoard } from '@/components/task-board/TaskBoard';
 import { AgentPool } from '@/components/agents/AgentPool';
+import { ProjectList } from '@/components/projects/ProjectList';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useWebSocket } from '@/hooks/use-websocket';
 
-export type Page = 'tasks' | 'agents';
+export type Page = 'tasks' | 'agents' | 'projects';
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -26,6 +27,7 @@ function AppContent() {
             <main className="flex-1 overflow-hidden">
                 {page === 'tasks' && <TaskBoard />}
                 {page === 'agents' && <AgentPool />}
+                {page === 'projects' && <ProjectList />}
             </main>
         </div>
     );

@@ -12,7 +12,7 @@ export function useTasks() {
 export function useCreateTask() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (data: { title: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string; repo_path?: string }) =>
+        mutationFn: (data: { title: string; description?: string; priority?: number; status?: string; project_id?: string; assigned_agent_id?: string }) =>
             apiFetch<Task>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     });
@@ -21,7 +21,7 @@ export function useCreateTask() {
 export function useUpdateTask() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, ...data }: { id: string; title?: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string; repo_path?: string }) =>
+        mutationFn: ({ id, ...data }: { id: string; title?: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string }) =>
             apiFetch<Task>(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     });

@@ -10,6 +10,7 @@ export type AgentStatus = "idle" | "busy" | "error" | "offline";
 export type AuthStatus = "unknown" | "authenticated" | "unauthenticated";
 export type TaskStatus = "backlog" | "in_progress" | "waiting" | "done";
 export type SessionStatus = "created" | "running" | "paused" | "completed" | "failed";
+export type RepositoryRole = "primary" | "dependency";
 export type WorktreeStatus = "active" | "stale" | "deleted";
 export type LogType = "stdout" | "stderr" | "control" | "status";
 
@@ -36,7 +37,7 @@ export interface Task {
     status: TaskStatus;
     priority: number;
     assigned_agent_id?: string;
-    repo_path?: string;
+    project_id?: string;
     auto_approve: boolean;
     position: number;
     created_at: string;
@@ -70,6 +71,25 @@ export interface Worktree {
     updated_at: string;
 }
 
+export interface Project {
+    id: string;
+    name: string;
+    description?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ProjectRepository {
+    id: string;
+    project_id: string;
+    local_path: string;
+    remote_url?: string;
+    role: RepositoryRole;
+    display_name?: string;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface SessionLog {
     id: number;
     session_id: string;
@@ -87,8 +107,8 @@ export interface CreateTaskRequest {
     description?: string;
     priority?: number;
     status?: TaskStatus;
+    project_id?: string;
     assigned_agent_id?: string;
-    repo_path?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -97,8 +117,8 @@ export interface UpdateTaskRequest {
     priority?: number;
     status?: TaskStatus;
     position?: number;
+    project_id?: string;
     assigned_agent_id?: string;
-    repo_path?: string;
 }
 
 export interface AssignTaskRequest {
@@ -127,6 +147,30 @@ export interface ResumeSessionRequest {
     prompt?: string;
 }
 
+export interface CreateProjectRequest {
+    name: string;
+    description?: string;
+}
+
+export interface UpdateProjectRequest {
+    name?: string;
+    description?: string;
+}
+
+export interface AddProjectRepositoryRequest {
+    local_path: string;
+    remote_url?: string;
+    role?: RepositoryRole;
+    display_name?: string;
+}
+
+export interface UpdateProjectRepositoryRequest {
+    local_path?: string;
+    remote_url?: string;
+    role?: RepositoryRole;
+    display_name?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
@@ -141,6 +185,22 @@ export interface AgentHealth {
 export interface StartTaskResponse {
     task: Task;
     session: Session;
+}
+
+// ---------------------------------------------------------------------------
+// Filesystem types
+// ---------------------------------------------------------------------------
+
+export interface DirEntry {
+    name: string;
+    path: string;
+    is_dir: boolean;
+}
+
+export interface BrowseResponse {
+    current_path: string;
+    parent?: string;
+    entries: DirEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +220,12 @@ export type WsEvent =
     | { type: "SessionPaused"; payload: { session_id: string } }
     | { type: "SessionOutput"; payload: { session_id: string; log_type: LogType; content: string } }
     | { type: "WorktreeCreated"; payload: Worktree }
-    | { type: "WorktreeDeleted"; payload: { worktree_id: string } };
+    | { type: "WorktreeDeleted"; payload: { worktree_id: string } }
+    | { type: "ProjectCreated"; payload: Project }
+    | { type: "ProjectUpdated"; payload: Project }
+    | { type: "ProjectDeleted"; payload: { project_id: string } }
+    | { type: "ProjectRepositoryAdded"; payload: { project_id: string; repository: ProjectRepository } }
+    | { type: "ProjectRepositoryRemoved"; payload: { project_id: string; repository_id: string } };
 
 export type WsCommand =
     | { type: "SubscribeSession"; payload: { session_id: string } }

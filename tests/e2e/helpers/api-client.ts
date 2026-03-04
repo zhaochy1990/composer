@@ -7,7 +7,7 @@ interface Task {
   priority: number;
   status: string;
   assigned_agent_id: string | null;
-  repo_path: string | null;
+  project_id: string | null;
   auto_approve: boolean;
 }
 
@@ -22,6 +22,23 @@ interface Session {
   id: string;
   agent_id: string;
   status: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ProjectRepository {
+  id: string;
+  project_id: string;
+  local_path: string;
+  remote_url: string | null;
+  role: string;
+  display_name: string | null;
 }
 
 export class ApiClient {
@@ -41,7 +58,7 @@ export class ApiClient {
 
   // --- Tasks ---
 
-  async createTask(data: { title: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string; repo_path?: string }): Promise<Task> {
+  async createTask(data: { title: string; description?: string; priority?: number; status?: string; project_id?: string; assigned_agent_id?: string }): Promise<Task> {
     return this.fetch<Task>('/tasks', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -50,6 +67,30 @@ export class ApiClient {
 
   async listTasks(): Promise<Task[]> {
     return this.fetch<Task[]>('/tasks');
+  }
+
+  async getTask(id: string): Promise<Task> {
+    return this.fetch<Task>(`/tasks/${id}`);
+  }
+
+  async updateTask(id: string, data: Partial<{ title: string; description: string; priority: number; status: string; position: number; project_id: string; assigned_agent_id: string }>): Promise<Task> {
+    return this.fetch<Task>(`/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async startTask(id: string): Promise<{ task: Task; session: Session }> {
+    return this.fetch<{ task: Task; session: Session }>(`/tasks/${id}/start`, {
+      method: 'POST',
+    });
+  }
+
+  async moveTask(id: string, status: string, position?: number): Promise<Task> {
+    return this.fetch<Task>(`/tasks/${id}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ status, position }),
+    });
   }
 
   async deleteTask(id: string): Promise<void> {
@@ -67,6 +108,10 @@ export class ApiClient {
 
   async listAgents(): Promise<Agent[]> {
     return this.fetch<Agent[]>('/agents');
+  }
+
+  async getAgent(id: string): Promise<Agent> {
+    return this.fetch<Agent>(`/agents/${id}`);
   }
 
   async deleteAgent(id: string): Promise<void> {
@@ -90,41 +135,68 @@ export class ApiClient {
     return this.fetch<Session[]>(`/tasks/${taskId}/sessions`);
   }
 
-  async getTask(id: string): Promise<Task> {
-    return this.fetch<Task>(`/tasks/${id}`);
+  // --- Projects ---
+
+  async createProject(data: { name: string; description?: string }): Promise<Project> {
+    return this.fetch<Project>('/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateTask(id: string, data: Partial<{ title: string; description: string; priority: number; status: string; position: number; assigned_agent_id: string; repo_path: string }>): Promise<Task> {
-    return this.fetch<Task>(`/tasks/${id}`, {
+  async listProjects(): Promise<Project[]> {
+    return this.fetch<Project[]>('/projects');
+  }
+
+  async getProject(id: string): Promise<Project> {
+    return this.fetch<Project>(`/projects/${id}`);
+  }
+
+  async updateProject(id: string, data: { name?: string; description?: string }): Promise<Project> {
+    return this.fetch<Project>(`/projects/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async startTask(id: string): Promise<{ task: Task; session: Session }> {
-    return this.fetch<{ task: Task; session: Session }>(`/tasks/${id}/start`, {
+  async deleteProject(id: string): Promise<void> {
+    return this.fetch<void>(`/projects/${id}`, { method: 'DELETE' });
+  }
+
+  async addProjectRepository(
+    projectId: string,
+    data: { local_path: string; remote_url?: string; role?: string; display_name?: string },
+  ): Promise<ProjectRepository> {
+    return this.fetch<ProjectRepository>(`/projects/${projectId}/repositories`, {
       method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
-  async moveTask(id: string, status: string, position?: number): Promise<Task> {
-    return this.fetch<Task>(`/tasks/${id}/move`, {
-      method: 'POST',
-      body: JSON.stringify({ status, position }),
-    });
+  async listProjectRepositories(projectId: string): Promise<ProjectRepository[]> {
+    return this.fetch<ProjectRepository[]>(`/projects/${projectId}/repositories`);
   }
 
-  async getAgent(id: string): Promise<Agent> {
-    return this.fetch<Agent>(`/agents/${id}`);
+  async removeProjectRepository(projectId: string, repoId: string): Promise<void> {
+    return this.fetch<void>(`/projects/${projectId}/repositories/${repoId}`, { method: 'DELETE' });
+  }
+
+  async listProjectTasks(projectId: string): Promise<Task[]> {
+    return this.fetch<Task[]>(`/projects/${projectId}/tasks`);
   }
 
   // --- Cleanup ---
 
   async resetAllData(): Promise<void> {
-    const [tasks, agents] = await Promise.all([this.listTasks(), this.listAgents()]);
+    const [tasks, agents, projects] = await Promise.all([
+      this.listTasks(),
+      this.listAgents(),
+      this.listProjects(),
+    ]);
     await Promise.all([
       ...tasks.map((t) => this.deleteTask(t.id)),
       ...agents.map((a) => this.deleteAgent(a.id)),
+      ...projects.map((p) => this.deleteProject(p.id)),
     ]);
   }
 

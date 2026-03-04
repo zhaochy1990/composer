@@ -165,7 +165,7 @@ mod task_tests {
             Some(3),
             Some(&TaskStatus::InProgress),
             None,
-            Some("/tmp/repo"),
+            None,
         )
         .await
         .unwrap();
@@ -173,7 +173,6 @@ mod task_tests {
         assert_eq!(t.description.as_deref(), Some("A description"));
         assert_eq!(t.priority, 3);
         assert!(matches!(t.status, TaskStatus::InProgress));
-        assert_eq!(t.repo_path.as_deref(), Some("/tmp/repo"));
         assert!(t.auto_approve); // default is true
     }
 
