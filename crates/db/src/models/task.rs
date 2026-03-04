@@ -13,6 +13,8 @@ struct TaskRow {
     project_id: Option<String>,
     auto_approve: bool,
     position: f64,
+    task_number: i32,
+    simple_id: String,
     created_at: String,
     updated_at: String,
 }
@@ -31,6 +33,8 @@ impl TryFrom<TaskRow> for Task {
             project_id: row.project_id.map(|s| s.parse()).transpose()?,
             auto_approve: row.auto_approve,
             position: row.position,
+            task_number: row.task_number,
+            simple_id: row.simple_id,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
         })
@@ -54,7 +58,6 @@ pub async fn create(
         .flatten()
         .unwrap_or_else(|| "backlog".to_string());
 
-    // Fix #26: Wrap position MAX query + INSERT in BEGIN IMMEDIATE transaction
     let mut tx = pool.begin().await?;
 
     let max_pos: Option<(f64,)> = sqlx::query_as(
@@ -65,8 +68,29 @@ pub async fn create(
     .await?;
     let position = max_pos.map(|r| r.0).unwrap_or(0.0) + 1.0;
 
+    // If project_id is provided, atomically increment the project's task_counter
+    // and compute the simple_id from prefix + counter
+    let (task_number, simple_id) = if let Some(pid) = project_id {
+        let row: Option<(i32, String)> = sqlx::query_as(
+            "UPDATE projects SET task_counter = task_counter + 1, \
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+             WHERE id = ? \
+             RETURNING task_counter, task_prefix"
+        )
+        .bind(pid)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        match row {
+            Some((counter, prefix)) => (counter, format!("{}-{}", prefix, counter)),
+            None => return Err(anyhow::anyhow!("Project not found: {}", pid)),
+        }
+    } else {
+        (0, String::new())
+    };
+
     sqlx::query(
-        "INSERT INTO tasks (id, title, description, status, priority, position, project_id, assigned_agent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, title, description, status, priority, position, project_id, assigned_agent_id, task_number, simple_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(title)
@@ -76,6 +100,8 @@ pub async fn create(
     .bind(position)
     .bind(project_id)
     .bind(assigned_agent_id)
+    .bind(task_number)
+    .bind(&simple_id)
     .execute(&mut *tx)
     .await?;
 
@@ -84,7 +110,7 @@ pub async fn create(
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
 }
 
-const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, created_at, updated_at";
+const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, task_number, simple_id, created_at, updated_at";
 
 pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Task>> {
     let row = sqlx::query_as::<_, TaskRow>(&format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id = ?"))

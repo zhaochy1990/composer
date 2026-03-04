@@ -139,7 +139,12 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
             <div className="fixed inset-y-0 right-0 w-[720px] max-w-full z-50 bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-                    <h2 className="text-lg font-semibold text-gray-100">Edit Task</h2>
+                    <div className="flex items-center gap-3">
+                        {task.simple_id && (
+                            <span className="font-mono text-sm text-gray-400 bg-gray-800 px-2 py-0.5 rounded">{task.simple_id}</span>
+                        )}
+                        <h2 className="text-lg font-semibold text-gray-100">Edit Task</h2>
+                    </div>
                     <button
                         type="button"
                         onClick={onClose}

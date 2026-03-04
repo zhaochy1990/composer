@@ -40,6 +40,8 @@ export interface Task {
     project_id?: string;
     auto_approve: boolean;
     position: number;
+    task_number: number;
+    simple_id: string;
     created_at: string;
     updated_at: string;
 }
@@ -75,6 +77,8 @@ export interface Project {
     id: string;
     name: string;
     description?: string;
+    task_prefix: string;
+    task_counter: number;
     created_at: string;
     updated_at: string;
 }

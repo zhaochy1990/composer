@@ -24,9 +24,10 @@ mod event_bus_tests {
             priority: 0,
             assigned_agent_id: None,
             project_id: None,
-
             auto_approve: true,
             position: 1.0,
+            task_number: 0,
+            simple_id: String::new(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })

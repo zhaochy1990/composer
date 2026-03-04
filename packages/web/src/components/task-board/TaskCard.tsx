@@ -30,6 +30,9 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCa
             <div className="flex items-start gap-2">
                 <GripVertical className="w-4 h-4 text-gray-600 mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="flex-1 min-w-0">
+                    {task.simple_id && (
+                        <span className="font-mono text-xs text-gray-500 mr-1.5">{task.simple_id}</span>
+                    )}
                     <p className="font-semibold text-gray-100 text-sm leading-snug">
                         {task.title}
                     </p>

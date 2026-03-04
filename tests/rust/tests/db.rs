@@ -3,6 +3,108 @@ use composer_db::Database;
 use composer_tests::test_pool;
 
 // ---------------------------------------------------------------------------
+// Migration safety test: seed data before migration 006, verify no conflicts
+// ---------------------------------------------------------------------------
+
+/// Reproduce the exact scenario: create schema matching migrations 001-005,
+/// seed a project with multiple tasks, then run migration 006. The unique
+/// index on (project_id, task_number) must NOT fail.
+#[tokio::test]
+async fn migration_006_backfill_with_existing_data() {
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+
+    // Build schema equivalent to migrations 001-005 applied
+    let schema_stmts = vec![
+        // From 001 + 003 (project_id added) + 004/005 (repo_path added then dropped, auto_approve kept)
+        "CREATE TABLE agents (
+            id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
+            agent_type TEXT NOT NULL DEFAULT 'claude_code' UNIQUE,
+            executable_path TEXT, status TEXT NOT NULL DEFAULT 'idle',
+            auth_status TEXT NOT NULL DEFAULT 'unknown', last_heartbeat TEXT,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )",
+        "CREATE TABLE projects (
+            id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, description TEXT,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )",
+        "CREATE TABLE tasks (
+            id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, description TEXT,
+            status TEXT NOT NULL DEFAULT 'backlog', priority INTEGER NOT NULL DEFAULT 0,
+            assigned_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+            project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+            auto_approve INTEGER NOT NULL DEFAULT 1,
+            position REAL NOT NULL DEFAULT 0.0,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )",
+    ];
+    for stmt in &schema_stmts {
+        sqlx::query(stmt).execute(&pool).await
+            .unwrap_or_else(|e| panic!("Schema setup failed: {stmt}\nError: {e}"));
+    }
+
+    // Seed: one project with 3 tasks (the scenario that broke before)
+    sqlx::query("INSERT INTO projects (id, name) VALUES ('p1', 'composer')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO tasks (id, title, project_id, created_at) VALUES ('t1', 'Task A', 'p1', '2024-01-01T00:00:00Z')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO tasks (id, title, project_id, created_at) VALUES ('t2', 'Task B', 'p1', '2024-01-02T00:00:00Z')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO tasks (id, title, project_id, created_at) VALUES ('t3', 'Task C', 'p1', '2024-01-03T00:00:00Z')")
+        .execute(&pool).await.unwrap();
+    // Also an orphan task with no project
+    sqlx::query("INSERT INTO tasks (id, title, project_id, created_at) VALUES ('t4', 'Orphan', NULL, '2024-01-04T00:00:00Z')")
+        .execute(&pool).await.unwrap();
+
+    // Now run migration 006 — this is the one under test.
+    // Strip SQL comments before splitting on ';' to avoid false splits
+    // from semicolons inside comments.
+    let migration_006: &str = include_str!("../../../crates/db/migrations/006_task_simple_id.sql");
+    let stripped: String = migration_006
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("--"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for stmt in stripped.split(';') {
+        let stmt = stmt.trim();
+        if !stmt.is_empty() {
+            sqlx::query(stmt).execute(&pool).await
+                .unwrap_or_else(|e| panic!("Migration 006 failed: {stmt}\nError: {e}"));
+        }
+    }
+
+    // Verify backfill results
+    let rows: Vec<(String, String, i32, String)> = sqlx::query_as(
+        "SELECT id, title, task_number, simple_id FROM tasks WHERE project_id IS NOT NULL ORDER BY task_number"
+    ).fetch_all(&pool).await.unwrap();
+
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0], ("t1".into(), "Task A".into(), 1, "COM-1".into()));
+    assert_eq!(rows[1], ("t2".into(), "Task B".into(), 2, "COM-2".into()));
+    assert_eq!(rows[2], ("t3".into(), "Task C".into(), 3, "COM-3".into()));
+
+    // Orphan task should remain at defaults
+    let orphan: (i32, String) = sqlx::query_as(
+        "SELECT task_number, simple_id FROM tasks WHERE id = 't4'"
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(orphan, (0, "".into()));
+
+    // Project counter should match
+    let counter: (i32, String) = sqlx::query_as(
+        "SELECT task_counter, task_prefix FROM projects WHERE id = 'p1'"
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(counter, (3, "COM".into()));
+}
+
+// ---------------------------------------------------------------------------
 // Database connection tests (from crates/db/src/lib.rs)
 // ---------------------------------------------------------------------------
 
@@ -305,6 +407,118 @@ mod task_tests {
         // Both should start at position 1.0 since they're in different columns
         assert_eq!(backlog.position, 1.0);
         assert_eq!(done.position, 1.0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Project model tests (from crates/db/src/models/project.rs)
+// ---------------------------------------------------------------------------
+
+mod project_tests {
+    use super::*;
+    use composer_db::models::project;
+
+    #[test]
+    fn derive_task_prefix_normal() {
+        assert_eq!(project::derive_task_prefix("composer"), "COM");
+        assert_eq!(project::derive_task_prefix("Composer"), "COM");
+        assert_eq!(project::derive_task_prefix("my-project"), "MYP");
+        assert_eq!(project::derive_task_prefix("ABC"), "ABC");
+    }
+
+    #[test]
+    fn derive_task_prefix_with_numbers() {
+        assert_eq!(project::derive_task_prefix("project123"), "PRO");
+        assert_eq!(project::derive_task_prefix("123abc"), "ABC");
+    }
+
+    #[test]
+    fn derive_task_prefix_short_name() {
+        assert_eq!(project::derive_task_prefix("ab"), "TSK");
+        assert_eq!(project::derive_task_prefix(""), "TSK");
+        assert_eq!(project::derive_task_prefix("a"), "TSK");
+        assert_eq!(project::derive_task_prefix("12"), "TSK");
+    }
+
+    #[tokio::test]
+    async fn create_project_sets_prefix() {
+        let pool = test_pool().await;
+        let p = project::create(&pool, "composer", None).await.unwrap();
+        assert_eq!(p.task_prefix, "COM");
+        assert_eq!(p.task_counter, 0);
+    }
+
+    #[tokio::test]
+    async fn update_project_name_updates_prefix() {
+        let pool = test_pool().await;
+        let p = project::create(&pool, "composer", None).await.unwrap();
+        assert_eq!(p.task_prefix, "COM");
+        let updated = project::update(&pool, &p.id.to_string(), Some("webserver"), None).await.unwrap();
+        assert_eq!(updated.task_prefix, "WEB");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Task simple_id tests
+// ---------------------------------------------------------------------------
+
+mod task_simple_id_tests {
+    use super::*;
+    use composer_db::models::{project, task};
+
+    #[tokio::test]
+    async fn task_with_project_gets_simple_id() {
+        let pool = test_pool().await;
+        let p = project::create(&pool, "composer", None).await.unwrap();
+        let pid = p.id.to_string();
+
+        let t1 = task::create(&pool, "First task", None, None, None, Some(&pid), None).await.unwrap();
+        assert_eq!(t1.simple_id, "COM-1");
+        assert_eq!(t1.task_number, 1);
+
+        let t2 = task::create(&pool, "Second task", None, None, None, Some(&pid), None).await.unwrap();
+        assert_eq!(t2.simple_id, "COM-2");
+        assert_eq!(t2.task_number, 2);
+    }
+
+    #[tokio::test]
+    async fn task_without_project_has_empty_simple_id() {
+        let pool = test_pool().await;
+        let t = task::create(&pool, "No project task", None, None, None, None, None).await.unwrap();
+        assert_eq!(t.simple_id, "");
+        assert_eq!(t.task_number, 0);
+    }
+
+    #[tokio::test]
+    async fn task_counter_increments_per_project() {
+        let pool = test_pool().await;
+        let p1 = project::create(&pool, "alpha", None).await.unwrap();
+        let p2 = project::create(&pool, "beta", None).await.unwrap();
+        let p1id = p1.id.to_string();
+        let p2id = p2.id.to_string();
+
+        let t1 = task::create(&pool, "Alpha task 1", None, None, None, Some(&p1id), None).await.unwrap();
+        assert_eq!(t1.simple_id, "ALP-1");
+
+        let t2 = task::create(&pool, "Beta task 1", None, None, None, Some(&p2id), None).await.unwrap();
+        assert_eq!(t2.simple_id, "BET-1");
+
+        let t3 = task::create(&pool, "Alpha task 2", None, None, None, Some(&p1id), None).await.unwrap();
+        assert_eq!(t3.simple_id, "ALP-2");
+    }
+
+    #[tokio::test]
+    async fn project_counter_reflects_task_count() {
+        let pool = test_pool().await;
+        let p = project::create(&pool, "counter", None).await.unwrap();
+        let pid = p.id.to_string();
+
+        task::create(&pool, "T1", None, None, None, Some(&pid), None).await.unwrap();
+        task::create(&pool, "T2", None, None, None, Some(&pid), None).await.unwrap();
+        task::create(&pool, "T3", None, None, None, Some(&pid), None).await.unwrap();
+
+        let updated = project::find_by_id(&pool, &pid).await.unwrap().unwrap();
+        assert_eq!(updated.task_counter, 3);
     }
 }
 

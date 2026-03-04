@@ -116,6 +116,8 @@ pub struct Task {
     pub project_id: Option<Uuid>,
     pub auto_approve: bool,
     pub position: f64,
+    pub task_number: i32,
+    pub simple_id: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -157,6 +159,8 @@ pub struct Project {
     pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
+    pub task_prefix: String,
+    pub task_counter: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

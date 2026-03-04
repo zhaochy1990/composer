@@ -9,6 +9,8 @@ function makeProject(overrides: Partial<Project> = {}): Project {
         id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
         name: 'Test Project',
         description: undefined,
+        task_prefix: 'TES',
+        task_counter: 0,
         created_at: '2024-01-15T00:00:00Z',
         updated_at: '2024-01-15T00:00:00Z',
         ...overrides,

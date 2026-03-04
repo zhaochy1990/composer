@@ -15,6 +15,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         project_id: null,
         auto_approve: true,
         position: 1.0,
+        task_number: 0,
+        simple_id: '',
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
         ...overrides,
@@ -87,5 +89,17 @@ describe('TaskCard', () => {
     it('does not show project badge when project_id is null', () => {
         render(<TaskCard task={makeTask()} onClick={() => {}} projectNameMap={{ 'proj-456': 'My Project' }} />);
         expect(screen.queryByText('My Project')).not.toBeInTheDocument();
+    });
+
+    it('renders simple_id when present', () => {
+        const task = makeTask({ simple_id: 'COM-1', task_number: 1 });
+        render(<TaskCard task={task} onClick={() => {}} />);
+        expect(screen.getByText('COM-1')).toBeInTheDocument();
+    });
+
+    it('does not render simple_id when empty', () => {
+        const task = makeTask({ simple_id: '', task_number: 0 });
+        render(<TaskCard task={task} onClick={() => {}} />);
+        expect(screen.queryByText(/^[A-Z]+-\d+$/)).not.toBeInTheDocument();
     });
 });
