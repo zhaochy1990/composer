@@ -16,6 +16,8 @@ pub struct AppState {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // ── Load configuration (env vars > ~/.composer/config.toml > defaults) ──
+    // Note: loaded BEFORE tracing init so we can read logging.level.
+    // Neither load() emits tracing calls; we call log_summary() after init.
     let config = composer_config::ComposerConfig::load(None)?;
     let credentials = composer_config::CredentialsConfig::load(None)?;
 
@@ -38,6 +40,10 @@ async fn main() -> anyhow::Result<()> {
             .with_writer(non_blocking)
             .init();
 
+        // Now that tracing is live, log config diagnostics
+        config.log_summary();
+        credentials.log_summary();
+
         // Keep _guard alive for the duration of main
         run_server(config, credentials, Some(_guard)).await
     } else {
@@ -47,6 +53,10 @@ async fn main() -> anyhow::Result<()> {
                     .unwrap_or_else(|_| EnvFilter::new(&config.logging.level)),
             )
             .init();
+
+        // Now that tracing is live, log config diagnostics
+        config.log_summary();
+        credentials.log_summary();
 
         run_server(config, credentials, None::<tracing_appender::non_blocking::WorkerGuard>).await
     }

@@ -23,7 +23,21 @@ impl CredentialsConfig {
     }
 
     /// Load credentials with full precedence: env vars > file > None.
+    ///
+    /// Note: this method does NOT emit tracing calls because it may run
+    /// before the tracing subscriber is initialized. Call [`log_summary`]
+    /// after initializing the subscriber.
     pub fn load(creds_path: Option<&Path>) -> Result<Self> {
+        Self::load_with_env(creds_path, |key| std::env::var(key).ok())
+    }
+
+    /// Load credentials using a custom env lookup function.
+    ///
+    /// Testable core — avoids `std::env::set_var` in parallel tests.
+    pub fn load_with_env(
+        creds_path: Option<&Path>,
+        env_lookup: impl Fn(&str) -> Option<String>,
+    ) -> Result<Self> {
         let mut creds = match creds_path {
             Some(path) if path.exists() => {
                 check_file_permissions(path);
@@ -39,17 +53,20 @@ impl CredentialsConfig {
             },
         };
 
-        creds.apply_env_overrides();
-
-        if creds.anthropic_api_key.is_some() {
-            tracing::debug!("Anthropic API key loaded");
-        }
-
+        creds.apply_env_overrides(&env_lookup);
         Ok(creds)
     }
 
-    fn apply_env_overrides(&mut self) {
-        if let Ok(val) = std::env::var("ANTHROPIC_API_KEY") {
+    /// Log a summary of loaded credentials. Call this **after**
+    /// initializing the tracing subscriber.
+    pub fn log_summary(&self) {
+        if self.anthropic_api_key.is_some() {
+            tracing::debug!("Anthropic API key loaded");
+        }
+    }
+
+    fn apply_env_overrides(&mut self, env_lookup: &impl Fn(&str) -> Option<String>) {
+        if let Some(val) = env_lookup("ANTHROPIC_API_KEY") {
             self.anthropic_api_key = Some(val);
         }
     }
@@ -95,6 +112,19 @@ fn check_file_permissions(_path: &Path) {
 mod tests {
     use super::*;
 
+    /// Helper: build an env lookup from key-value pairs.
+    fn mock_env(vars: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let map: std::collections::HashMap<String, String> = vars
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |key| map.get(key).cloned()
+    }
+
+    fn empty_env() -> impl Fn(&str) -> Option<String> {
+        |_| None
+    }
+
     #[test]
     fn default_credentials_are_none() {
         let creds = CredentialsConfig::default();
@@ -113,48 +143,48 @@ mod tests {
 
     #[test]
     fn missing_credentials_file_returns_defaults() {
-        let creds =
-            CredentialsConfig::load(Some(Path::new("/nonexistent/credentials.toml"))).unwrap();
+        let creds = CredentialsConfig::load_with_env(
+            Some(Path::new("/nonexistent/credentials.toml")),
+            empty_env(),
+        )
+        .unwrap();
         assert!(creds.anthropic_api_key.is_none());
     }
 
     #[test]
     fn env_var_overrides_credentials_file() {
-        // Test that env var override works in apply_env_overrides
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("credentials.toml");
         std::fs::write(&path, r#"anthropic_api_key = "sk-from-file""#).unwrap();
 
-        let mut creds = CredentialsConfig::from_file(&path).unwrap();
-        assert_eq!(creds.anthropic_api_key.as_deref(), Some("sk-from-file"));
-
-        // Simulate env override directly
-        creds.anthropic_api_key = Some("sk-from-env".into());
+        let env = mock_env(&[("ANTHROPIC_API_KEY", "sk-from-env")]);
+        let creds = CredentialsConfig::load_with_env(Some(&path), env).unwrap();
         assert_eq!(creds.anthropic_api_key.as_deref(), Some("sk-from-env"));
     }
 
     #[test]
-    fn inject_into_env_sets_missing_var() {
-        // Use a unique env var name to avoid parallel test interference
-        // Test the logic directly rather than via real env vars
-        let creds = CredentialsConfig {
-            anthropic_api_key: Some("sk-inject-test".into()),
-        };
-        assert!(creds.anthropic_api_key.is_some());
+    fn env_only_credentials() {
+        let env = mock_env(&[("ANTHROPIC_API_KEY", "sk-env-only")]);
+        let creds = CredentialsConfig::load_with_env(None, env).unwrap();
+        assert_eq!(creds.anthropic_api_key.as_deref(), Some("sk-env-only"));
     }
 
     #[test]
-    fn inject_into_env_does_not_overwrite_existing() {
-        // Test the logic: if env var is already set, inject should not overwrite
-        // We test the method contract without mutating shared env state
+    fn no_env_no_file_returns_none() {
+        let creds = CredentialsConfig::load_with_env(
+            Some(Path::new("/nonexistent/credentials.toml")),
+            empty_env(),
+        )
+        .unwrap();
+        assert!(creds.anthropic_api_key.is_none());
+    }
+
+    #[test]
+    fn inject_into_env_sets_missing_var() {
         let creds = CredentialsConfig {
-            anthropic_api_key: Some("sk-should-not-replace".into()),
+            anthropic_api_key: Some("sk-inject-test".into()),
         };
-        // The method checks std::env::var("ANTHROPIC_API_KEY").is_err()
-        // before setting. This validates the struct is constructed correctly.
-        assert_eq!(
-            creds.anthropic_api_key.as_deref(),
-            Some("sk-should-not-replace")
-        );
+        // Verify the struct holds the value for injection
+        assert_eq!(creds.anthropic_api_key.as_deref(), Some("sk-inject-test"));
     }
 }
