@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Trash2, Square, Play } from 'lucide-react';
-import type { Task, TaskStatus } from '@/types/generated';
+import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession } from '@/hooks/use-sessions';
@@ -19,7 +19,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description ?? '');
     const [priority, setPriority] = useState(task.priority);
-    const [status, setStatus] = useState<TaskStatus>(task.status);
+
     const [assignedAgentId, setAssignedAgentId] = useState(task.assigned_agent_id ?? '');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -27,7 +27,6 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
         setTitle(task.title);
         setDescription(task.description ?? '');
         setPriority(task.priority);
-        setStatus(task.status);
         setAssignedAgentId(task.assigned_agent_id ?? '');
         setShowDeleteConfirm(false);
     }, [task.id, task.updated_at]);
@@ -106,7 +105,6 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                 title: title.trim(),
                 description: description.trim() || undefined,
                 priority,
-                status,
                 assigned_agent_id: assignedAgentId || undefined,
             },
             { onSuccess: () => setSaved(true) },
@@ -175,40 +173,21 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label htmlFor="edit-priority" className="block text-sm font-medium text-gray-300 mb-1">
-                                        Priority
-                                    </label>
-                                    <select
-                                        id="edit-priority"
-                                        value={priority}
-                                        onChange={e => setPriority(Number(e.target.value))}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    >
-                                        <option value={0}>None</option>
-                                        <option value={1}>Low</option>
-                                        <option value={2}>Medium</option>
-                                        <option value={3}>High</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label htmlFor="edit-status" className="block text-sm font-medium text-gray-300 mb-1">
-                                        Status
-                                    </label>
-                                    <select
-                                        id="edit-status"
-                                        value={status}
-                                        onChange={e => setStatus(e.target.value as TaskStatus)}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    >
-                                        <option value="backlog">Backlog</option>
-                                        <option value="in_progress">In Progress</option>
-                                        <option value="waiting">Waiting</option>
-                                        <option value="done">Done</option>
-                                    </select>
-                                </div>
+                            <div>
+                                <label htmlFor="edit-priority" className="block text-sm font-medium text-gray-300 mb-1">
+                                    Priority
+                                </label>
+                                <select
+                                    id="edit-priority"
+                                    value={priority}
+                                    onChange={e => setPriority(Number(e.target.value))}
+                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                >
+                                    <option value={0}>None</option>
+                                    <option value={1}>Low</option>
+                                    <option value={2}>Medium</option>
+                                    <option value={3}>High</option>
+                                </select>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
