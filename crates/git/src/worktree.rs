@@ -95,27 +95,13 @@ pub async fn remove_worktree(
     Ok(())
 }
 
-/// List all active worktrees by parsing `git worktree list --porcelain`.
-pub async fn list_worktrees(
-    repo_path: &Path,
-) -> Result<Vec<WorktreeInfo>, GitWorktreeError> {
-    let output = Command::new("git")
-        .current_dir(repo_path)
-        .args(["worktree", "list", "--porcelain"])
-        .output()
-        .await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+/// Parse `git worktree list --porcelain` output into WorktreeInfo entries.
+pub fn parse_porcelain(output: &str) -> Vec<WorktreeInfo> {
     let mut worktrees = Vec::new();
     let mut current_path: Option<PathBuf> = None;
     let mut current_branch: Option<String> = None;
 
-    for line in stdout.lines() {
+    for line in output.lines() {
         if let Some(path) = line.strip_prefix("worktree ") {
             current_path = Some(PathBuf::from(path));
         } else if let Some(branch) = line.strip_prefix("branch refs/heads/") {
@@ -138,5 +124,24 @@ pub async fn list_worktrees(
         });
     }
 
-    Ok(worktrees)
+    worktrees
+}
+
+/// List all active worktrees by parsing `git worktree list --porcelain`.
+pub async fn list_worktrees(
+    repo_path: &Path,
+) -> Result<Vec<WorktreeInfo>, GitWorktreeError> {
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_porcelain(&stdout))
 }

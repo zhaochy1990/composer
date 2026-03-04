@@ -8,6 +8,7 @@ members = [
     "crates/git",
     "crates/services",
     "crates/server",
+    "tests/rust",
 ]
 
 [workspace.dependencies]
