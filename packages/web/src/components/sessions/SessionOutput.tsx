@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useSessionOutputStore, type SessionLogEntry } from '@/stores/session-output-store';
+import { parseClaudeMessage } from '@/lib/parse-claude-message';
+import { MessageEntry } from './MessageEntry';
 import { cn } from '@/lib/utils';
 
 const EMPTY_OUTPUT: SessionLogEntry[] = [];
@@ -40,35 +42,57 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
         }
     }, [output.length]);
 
+    // Parse stdout lines into structured messages, memoized to avoid re-parsing
+    const parsedEntries = useMemo(() => {
+        return output.map((line) => ({
+            ...line,
+            parsed: line.log_type === 'stdout' ? parseClaudeMessage(line.content) : null,
+        }));
+    }, [output]);
+
     return (
         <div
             ref={scrollRef}
             className="h-full overflow-y-auto bg-gray-950 rounded-lg p-4 font-mono text-sm border border-gray-800"
         >
-            {output.length === 0 && (
+            {parsedEntries.length === 0 && (
                 <p className="text-gray-600 italic">
                     Waiting for output...
                 </p>
             )}
-            {output.map((line) => (
-                <div
-                    key={line.seq}
-                    className={cn(
-                        'py-0.5 whitespace-pre-wrap break-all leading-relaxed',
-                        line.log_type === 'stderr' && 'text-red-400',
-                        line.log_type === 'control' && 'text-blue-400',
-                        line.log_type === 'status' && 'text-yellow-400',
-                        line.log_type === 'stdout' && 'text-gray-200',
-                        line.log_type === 'user_input' && 'text-green-400',
-                        !['stderr', 'control', 'status', 'stdout', 'user_input'].includes(
-                            line.log_type,
-                        ) && 'text-gray-300',
-                    )}
-                >
-                    {line.log_type === 'user_input' && <span className="text-green-600 mr-1">&gt;</span>}
-                    {line.content}
-                </div>
-            ))}
+            {parsedEntries.map((line) => {
+                // For stdout lines, render parsed messages (skip if empty — suppressed types)
+                if (line.parsed) {
+                    if (line.parsed.length === 0) return null;
+                    return (
+                        <div key={line.seq}>
+                            {line.parsed.map((msg, i) => (
+                                <MessageEntry key={`${line.seq}-${i}`} message={msg} />
+                            ))}
+                        </div>
+                    );
+                }
+
+                // For stderr, control, user_input — keep original rendering
+                return (
+                    <div
+                        key={line.seq}
+                        className={cn(
+                            'py-0.5 whitespace-pre-wrap break-all leading-relaxed',
+                            line.log_type === 'stderr' && 'text-red-400',
+                            line.log_type === 'control' && 'text-blue-400',
+                            line.log_type === 'status' && 'text-yellow-400',
+                            line.log_type === 'user_input' && 'text-green-400',
+                            !['stderr', 'control', 'status', 'user_input'].includes(
+                                line.log_type,
+                            ) && 'text-gray-300',
+                        )}
+                    >
+                        {line.log_type === 'user_input' && <span className="text-green-600 mr-1">&gt;</span>}
+                        {line.content}
+                    </div>
+                );
+            })}
         </div>
     );
 }
