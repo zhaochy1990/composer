@@ -135,6 +135,7 @@ impl ComposerConfig {
         };
 
         config.apply_env_overrides(&env_lookup);
+        config.resolve_database_path();
         Ok(config)
     }
 
@@ -151,14 +152,22 @@ impl ComposerConfig {
                 self.server.bind_address
             );
         }
-        if self.database.url_pattern != defaults.database.url_pattern {
-            tracing::info!(
-                "Config override: database.url_pattern = {}",
-                self.database.url_pattern
-            );
-        }
+        tracing::info!("Database URL: {}", self.database.url_pattern);
         if self.logging.level != defaults.logging.level {
             tracing::info!("Config override: logging.level = {}", self.logging.level);
+        }
+    }
+
+    /// If the database URL is still the default relative path, resolve it
+    /// to `~/.composer/data/composer.db` so the DB lives in a stable location.
+    fn resolve_database_path(&mut self) {
+        let default_pattern = DatabaseConfig::default().url_pattern;
+        if self.database.url_pattern == default_pattern {
+            if let Ok(data_dir) = crate::paths::data_dir() {
+                let db_path = data_dir.join("composer.db");
+                self.database.url_pattern =
+                    format!("sqlite:{}?mode=rwc", db_path.display());
+            }
         }
     }
 

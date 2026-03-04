@@ -28,7 +28,7 @@ export default defineConfig({
       port: 3000,
       reuseExistingServer: !process.env.CI,
       env: {
-        DATABASE_URL: 'sqlite:composer_test.db?mode=rwc',
+        DATABASE_URL: `sqlite:${require('os').homedir().replace(/\\/g, '/')}/.composer/data/composer_test.db?mode=rwc`,
       },
       timeout: 120_000,
     },

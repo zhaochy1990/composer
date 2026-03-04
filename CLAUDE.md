@@ -112,7 +112,7 @@ Composer uses a layered configuration system. Precedence: **env var > `~/.compos
 
 **Config sections & defaults:**
 - `server.port` = 3000, `server.bind_address` = "127.0.0.1"
-- `database.url_pattern` = "sqlite:composer.db?mode=rwc"
+- `database.url_pattern` = "sqlite:composer.db?mode=rwc" (resolved to `~/.composer/data/composer.db` by default)
 - `logging.level` = "composer=debug,tower_http=debug", `logging.log_to_file` = false
 - `cors.origins` = [localhost:5173, localhost:3000 variants]
 
