@@ -95,27 +95,13 @@ pub async fn remove_worktree(
     Ok(())
 }
 
-/// List all active worktrees by parsing `git worktree list --porcelain`.
-pub async fn list_worktrees(
-    repo_path: &Path,
-) -> Result<Vec<WorktreeInfo>, GitWorktreeError> {
-    let output = Command::new("git")
-        .current_dir(repo_path)
-        .args(["worktree", "list", "--porcelain"])
-        .output()
-        .await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+/// Parse `git worktree list --porcelain` output into WorktreeInfo entries.
+pub fn parse_porcelain(output: &str) -> Vec<WorktreeInfo> {
     let mut worktrees = Vec::new();
     let mut current_path: Option<PathBuf> = None;
     let mut current_branch: Option<String> = None;
 
-    for line in stdout.lines() {
+    for line in output.lines() {
         if let Some(path) = line.strip_prefix("worktree ") {
             current_path = Some(PathBuf::from(path));
         } else if let Some(branch) = line.strip_prefix("branch refs/heads/") {
@@ -138,100 +124,24 @@ pub async fn list_worktrees(
         });
     }
 
-    Ok(worktrees)
+    worktrees
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
+/// List all active worktrees by parsing `git worktree list --porcelain`.
+pub async fn list_worktrees(
+    repo_path: &Path,
+) -> Result<Vec<WorktreeInfo>, GitWorktreeError> {
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .await?;
 
-    // --- Parser tests (no git required) ---
-
-    /// Helper: parse porcelain output using the same logic as list_worktrees
-    fn parse_porcelain(output: &str) -> Vec<WorktreeInfo> {
-        let mut worktrees = Vec::new();
-        let mut current_path: Option<PathBuf> = None;
-        let mut current_branch: Option<String> = None;
-
-        for line in output.lines() {
-            if let Some(path) = line.strip_prefix("worktree ") {
-                current_path = Some(PathBuf::from(path));
-            } else if let Some(branch) = line.strip_prefix("branch refs/heads/") {
-                current_branch = Some(branch.to_string());
-            } else if line.is_empty() {
-                if let (Some(path), Some(branch)) = (current_path.take(), current_branch.take()) {
-                    worktrees.push(WorktreeInfo {
-                        worktree_path: path,
-                        branch_name: branch,
-                    });
-                }
-            }
-        }
-        if let (Some(path), Some(branch)) = (current_path, current_branch) {
-            worktrees.push(WorktreeInfo {
-                worktree_path: path,
-                branch_name: branch,
-            });
-        }
-        worktrees
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
     }
 
-    #[test]
-    fn parse_single_worktree() {
-        let output = "worktree /repo/.composer/worktrees/test\nHEAD abc123\nbranch refs/heads/composer/test\n\n";
-        let wts = parse_porcelain(output);
-        assert_eq!(wts.len(), 1);
-        assert_eq!(wts[0].branch_name, "composer/test");
-        assert_eq!(wts[0].worktree_path, PathBuf::from("/repo/.composer/worktrees/test"));
-    }
-
-    #[test]
-    fn parse_multiple_worktrees() {
-        let output = "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo/.composer/worktrees/wt1\nHEAD def\nbranch refs/heads/composer/wt1\n\n";
-        let wts = parse_porcelain(output);
-        assert_eq!(wts.len(), 2);
-    }
-
-    #[test]
-    fn parse_empty_output() {
-        let wts = parse_porcelain("");
-        assert!(wts.is_empty());
-    }
-
-    #[test]
-    fn parse_no_trailing_newline() {
-        let output = "worktree /repo\nHEAD abc\nbranch refs/heads/main";
-        let wts = parse_porcelain(output);
-        assert_eq!(wts.len(), 1);
-        assert_eq!(wts[0].branch_name, "main");
-    }
-
-    #[test]
-    fn parse_bare_worktree_skipped() {
-        // A bare worktree has no branch line — should be skipped
-        let output = "worktree /repo\nHEAD abc\nbare\n\n";
-        let wts = parse_porcelain(output);
-        assert!(wts.is_empty());
-    }
-
-    #[test]
-    fn already_exists_error() {
-        let err = GitWorktreeError::AlreadyExists(PathBuf::from("/test"));
-        assert!(err.to_string().contains("/test"));
-    }
-
-    #[test]
-    fn command_failed_error() {
-        let err = GitWorktreeError::CommandFailed("bad thing".to_string());
-        assert!(err.to_string().contains("bad thing"));
-    }
-
-    #[test]
-    fn worktree_info_branch_naming() {
-        // Verify the expected branch naming convention
-        let name = "my-feature";
-        let branch = format!("composer/{}", name);
-        assert_eq!(branch, "composer/my-feature");
-    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_porcelain(&stdout))
 }

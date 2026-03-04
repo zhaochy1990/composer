@@ -28,8 +28,3 @@ composer-api-types = { path = "../api-types" }
 composer-db = { path = "../db" }
 composer-services = { path = "../services" }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"

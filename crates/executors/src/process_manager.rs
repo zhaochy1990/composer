@@ -202,32 +202,3 @@ impl AgentProcessManager {
         self.processes.len()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_manager() -> AgentProcessManager {
-        let (tx, _) = broadcast::channel(16);
-        AgentProcessManager::new(tx)
-    }
-
-    #[test]
-    fn is_running_false_for_unknown() {
-        let mgr = make_manager();
-        assert!(!mgr.is_running(&Uuid::new_v4()));
-    }
-
-    #[test]
-    fn running_count_starts_at_zero() {
-        let mgr = make_manager();
-        assert_eq!(mgr.running_count(), 0);
-    }
-
-    #[tokio::test]
-    async fn interrupt_nonexistent_session_ok() {
-        let mgr = make_manager();
-        // Should not panic or error
-        mgr.interrupt(Uuid::new_v4()).await.unwrap();
-    }
-}

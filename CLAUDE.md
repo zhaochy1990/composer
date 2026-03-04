@@ -24,12 +24,21 @@ pnpm run build:server       # Cargo release build → target/release/composer-se
 ```
 
 ### Test
+
+All tests live in the `tests/` directory at the project root:
+
 ```bash
-pnpm run test:e2e           # Playwright E2E tests (headless)
-pnpm run test:e2e:ui        # Playwright with UI
-pnpm run test:e2e:headed    # Playwright with visible browser
-cargo test                  # Rust unit tests
+cargo test --workspace      # All Rust tests (from tests/rust/)
+cd packages/web && pnpm run test          # Frontend unit tests (Vitest, from tests/web/)
+cd packages/web && pnpm run test:e2e      # Playwright E2E tests (from tests/e2e/)
+cd packages/web && pnpm run test:e2e:ui   # Playwright with UI
+cd packages/web && pnpm run test:e2e:headed # Playwright with visible browser
 ```
+
+**Test directory structure:**
+- `tests/rust/` — Cargo crate (`composer-tests`) with integration tests for all 6 Rust crates
+- `tests/web/` — Vitest unit tests for React components, hooks, stores, and utilities
+- `tests/e2e/` — Playwright E2E tests with fixtures and API helpers
 
 ### Lint & Format
 ```bash
@@ -100,4 +109,4 @@ When adding a new feature, the typical flow is:
 
 ## E2E Tests
 
-Located in `packages/web/e2e/tests/`. Uses Playwright with a test-specific DB (`sqlite:composer_test.db`). Tests run sequentially (1 worker). The Playwright config auto-starts both the Cargo server and Vite dev server.
+Located in `tests/e2e/tests/`. Uses Playwright with a test-specific DB (`sqlite:composer_test.db`). Tests run sequentially (1 worker). The Playwright config (`packages/web/playwright.config.ts`) auto-starts both the Cargo server and Vite dev server.

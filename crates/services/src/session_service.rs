@@ -324,33 +324,3 @@ impl SessionService {
         &self.process_manager
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    async fn setup() -> SessionService {
-        let db = composer_db::Database::connect("sqlite::memory:").await.unwrap();
-        db.run_migrations().await.unwrap();
-        let event_bus = EventBus::new();
-        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
-        SessionService::new(Arc::new(db), event_bus, pm)
-    }
-
-    #[tokio::test]
-    async fn list_all_empty() {
-        let svc = setup().await;
-        let sessions = svc.list_all().await.unwrap();
-        assert!(sessions.is_empty());
-    }
-
-    #[tokio::test]
-    async fn get_nonexistent() {
-        let svc = setup().await;
-        let found = svc
-            .get("00000000-0000-0000-0000-000000000000")
-            .await
-            .unwrap();
-        assert!(found.is_none());
-    }
-}
