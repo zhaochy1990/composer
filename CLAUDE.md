@@ -29,12 +29,21 @@ pnpm run build:server       # Cargo release build → target/release/composer-se
 ```
 
 ### Test
+
+All tests live in the `tests/` directory at the project root:
+
 ```bash
-pnpm run test:e2e           # Playwright E2E tests (headless)
-pnpm run test:e2e:ui        # Playwright with UI
-pnpm run test:e2e:headed    # Playwright with visible browser
-cargo test                  # Rust unit tests
+cargo test --workspace      # All Rust tests (from tests/rust/)
+cd packages/web && pnpm run test          # Frontend unit tests (Vitest, from tests/web/)
+cd packages/web && pnpm run test:e2e      # Playwright E2E tests (from tests/e2e/)
+cd packages/web && pnpm run test:e2e:ui   # Playwright with UI
+cd packages/web && pnpm run test:e2e:headed # Playwright with visible browser
 ```
+
+**Test directory structure:**
+- `tests/rust/` — Cargo crate (`composer-tests`) with integration tests for all 6 Rust crates
+- `tests/web/` — Vitest unit tests for React components, hooks, stores, and utilities
+- `tests/e2e/` — Playwright E2E tests with fixtures and API helpers
 
 ### Lint & Format
 ```bash
@@ -50,8 +59,9 @@ pnpm run generate-types     # Export Rust types → packages/web/src/types/gener
 ## Architecture
 
 ### Monorepo Structure
-- **Cargo workspace** (`crates/`): 6 Rust crates
+- **Cargo workspace** (`crates/`): 6 Rust crates + 1 test crate (`tests/rust/`)
 - **pnpm workspace** (`packages/`): 1 React/TypeScript package
+- **Tests** (`tests/`): All test code lives here, separated from production code
 
 ### Rust Crates (dependency order)
 1. **api-types** — Shared structs/enums with `#[derive(TS)]` for TypeScript codegen via ts-rs
@@ -102,7 +112,10 @@ When adding a new feature, the typical flow is:
 6. Run `pnpm run generate-types` to sync types to frontend
 7. Build React components in `packages/web/src/components/`
 8. Add TanStack Query hooks in `packages/web/src/hooks/`
+9. Add tests in `tests/` (Rust tests in `tests/rust/tests/`, frontend tests in `tests/web/`)
+
+**Important:** Do not add `#[cfg(test)]` blocks in `crates/` source files or `__tests__/` directories in `packages/web/src/`. All tests belong in the `tests/` directory.
 
 ## E2E Tests
 
-Located in `packages/web/e2e/tests/`. Uses Playwright with a test-specific DB (`sqlite:composer_test.db`). Tests run sequentially (1 worker). The Playwright config auto-starts both the Cargo server and Vite dev server.
+Located in `tests/e2e/tests/`. Uses Playwright with a test-specific DB (`sqlite:composer_test.db`). Tests run sequentially (1 worker). The Playwright config (`packages/web/playwright.config.ts`) auto-starts both the Cargo server and Vite dev server.

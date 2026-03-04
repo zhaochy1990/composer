@@ -291,6 +291,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "composer-tests"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "composer-api-types",
+ "composer-db",
+ "composer-executors",
+ "composer-git",
+ "composer-server",
+ "composer-services",
+ "http-body-util",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tower",
+ "uuid",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
