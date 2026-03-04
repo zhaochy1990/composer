@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+IMPORTANT RULES
+
+- always do testing after any changes
+- add testing once implemented new features
+
 ## Project Overview
 
 Composer is an AI agent orchestration platform that turns work items into parallelized, workflow-driven coding tasks. It pairs a Rust backend (Axum + SQLite) with a React frontend, built to ship as a single binary via rust-embed.
