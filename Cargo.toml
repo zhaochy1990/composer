@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/api-types",
+    "crates/config",
     "crates/db",
     "crates/executors",
     "crates/git",
@@ -49,6 +50,10 @@ dashmap = "6"
 tokio-util = "0.7"
 which = "7"
 mime_guess = "2"
+toml = "0.8"
+dirs = "6"
+tracing-appender = "0.2"
+tempfile = "3"
 
 [profile.release]
 strip = "symbols"

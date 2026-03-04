@@ -10,10 +10,12 @@ composer-db = { path = "../../crates/db" }
 composer-executors = { path = "../../crates/executors" }
 composer-git = { path = "../../crates/git" }
 composer-services = { path = "../../crates/services" }
+composer-config = { path = "../../crates/config" }
 composer-server = { path = "../../crates/server" }
 
 # Test dependencies
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tempfile = "3"
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"

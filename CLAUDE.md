@@ -41,7 +41,7 @@ cd packages/web && pnpm run test:e2e:headed # Playwright with visible browser
 ```
 
 **Test directory structure:**
-- `tests/rust/` — Cargo crate (`composer-tests`) with integration tests for all 6 Rust crates
+- `tests/rust/` — Cargo crate (`composer-tests`) with integration tests for all Rust crates
 - `tests/web/` — Vitest unit tests for React components, hooks, stores, and utilities
 - `tests/e2e/` — Playwright E2E tests with fixtures and API helpers
 
@@ -59,17 +59,18 @@ pnpm run generate-types     # Export Rust types → packages/web/src/types/gener
 ## Architecture
 
 ### Monorepo Structure
-- **Cargo workspace** (`crates/`): 6 Rust crates + 1 test crate (`tests/rust/`)
+- **Cargo workspace** (`crates/`): 7 Rust crates + 1 test crate (`tests/rust/`)
 - **pnpm workspace** (`packages/`): 1 React/TypeScript package
 - **Tests** (`tests/`): All test code lives here, separated from production code
 
 ### Rust Crates (dependency order)
 1. **api-types** — Shared structs/enums with `#[derive(TS)]` for TypeScript codegen via ts-rs
-2. **db** — SQLx + SQLite layer (WAL mode). Migrations in `crates/db/migrations/`
-3. **git** — Git worktree management for agent isolation (creates under `.composer/worktrees/`)
-4. **executors** — Spawns Claude Code CLI processes, parses stream-JSON protocol, emits events
-5. **services** — Business logic: TaskService, AgentService, SessionService, WorktreeService, EventBus
-6. **server** — Axum HTTP server (port 3000), WebSocket hub, route handlers, embedded SPA serving
+2. **config** — User configuration from `~/.composer/config.toml`, credentials, and path management
+3. **db** — SQLx + SQLite layer (WAL mode). Migrations in `crates/db/migrations/`
+4. **git** — Git worktree management for agent isolation (creates under `.composer/worktrees/`)
+5. **executors** — Spawns Claude Code CLI processes, parses stream-JSON protocol, emits events
+6. **services** — Business logic: TaskService, AgentService, SessionService, WorktreeService, EventBus
+7. **server** — Axum HTTP server (port 3000), WebSocket hub, route handlers, embedded SPA serving
 
 ### Frontend (`packages/web/`)
 - **React 18** with **TanStack Router** and **TanStack Query** for data fetching
@@ -96,10 +97,32 @@ All routes are under the Axum server at `:3000`:
 - `/worktrees` — List, delete
 - `/ws` — WebSocket (bidirectional: WsCommand/WsEvent)
 
+### Configuration (`crates/config/`)
+
+Composer uses a layered configuration system. Precedence: **env var > `~/.composer/config.toml` > defaults**.
+
+**`~/.composer/` directory structure:**
+```
+~/.composer/
+├── config.toml          # Global user config
+├── credentials.toml     # API keys (restricted permissions on Unix)
+├── logs/                # Rotated server logs (when logging.log_to_file = true)
+└── data/                # Runtime data (future use)
+```
+
+**Config sections & defaults:**
+- `server.port` = 3000, `server.bind_address` = "127.0.0.1"
+- `database.url_pattern` = "sqlite:composer.db?mode=rwc"
+- `logging.level` = "composer=debug,tower_http=debug", `logging.log_to_file` = false
+- `cors.origins` = [localhost:5173, localhost:3000 variants]
+
 ### Environment Variables
-- `DATABASE_URL` — default: `sqlite:composer.db?mode=rwc`
-- `CORS_ORIGINS` — default: localhost origins for ports 5173 and 3000
-- `RUST_LOG` — default: `composer=debug,tower_http=debug`
+- `DATABASE_URL` — overrides `database.url_pattern`
+- `CORS_ORIGINS` — overrides `cors.origins` (comma-separated)
+- `RUST_LOG` — overrides `logging.level`
+- `ANTHROPIC_API_KEY` — overrides `credentials.anthropic_api_key`
+- `COMPOSER_PORT` — overrides `server.port`
+- `COMPOSER_BIND_ADDRESS` — overrides `server.bind_address`
 
 ## Development Workflow
 

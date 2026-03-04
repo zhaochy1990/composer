@@ -14,11 +14,11 @@ pub struct AppState {
 
 /// Build the application router with all routes and middleware.
 /// Extracted from main() to enable integration testing.
-pub fn build_app(state: Arc<AppState>) -> Router {
-    let cors_origins_str = std::env::var("CORS_ORIGINS")
-        .unwrap_or_else(|_| "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000".to_string());
-    let origins: Vec<HeaderValue> = cors_origins_str
-        .split(',')
+///
+/// `cors_origins` is a list of allowed CORS origins (e.g. from `ComposerConfig`).
+pub fn build_app(state: Arc<AppState>, cors_origins: &[String]) -> Router {
+    let origins: Vec<HeaderValue> = cors_origins
+        .iter()
         .filter_map(|s| s.trim().parse::<HeaderValue>().ok())
         .collect();
 

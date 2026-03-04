@@ -16,7 +16,8 @@ async fn setup_app() -> axum::Router {
         services,
         event_bus,
     });
-    build_app(state)
+    let default_origins = composer_config::ComposerConfig::default().cors.origins;
+    build_app(state, &default_origins)
 }
 
 async fn body_json(body: Body) -> serde_json::Value {
