@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Trash2, Square, Play, Send, RotateCcw } from 'lucide-react';
+import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
@@ -24,6 +24,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const [assignedAgentId, setAssignedAgentId] = useState(task.assigned_agent_id ?? '');
     const [projectId, setProjectId] = useState(task.project_id ?? '');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [formCollapsed, setFormCollapsed] = useState(false);
 
     useEffect(() => {
         setTitle(task.title);
@@ -90,6 +91,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
         const active = sortedSessions.find(s => s.status === 'running' || s.status === 'paused');
         if (active) {
             setSelectedSessionId(active.id);
+            setFormCollapsed(true);
             hasAutoSelected.current = true;
         }
     }, [sortedSessions]);
@@ -136,14 +138,14 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
             />
 
             {/* Panel */}
-            <div className="fixed inset-y-0 right-0 w-[720px] max-w-full z-50 bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
+            <div className="fixed inset-y-0 right-0 w-[900px] max-w-full z-50 bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+                <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800">
                     <div className="flex items-center gap-3">
                         {task.simple_id && (
                             <span className="font-mono text-sm text-gray-400 bg-gray-800 px-2 py-0.5 rounded">{task.simple_id}</span>
                         )}
-                        <h2 className="text-lg font-semibold text-gray-100">Edit Task</h2>
+                        <h2 className="text-lg font-semibold text-gray-100">{task.title}</h2>
                     </div>
                     <button
                         type="button"
@@ -154,284 +156,291 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
-                    {/* Section 1: Task Edit Form */}
-                    <form onSubmit={handleSubmit} className="px-6 py-4 border-b border-gray-800">
-                        <div className="space-y-4">
-                            <div>
-                                <label htmlFor="edit-title" className="block text-sm font-medium text-gray-300 mb-1">
-                                    Title <span className="text-red-400">*</span>
-                                </label>
-                                <input
-                                    id="edit-title"
-                                    type="text"
-                                    value={title}
-                                    onChange={e => setTitle(e.target.value)}
-                                    placeholder="Task title"
-                                    required
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label htmlFor="edit-description" className="block text-sm font-medium text-gray-300 mb-1">
-                                    Description
-                                </label>
-                                <textarea
-                                    id="edit-description"
-                                    value={description}
-                                    onChange={e => setDescription(e.target.value)}
-                                    placeholder="Optional description"
-                                    rows={3}
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
-                                />
-                            </div>
-
-                            <div>
-                                <label htmlFor="edit-priority" className="block text-sm font-medium text-gray-300 mb-1">
-                                    Priority
-                                </label>
-                                <select
-                                    id="edit-priority"
-                                    value={priority}
-                                    onChange={e => setPriority(Number(e.target.value))}
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                >
-                                    <option value={0}>None</option>
-                                    <option value={1}>Low</option>
-                                    <option value={2}>Medium</option>
-                                    <option value={3}>High</option>
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
+                {/* Collapsible Task Edit Form */}
+                <div className="border-b border-gray-800 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setFormCollapsed(!formCollapsed)}
+                        className="flex items-center gap-2 w-full px-6 py-2.5 text-left text-sm font-semibold text-gray-400 uppercase tracking-wider hover:bg-gray-800/50 transition-colors"
+                    >
+                        {formCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        Task Details
+                    </button>
+                    {!formCollapsed && (
+                        <form onSubmit={handleSubmit} className="px-6 pb-4">
+                            <div className="space-y-3">
                                 <div>
-                                    <label htmlFor="edit-agent" className="block text-sm font-medium text-gray-300 mb-1">
-                                        Agent
+                                    <label htmlFor="edit-title" className="block text-sm font-medium text-gray-300 mb-1">
+                                        Title <span className="text-red-400">*</span>
                                     </label>
-                                    <select
-                                        id="edit-agent"
-                                        value={assignedAgentId}
-                                        onChange={e => setAssignedAgentId(e.target.value)}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    >
-                                        <option value="">None</option>
-                                        {agents?.map(agent => (
-                                            <option key={agent.id} value={agent.id}>{agent.name}</option>
-                                        ))}
-                                    </select>
+                                    <input
+                                        id="edit-title"
+                                        type="text"
+                                        value={title}
+                                        onChange={e => setTitle(e.target.value)}
+                                        placeholder="Task title"
+                                        required
+                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
                                 </div>
 
                                 <div>
-                                    <label htmlFor="edit-project" className="block text-sm font-medium text-gray-300 mb-1">
-                                        Project
+                                    <label htmlFor="edit-description" className="block text-sm font-medium text-gray-300 mb-1">
+                                        Description
                                     </label>
-                                    <select
-                                        id="edit-project"
-                                        value={projectId}
-                                        onChange={e => setProjectId(e.target.value)}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    >
-                                        <option value="">None</option>
-                                        {projects?.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                    <textarea
+                                        id="edit-description"
+                                        value={description}
+                                        onChange={e => setDescription(e.target.value)}
+                                        placeholder="Optional description"
+                                        rows={2}
+                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                                    />
                                 </div>
-                            </div>
 
-                            <div className="text-xs text-gray-500">
-                                Created {new Date(task.created_at).toLocaleString()}
-                                {task.updated_at !== task.created_at && (
-                                    <> &middot; Updated {new Date(task.updated_at).toLocaleString()}</>
-                                )}
-                            </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div>
+                                        <label htmlFor="edit-priority" className="block text-sm font-medium text-gray-300 mb-1">
+                                            Priority
+                                        </label>
+                                        <select
+                                            id="edit-priority"
+                                            value={priority}
+                                            onChange={e => setPriority(Number(e.target.value))}
+                                            className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                        >
+                                            <option value={0}>None</option>
+                                            <option value={1}>Low</option>
+                                            <option value={2}>Medium</option>
+                                            <option value={3}>High</option>
+                                        </select>
+                                    </div>
 
-                            <div className="flex items-center justify-between pt-2">
-                                {!showDeleteConfirm ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowDeleteConfirm(true)}
-                                        className="flex items-center gap-1 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded-md transition-colors"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                        Delete
-                                    </button>
-                                ) : (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-red-400">Delete this task?</span>
+                                    <div>
+                                        <label htmlFor="edit-agent" className="block text-sm font-medium text-gray-300 mb-1">
+                                            Agent
+                                        </label>
+                                        <select
+                                            id="edit-agent"
+                                            value={assignedAgentId}
+                                            onChange={e => setAssignedAgentId(e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                        >
+                                            <option value="">None</option>
+                                            {agents?.map(agent => (
+                                                <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label htmlFor="edit-project" className="block text-sm font-medium text-gray-300 mb-1">
+                                            Project
+                                        </label>
+                                        <select
+                                            id="edit-project"
+                                            value={projectId}
+                                            onChange={e => setProjectId(e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                        >
+                                            <option value="">None</option>
+                                            {projects?.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-1">
+                                    <div className="flex items-center gap-3">
+                                        {!showDeleteConfirm ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDeleteConfirm(true)}
+                                                className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded-md transition-colors"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Delete
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-red-400">Delete?</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleDelete}
+                                                    disabled={deleteTask.isPending}
+                                                    className="px-3 py-1 text-sm text-white bg-red-600 rounded-md hover:bg-red-500 transition-colors disabled:opacity-50"
+                                                >
+                                                    {deleteTask.isPending ? '...' : 'Yes'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowDeleteConfirm(false)}
+                                                    className="px-3 py-1 text-sm text-gray-300 bg-gray-800 rounded-md hover:bg-gray-700 transition-colors"
+                                                >
+                                                    No
+                                                </button>
+                                            </div>
+                                        )}
+                                        <span className="text-xs text-gray-500">
+                                            Created {new Date(task.created_at).toLocaleString()}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex gap-2">
                                         <button
                                             type="button"
-                                            onClick={handleDelete}
-                                            disabled={deleteTask.isPending}
-                                            className="px-3 py-1 text-sm text-white bg-red-600 rounded-md hover:bg-red-500 transition-colors disabled:opacity-50"
+                                            onClick={onClose}
+                                            className="px-3 py-1.5 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors"
                                         >
-                                            {deleteTask.isPending ? 'Deleting...' : 'Yes'}
+                                            Cancel
                                         </button>
                                         <button
-                                            type="button"
-                                            onClick={() => setShowDeleteConfirm(false)}
-                                            className="px-3 py-1 text-sm text-gray-300 bg-gray-800 rounded-md hover:bg-gray-700 transition-colors"
+                                            type="submit"
+                                            disabled={!title.trim() || updateTask.isPending}
+                                            className={`px-3 py-1.5 text-sm text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${saved ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'}`}
                                         >
-                                            No
+                                            {updateTask.isPending ? 'Saving...' : saved ? 'Saved' : 'Save'}
                                         </button>
                                     </div>
-                                )}
-
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={onClose}
-                                        className="px-4 py-2 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={!title.trim() || updateTask.isPending}
-                                        className={`px-4 py-2 text-sm text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${saved ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'}`}
-                                    >
-                                        {updateTask.isPending ? 'Saving...' : saved ? 'Saved' : 'Save'}
-                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    </form>
+                        </form>
+                    )}
+                </div>
 
-                    {/* Section 2: Sessions */}
-                    <div className="px-6 py-4 border-b border-gray-800">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Sessions</h3>
-                            {task.status === 'backlog' && (() => {
-                                const missingAgent = !task.assigned_agent_id;
-                                const missingProject = !task.project_id;
-                                const canStart = !missingAgent && !missingProject;
-                                const tooltip = missingAgent && missingProject
-                                    ? 'Assign an agent and project first'
-                                    : missingAgent ? 'Assign an agent first'
-                                    : missingProject ? 'Assign a project first'
-                                    : undefined;
-                                return (
-                                    <button
-                                        type="button"
-                                        title={tooltip}
-                                        onClick={() => startTask.mutate(task.id, {
-                                            onSuccess: (data) => setSelectedSessionId(data.session.id),
-                                        })}
-                                        disabled={!canStart || startTask.isPending}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <Play className="w-3.5 h-3.5" />
-                                        {startTask.isPending ? 'Starting...' : 'Start'}
-                                    </button>
-                                );
-                            })()}
-                            {startTask.isError && (
-                                <p className="text-xs text-red-400 mt-1">{(startTask.error as Error).message}</p>
-                            )}
-                        </div>
-
-                        {sortedSessions.length === 0 ? (
-                            <p className="text-sm text-gray-500 py-4 text-center">
-                                No sessions yet{task.status === 'backlog' ? ' — click Start to begin' : ''}
-                            </p>
-                        ) : (
-                            <div className="flex flex-col gap-1">
-                                {sortedSessions.map((session) => (
-                                    <button
-                                        key={session.id}
-                                        type="button"
-                                        onClick={() => setSelectedSessionId(session.id)}
-                                        className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm text-left transition-colors ${
-                                            selectedSessionId === session.id
-                                                ? 'bg-gray-700 text-gray-100'
-                                                : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
-                                        }`}
-                                    >
-                                        <span className="font-mono text-xs">{shortId(session.id)}</span>
-                                        <StatusBadge status={session.status} />
-                                        <span className="truncate">{agentNameMap[session.agent_id] ?? shortId(session.agent_id)}</span>
-                                        <span className="ml-auto text-xs text-gray-500">
-                                            {formatDuration(session.started_at, session.completed_at)}
-                                        </span>
-                                        <span className="text-xs text-gray-600">{formatTime(session.created_at)}</span>
-                                    </button>
-                                ))}
-                            </div>
+                {/* Sessions list (compact) */}
+                <div className="px-6 py-2.5 border-b border-gray-800 shrink-0">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sessions</h3>
+                        {task.status === 'backlog' && (() => {
+                            const missingAgent = !task.assigned_agent_id;
+                            const missingProject = !task.project_id;
+                            const canStart = !missingAgent && !missingProject;
+                            const tooltip = missingAgent && missingProject
+                                ? 'Assign an agent and project first'
+                                : missingAgent ? 'Assign an agent first'
+                                : missingProject ? 'Assign a project first'
+                                : undefined;
+                            return (
+                                <button
+                                    type="button"
+                                    title={tooltip}
+                                    onClick={() => startTask.mutate(task.id, {
+                                        onSuccess: (data) => {
+                                            setSelectedSessionId(data.session.id);
+                                            setFormCollapsed(true);
+                                        },
+                                    })}
+                                    disabled={!canStart || startTask.isPending}
+                                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Play className="w-3 h-3" />
+                                    {startTask.isPending ? 'Starting...' : 'Start'}
+                                </button>
+                            );
+                        })()}
+                        {startTask.isError && (
+                            <p className="text-xs text-red-400 mt-1">{(startTask.error as Error).message}</p>
                         )}
                     </div>
 
-                    {/* Section 3: Session Output */}
-                    {selectedSessionId && selectedSessionLoading && (
-                        <div className="px-6 py-8 text-center">
-                            <p className="text-sm text-gray-500">Loading session...</p>
+                    {sortedSessions.length === 0 ? (
+                        <p className="text-sm text-gray-500 py-2 text-center">
+                            No sessions yet{task.status === 'backlog' ? ' — click Start to begin' : ''}
+                        </p>
+                    ) : (
+                        <div className="flex flex-col gap-0.5">
+                            {sortedSessions.map((session) => (
+                                <button
+                                    key={session.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedSessionId(session.id);
+                                        setFormCollapsed(true);
+                                    }}
+                                    className={`flex items-center gap-3 px-3 py-1.5 rounded-md text-sm text-left transition-colors ${
+                                        selectedSessionId === session.id
+                                            ? 'bg-gray-700 text-gray-100'
+                                            : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                                    }`}
+                                >
+                                    <span className="font-mono text-xs">{shortId(session.id)}</span>
+                                    <StatusBadge status={session.status} />
+                                    <span className="truncate">{agentNameMap[session.agent_id] ?? shortId(session.agent_id)}</span>
+                                    <span className="ml-auto text-xs text-gray-500">
+                                        {formatDuration(session.started_at, session.completed_at)}
+                                    </span>
+                                    <span className="text-xs text-gray-600">{formatTime(session.created_at)}</span>
+                                </button>
+                            ))}
                         </div>
                     )}
-                    {selectedSessionId && selectedSession && (
-                        <div className="px-6 py-4 flex flex-col gap-3">
-                            {/* Session action buttons */}
-                            <div className="flex items-center gap-2">
-                                {isRunning && (
-                                    <button
-                                        type="button"
-                                        onClick={() => interruptMutation.mutate(selectedSession.id)}
-                                        disabled={interruptMutation.isPending}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-red-900/40 text-red-300 border border-red-700 hover:bg-red-900/60 transition-colors disabled:opacity-50"
-                                    >
-                                        <Square className="w-3.5 h-3.5" />
-                                        {interruptMutation.isPending ? 'Interrupting...' : 'Interrupt'}
-                                    </button>
-                                )}
-                                {isPaused && (
-                                    <button
-                                        type="button"
-                                        onClick={() => resumeMutation.mutate({ id: selectedSession.id })}
-                                        disabled={resumeMutation.isPending}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-green-900/40 text-green-300 border border-green-700 hover:bg-green-900/60 transition-colors disabled:opacity-50"
-                                    >
-                                        <Play className="w-3.5 h-3.5" />
-                                        {resumeMutation.isPending ? 'Resuming...' : 'Resume'}
-                                    </button>
-                                )}
-                                {isFailed && (
-                                    <button
-                                        type="button"
-                                        onClick={() => retryMutation.mutate({ id: selectedSession.id })}
-                                        disabled={retryMutation.isPending}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-orange-900/40 text-orange-300 border border-orange-700 hover:bg-orange-900/60 transition-colors disabled:opacity-50"
-                                    >
-                                        <RotateCcw className="w-3.5 h-3.5" />
-                                        {retryMutation.isPending ? 'Retrying...' : 'Retry'}
-                                    </button>
-                                )}
-                            </div>
+                </div>
 
-                            {/* Prompt */}
-                            {selectedSession.prompt && (
-                                <div>
-                                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Prompt</p>
-                                    <p className="text-sm text-gray-300 whitespace-pre-wrap">{selectedSession.prompt}</p>
-                                </div>
-                            )}
-
-                            {/* Result summary */}
-                            {selectedSession.result_summary && (
-                                <div>
-                                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Result</p>
-                                    <p className="text-sm text-gray-300 whitespace-pre-wrap">{selectedSession.result_summary}</p>
-                                </div>
-                            )}
-
-                            {/* Output */}
-                            <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Output</p>
-                                <div className="h-[300px]">
-                                    <SessionOutput sessionId={selectedSessionId} />
-                                </div>
-                            </div>
-
-                            {/* Message input for running sessions */}
+                {/* Session Output — takes all remaining space */}
+                {selectedSessionId && selectedSessionLoading && (
+                    <div className="flex-1 flex items-center justify-center">
+                        <p className="text-sm text-gray-500">Loading session...</p>
+                    </div>
+                )}
+                {selectedSessionId && selectedSession && (
+                    <div className="flex-1 flex flex-col min-h-0">
+                        {/* Session action bar + metadata */}
+                        <div className="px-6 py-2 flex items-center gap-3 border-b border-gray-800 shrink-0">
                             {isRunning && (
+                                <button
+                                    type="button"
+                                    onClick={() => interruptMutation.mutate(selectedSession.id)}
+                                    disabled={interruptMutation.isPending}
+                                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-red-900/40 text-red-300 border border-red-700 hover:bg-red-900/60 transition-colors disabled:opacity-50"
+                                >
+                                    <Square className="w-3 h-3" />
+                                    {interruptMutation.isPending ? 'Interrupting...' : 'Interrupt'}
+                                </button>
+                            )}
+                            {isPaused && (
+                                <button
+                                    type="button"
+                                    onClick={() => resumeMutation.mutate({ id: selectedSession.id })}
+                                    disabled={resumeMutation.isPending}
+                                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-green-900/40 text-green-300 border border-green-700 hover:bg-green-900/60 transition-colors disabled:opacity-50"
+                                >
+                                    <Play className="w-3 h-3" />
+                                    {resumeMutation.isPending ? 'Resuming...' : 'Resume'}
+                                </button>
+                            )}
+                            {isFailed && (
+                                <button
+                                    type="button"
+                                    onClick={() => retryMutation.mutate({ id: selectedSession.id })}
+                                    disabled={retryMutation.isPending}
+                                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-orange-900/40 text-orange-300 border border-orange-700 hover:bg-orange-900/60 transition-colors disabled:opacity-50"
+                                >
+                                    <RotateCcw className="w-3 h-3" />
+                                    {retryMutation.isPending ? 'Retrying...' : 'Retry'}
+                                </button>
+                            )}
+                            {selectedSession.prompt && (
+                                <span className="text-xs text-gray-500 truncate max-w-md" title={selectedSession.prompt}>
+                                    Prompt: {selectedSession.prompt}
+                                </span>
+                            )}
+                            {selectedSession.result_summary && (
+                                <span className="ml-auto text-xs text-yellow-400 truncate max-w-xs" title={selectedSession.result_summary}>
+                                    Result: {selectedSession.result_summary}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Output — fills remaining space */}
+                        <div className="flex-1 min-h-0">
+                            <SessionOutput sessionId={selectedSessionId} />
+                        </div>
+
+                        {/* Message input pinned at bottom */}
+                        {isRunning && (
+                            <div className="px-6 py-3 border-t border-gray-800 shrink-0">
                                 <form
                                     onSubmit={(e) => {
                                         e.preventDefault();
@@ -460,15 +469,15 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                         Send
                                     </button>
                                 </form>
-                            )}
-                        </div>
-                    )}
-                    {!selectedSessionId && sortedSessions.length > 0 && (
-                        <div className="px-6 py-8 text-center">
-                            <p className="text-sm text-gray-500">Select a session above to view its output</p>
-                        </div>
-                    )}
-                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                {!selectedSessionId && sortedSessions.length > 0 && (
+                    <div className="flex-1 flex items-center justify-center">
+                        <p className="text-sm text-gray-500">Select a session above to view its output</p>
+                    </div>
+                )}
             </div>
 
         </>
