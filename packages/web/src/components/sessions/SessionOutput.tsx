@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { useSessionOutputStore, type SessionLogEntry } from '@/stores/session-output-store';
+import { useSessionLogs } from '@/hooks/use-sessions';
 import { parseClaudeMessage } from '@/lib/parse-claude-message';
 import { MessageEntry } from './MessageEntry';
 import { cn } from '@/lib/utils';
@@ -14,6 +15,28 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
     const output = useSessionOutputStore(
         (state) => state.outputs[sessionId] ?? EMPTY_OUTPUT,
     );
+    const hydrate = useSessionOutputStore((state) => state.hydrate);
+    const isHydrated = useSessionOutputStore((state) => state.isHydrated(sessionId));
+
+    // Fetch historical logs from DB when store is empty (e.g., after page reload)
+    const { data: historicalLogs } = useSessionLogs(
+        output.length === 0 && !isHydrated ? sessionId : undefined,
+    );
+
+    // Hydrate store with historical logs once fetched
+    useEffect(() => {
+        if (historicalLogs && historicalLogs.length > 0 && !isHydrated) {
+            hydrate(
+                sessionId,
+                historicalLogs.map((log) => ({
+                    session_id: log.session_id,
+                    log_type: log.log_type,
+                    content: log.content,
+                    seq: log.id,
+                })),
+            );
+        }
+    }, [historicalLogs, sessionId, hydrate, isHydrated]);
     const scrollRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
 

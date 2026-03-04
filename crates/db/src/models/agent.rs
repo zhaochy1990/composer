@@ -112,6 +112,16 @@ pub async fn update_auth_status(pool: &SqlitePool, id: &str, auth_status: &AuthS
     Ok(())
 }
 
+/// Reset all "busy" agents to "idle" (used on server startup to recover from unclean shutdown).
+pub async fn reset_all_busy_to_idle(pool: &SqlitePool) -> anyhow::Result<u64> {
+    let result = sqlx::query(
+        "UPDATE agents SET status = 'idle', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = 'busy'"
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
     sqlx::query("DELETE FROM agents WHERE id = ?")
         .bind(id)

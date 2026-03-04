@@ -12,13 +12,17 @@ export interface SessionLogEntry {
 interface SessionOutputStore {
     outputs: Record<string, SessionLogEntry[]>;
     _seqCounters: Record<string, number>;
+    _hydrated: Record<string, boolean>;
     append: (sessionId: string, log: { session_id: string; log_type: string; content: string }) => void;
+    hydrate: (sessionId: string, logs: SessionLogEntry[]) => void;
+    isHydrated: (sessionId: string) => boolean;
     clear: (sessionId: string) => void;
 }
 
-export const useSessionOutputStore = create<SessionOutputStore>((set) => ({
+export const useSessionOutputStore = create<SessionOutputStore>((set, get) => ({
     outputs: {},
     _seqCounters: {},
+    _hydrated: {},
     append: (sessionId, log) =>
         set((state) => {
             const nextSeq = (state._seqCounters[sessionId] ?? 0) + 1;
@@ -34,10 +38,31 @@ export const useSessionOutputStore = create<SessionOutputStore>((set) => ({
                 _seqCounters: { ...state._seqCounters, [sessionId]: nextSeq },
             };
         }),
+    hydrate: (sessionId, logs) =>
+        set((state) => {
+            // Don't overwrite if we already have live data from WebSocket
+            if ((state.outputs[sessionId]?.length ?? 0) > 0) {
+                return { _hydrated: { ...state._hydrated, [sessionId]: true } };
+            }
+            const entries: SessionLogEntry[] = logs.map((log, i) => ({
+                ...log,
+                seq: i + 1,
+            }));
+            const trimmed = entries.length > MAX_OUTPUT_LINES
+                ? entries.slice(entries.length - MAX_OUTPUT_LINES)
+                : entries;
+            return {
+                outputs: { ...state.outputs, [sessionId]: trimmed },
+                _seqCounters: { ...state._seqCounters, [sessionId]: entries.length },
+                _hydrated: { ...state._hydrated, [sessionId]: true },
+            };
+        }),
+    isHydrated: (sessionId) => get()._hydrated[sessionId] ?? false,
     clear: (sessionId) =>
         set((state) => {
             const { [sessionId]: _, ...restOutputs } = state.outputs;
             const { [sessionId]: __, ...restCounters } = state._seqCounters;
-            return { outputs: restOutputs, _seqCounters: restCounters };
+            const { [sessionId]: ___, ...restHydrated } = state._hydrated;
+            return { outputs: restOutputs, _seqCounters: restCounters, _hydrated: restHydrated };
         }),
 }));

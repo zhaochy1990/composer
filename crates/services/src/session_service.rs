@@ -31,10 +31,31 @@ impl SessionService {
             worktree_service,
         };
 
+        // Recover orphaned sessions/agents from previous unclean shutdown
+        service.spawn_startup_recovery();
+
         // Spawn background task to persist session events to DB
         service.spawn_event_listener();
 
         service
+    }
+
+    /// On startup, mark any "running" sessions as "failed" and reset "busy" agents to "idle".
+    /// These are orphaned from a previous server process that exited without cleanup.
+    fn spawn_startup_recovery(&self) {
+        let db = self.db.clone();
+        tokio::spawn(async move {
+            match composer_db::models::session::fail_orphaned_running(&db.pool).await {
+                Ok(n) if n > 0 => tracing::warn!("Recovered {} orphaned running session(s) → failed", n),
+                Ok(_) => {}
+                Err(e) => tracing::error!("Failed to recover orphaned sessions: {}", e),
+            }
+            match composer_db::models::agent::reset_all_busy_to_idle(&db.pool).await {
+                Ok(n) if n > 0 => tracing::warn!("Reset {} busy agent(s) → idle", n),
+                Ok(_) => {}
+                Err(e) => tracing::error!("Failed to reset busy agents: {}", e),
+            }
+        });
     }
 
     /// Listens for WsEvents and persists session output/completion/failure to the database.

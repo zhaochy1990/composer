@@ -159,6 +159,21 @@ pub async fn update_status(pool: &SqlitePool, id: &str, status: &SessionStatus) 
     Ok(())
 }
 
+/// Mark all sessions in "running" status as "failed" (used on server startup to recover orphaned sessions).
+pub async fn fail_orphaned_running(pool: &SqlitePool) -> anyhow::Result<u64> {
+    let result = sqlx::query(
+        "UPDATE sessions SET \
+         status = 'failed', \
+         result_summary = COALESCE(result_summary, 'Server restarted while session was running'), \
+         completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+         WHERE status = 'running'"
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 pub async fn update_result(pool: &SqlitePool, id: &str, result_summary: Option<&str>, resume_session_id: Option<&str>) -> anyhow::Result<()> {
     sqlx::query(
         "UPDATE sessions SET result_summary = ?, resume_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
