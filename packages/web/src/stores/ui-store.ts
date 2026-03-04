@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 interface UiStore {
-    currentPage: 'tasks' | 'agents' | 'sessions';
+    currentPage: 'tasks' | 'agents';
     setPage: (page: UiStore['currentPage']) => void;
 }
 

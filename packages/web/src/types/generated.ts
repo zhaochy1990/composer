@@ -111,7 +111,7 @@ export interface CreateAgentRequest {
 
 export interface CreateSessionRequest {
     agent_id: string;
-    task_id?: string;
+    task_id: string;
     prompt: string;
     repo_path: string;
     auto_approve?: boolean;

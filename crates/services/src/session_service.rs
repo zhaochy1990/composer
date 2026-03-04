@@ -160,7 +160,7 @@ impl SessionService {
             &self.db.pool,
             &session_id_str,
             &agent.id.to_string(),
-            req.task_id.map(|id| id.to_string()).as_deref(),
+            Some(&req.task_id.to_string()),
             Some(&worktree.id.to_string()),
             &req.prompt,
             &SessionStatus::Running,
@@ -174,21 +174,19 @@ impl SessionService {
         )
         .await?;
 
-        if let Some(task_id) = req.task_id {
-            composer_db::models::task::update_status(
-                &self.db.pool,
-                &task_id.to_string(),
-                &TaskStatus::InProgress,
-            )
-            .await?;
-        }
+        composer_db::models::task::update_status(
+            &self.db.pool,
+            &req.task_id.to_string(),
+            &TaskStatus::InProgress,
+        )
+        .await?;
 
         // Spawn agent process — rollback on failure (fix #2, #3)
         if let Err(e) = self.process_manager
             .spawn(SpawnOptions {
                 session_id: session.id,
                 agent_id: agent.id,
-                task_id: req.task_id,
+                task_id: Some(req.task_id),
                 prompt: req.prompt.clone(),
                 working_dir: worktree.worktree_path.clone(),
                 auto_approve: req.auto_approve.unwrap_or(false),
@@ -278,6 +276,10 @@ impl SessionService {
 
     pub async fn list_all(&self) -> anyhow::Result<Vec<Session>> {
         composer_db::models::session::list_all(&self.db.pool).await
+    }
+
+    pub async fn list_by_task(&self, task_id: &str) -> anyhow::Result<Vec<Session>> {
+        composer_db::models::session::list_by_task(&self.db.pool, task_id).await
     }
 
     pub async fn get(&self, id: &str) -> anyhow::Result<Option<Session>> {

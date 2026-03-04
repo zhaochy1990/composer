@@ -39,7 +39,17 @@ export function useWebSocket() {
                 }
 
                 // Session lifecycle events
-                case 'SessionStarted':
+                case 'SessionStarted': {
+                    queryClient.invalidateQueries({ queryKey: ['sessions'] });
+                    queryClient.invalidateQueries({
+                        queryKey: ['sessions', parsed.payload.session_id],
+                    });
+                    if (parsed.payload.task_id) {
+                        queryClient.invalidateQueries({ queryKey: ['tasks', parsed.payload.task_id, 'sessions'] });
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                    break;
+                }
                 case 'SessionCompleted':
                 case 'SessionFailed':
                 case 'SessionPaused': {
@@ -47,6 +57,10 @@ export function useWebSocket() {
                     queryClient.invalidateQueries({
                         queryKey: ['sessions', parsed.payload.session_id],
                     });
+                    queryClient.invalidateQueries({
+                        predicate: (q) => q.queryKey[0] === 'tasks' && q.queryKey[2] === 'sessions',
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
                     break;
                 }
 

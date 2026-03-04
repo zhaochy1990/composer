@@ -2,14 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import type { Session, SessionLog, CreateSessionRequest } from '@/types/generated';
 
-export function useSessions() {
-    return useQuery({
-        queryKey: ['sessions'],
-        queryFn: () => apiFetch<Session[]>('/sessions'),
-        refetchInterval: 10_000,
-    });
-}
-
 export function useSession(id: string | undefined) {
     return useQuery({
         queryKey: ['sessions', id],
@@ -32,8 +24,10 @@ export function useCreateSession() {
                 method: 'POST',
                 body: JSON.stringify(data),
             }),
-        onSuccess: () => {
+        onSuccess: (_session, variables) => {
             queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['tasks', variables.task_id, 'sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
         },
     });
 }

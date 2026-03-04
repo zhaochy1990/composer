@@ -14,6 +14,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/tasks/{id}", get(get_task).put(update_task).delete(delete_task))
         .route("/tasks/{id}/assign", post(assign_task))
         .route("/tasks/{id}/move", post(move_task))
+        .route("/tasks/{id}/sessions", get(list_task_sessions))
 }
 
 async fn list_tasks(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Task>>, ServiceError> {
@@ -50,4 +51,14 @@ async fn assign_task(State(state): State<Arc<AppState>>, Path(id): Path<String>,
 async fn move_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<MoveTaskRequest>) -> Result<Json<Task>, ServiceError> {
     let task = state.services.tasks.move_task(&id, req).await?;
     Ok(Json(task))
+}
+
+async fn list_task_sessions(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<Session>>, ServiceError> {
+    state.services.tasks.get(&id).await?
+        .ok_or_else(|| ServiceError::NotFound(format!("Task {} not found", id)))?;
+    let sessions = state.services.sessions.list_by_task(&id).await?;
+    Ok(Json(sessions))
 }

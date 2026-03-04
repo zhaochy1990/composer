@@ -5,7 +5,7 @@ import { useTasks } from '@/hooks/use-tasks';
 import { useAgents } from '@/hooks/use-agents';
 import { TaskColumn } from './TaskColumn';
 import { TaskCreateDialog } from './TaskCreateDialog';
-import { TaskEditDialog } from './TaskEditDialog';
+import { TaskDetailPanel } from './TaskDetailPanel';
 
 const columns: { status: TaskStatus; title: string }[] = [
     { status: 'backlog', title: 'Backlog' },
@@ -143,7 +143,7 @@ export function TaskBoard() {
             />
 
             {editingTask && (
-                <TaskEditDialog
+                <TaskDetailPanel
                     key={editingTask.id}
                     task={editingTask}
                     onClose={() => setEditingTask(null)}

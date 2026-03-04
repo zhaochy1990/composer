@@ -197,7 +197,7 @@ pub struct CreateAgentRequest {
 #[ts(export)]
 pub struct CreateSessionRequest {
     pub agent_id: Uuid,
-    pub task_id: Option<Uuid>,
+    pub task_id: Uuid,
     pub prompt: String,
     pub repo_path: String,
     pub auto_approve: Option<bool>,

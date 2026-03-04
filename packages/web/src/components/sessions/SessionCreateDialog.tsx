@@ -7,11 +7,15 @@ import { useCreateSession } from '@/hooks/use-sessions';
 interface SessionCreateDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    taskId: string;
+    onSessionCreated?: (sessionId: string) => void;
 }
 
 export function SessionCreateDialog({
     open,
     onOpenChange,
+    taskId,
+    onSessionCreated,
 }: SessionCreateDialogProps) {
     const { data: agents, isLoading: agentsLoading } = useAgents();
     const createSession = useCreateSession();
@@ -37,14 +41,16 @@ export function SessionCreateDialog({
         createSession.mutate(
             {
                 agent_id: agentId,
+                task_id: taskId,
                 prompt: prompt.trim(),
                 repo_path: repoPath.trim(),
                 auto_approve: autoApprove,
             },
             {
-                onSuccess: () => {
+                onSuccess: (session) => {
                     resetForm();
                     onOpenChange(false);
+                    onSessionCreated?.(session.id);
                 },
             },
         );

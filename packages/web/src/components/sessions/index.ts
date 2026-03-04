@@ -1,4 +1,3 @@
-export { SessionList } from './SessionList';
 export { SessionDetail } from './SessionDetail';
 export { SessionOutput } from './SessionOutput';
 export { SessionCreateDialog } from './SessionCreateDialog';
