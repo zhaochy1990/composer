@@ -1,9 +1,16 @@
 use std::sync::Arc;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use composer_api_types::*;
 use composer_db::Database;
 use composer_executors::process_manager::{AgentProcessManager, SpawnOptions};
 use crate::event_bus::EventBus;
 use crate::worktree_service::WorktreeService;
+
+/// Matches PR URLs from GitHub, Azure DevOps, GitLab, and self-hosted instances.
+static PR_URL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"https?://[^\s"<>]+/(?:pull|pullrequest|merge_requests)/\d+"#).unwrap()
+});
 
 #[derive(Clone)]
 pub struct SessionService {
@@ -56,6 +63,8 @@ impl SessionService {
                         ).await {
                             tracing::warn!("Failed to persist session log: {}", e);
                         }
+                        // Detect PR URLs in session output
+                        Self::extract_and_save_pr_urls(&db, &session_id_str, content).await;
                     }
                     WsEvent::SessionCompleted { session_id, ref result_summary, ref claude_session_id } => {
                         let id_str = session_id.to_string();
@@ -74,6 +83,10 @@ impl SessionService {
                             claude_session_id.as_deref(),
                         ).await {
                             tracing::error!("Failed to update session result: {}", e);
+                        }
+                        // Also scan result_summary for PR URLs
+                        if let Some(summary) = result_summary {
+                            Self::extract_and_save_pr_urls(&db, &id_str, summary).await;
                         }
                         // Reset agent to idle and cleanup worktree
                         Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
@@ -145,6 +158,34 @@ impl SessionService {
                         )
                         .await;
                     }
+                }
+            }
+        }
+    }
+
+    /// Extracts PR URLs from text content and saves them to the session's task.
+    async fn extract_and_save_pr_urls(db: &Database, session_id: &str, content: &str) {
+        let urls: Vec<String> = PR_URL_RE
+            .find_iter(content)
+            .map(|m| m.as_str().to_string())
+            .collect();
+        if urls.is_empty() {
+            return;
+        }
+        // Look up the task_id for this session
+        let task_id = match composer_db::models::session::find_by_id(&db.pool, session_id).await {
+            Ok(Some(session)) => session.task_id,
+            _ => None,
+        };
+        if let Some(task_id) = task_id {
+            let task_id_str = task_id.to_string();
+            match composer_db::models::task::append_pr_urls(&db.pool, &task_id_str, &urls).await {
+                Ok(true) => {
+                    tracing::info!("Saved PR URLs for task {}: {:?}", task_id_str, urls);
+                }
+                Ok(false) => {} // All URLs already existed
+                Err(e) => {
+                    tracing::warn!("Failed to save PR URLs for task {}: {}", task_id_str, e);
                 }
             }
         }

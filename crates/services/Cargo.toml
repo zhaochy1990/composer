@@ -16,3 +16,5 @@ composer-api-types = { path = "../api-types" }
 composer-db = { path = "../db" }
 composer-executors = { path = "../executors" }
 composer-git = { path = "../git" }
+regex = { workspace = true }
+once_cell = { workspace = true }

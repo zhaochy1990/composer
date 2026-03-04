@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
@@ -155,6 +155,25 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                         <X className="w-4 h-4" />
                     </button>
                 </div>
+
+                {/* PR Links */}
+                {task.pr_urls?.length > 0 && (
+                    <div className="px-6 py-2 border-b border-gray-800 shrink-0 flex items-center gap-2 flex-wrap">
+                        <GitPullRequest className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                        {task.pr_urls.map((url) => (
+                            <a
+                                key={url}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-green-900/40 text-green-300 border border-green-700 hover:bg-green-900/60 transition-colors"
+                            >
+                                {url.replace(/^https?:\/\//, '').replace(/\/pull\//, '/pull/').replace(/\/pullrequest\//, '/pr/').replace(/\/merge_requests\//, '/mr/')}
+                                <ExternalLink className="w-3 h-3" />
+                            </a>
+                        ))}
+                    </div>
+                )}
 
                 {/* Collapsible Task Edit Form */}
                 <div className="border-b border-gray-800 shrink-0">

@@ -42,6 +42,7 @@ export interface Task {
     position: number;
     task_number: number;
     simple_id: string;
+    pr_urls: string[];
     created_at: string;
     updated_at: string;
 }

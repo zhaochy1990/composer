@@ -118,6 +118,7 @@ pub struct Task {
     pub position: f64,
     pub task_number: i32,
     pub simple_id: String,
+    pub pr_urls: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

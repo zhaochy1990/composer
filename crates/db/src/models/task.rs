@@ -15,6 +15,7 @@ struct TaskRow {
     position: f64,
     task_number: i32,
     simple_id: String,
+    pr_urls: String,
     created_at: String,
     updated_at: String,
 }
@@ -23,6 +24,7 @@ impl TryFrom<TaskRow> for Task {
     type Error = anyhow::Error;
 
     fn try_from(row: TaskRow) -> Result<Self, Self::Error> {
+        let pr_urls: Vec<String> = serde_json::from_str(&row.pr_urls).unwrap_or_default();
         Ok(Task {
             id: row.id.parse()?,
             title: row.title,
@@ -35,6 +37,7 @@ impl TryFrom<TaskRow> for Task {
             position: row.position,
             task_number: row.task_number,
             simple_id: row.simple_id,
+            pr_urls,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
         })
@@ -110,7 +113,7 @@ pub async fn create(
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
 }
 
-const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, task_number, simple_id, created_at, updated_at";
+const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, task_number, simple_id, pr_urls, created_at, updated_at";
 
 pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Task>> {
     let row = sqlx::query_as::<_, TaskRow>(&format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id = ?"))
@@ -210,4 +213,31 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
     sqlx::query("DELETE FROM tasks WHERE id = ?")
         .bind(id).execute(pool).await?;
     Ok(())
+}
+
+/// Append PR URLs to a task, deduplicating against existing entries.
+/// Returns true if any new URLs were actually added.
+pub async fn append_pr_urls(pool: &SqlitePool, id: &str, new_urls: &[String]) -> anyhow::Result<bool> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT pr_urls FROM tasks WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    let existing_json = row.map(|r| r.0).unwrap_or_else(|| "[]".to_string());
+    let mut urls: Vec<String> = serde_json::from_str(&existing_json).unwrap_or_default();
+    let before_len = urls.len();
+    for url in new_urls {
+        if !urls.contains(url) {
+            urls.push(url.clone());
+        }
+    }
+    if urls.len() == before_len {
+        return Ok(false);
+    }
+    let json = serde_json::to_string(&urls)?;
+    sqlx::query("UPDATE tasks SET pr_urls = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(&json)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(true)
 }

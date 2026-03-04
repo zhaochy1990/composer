@@ -1,0 +1,1 @@
+ALTER TABLE tasks ADD COLUMN pr_urls TEXT NOT NULL DEFAULT '[]';

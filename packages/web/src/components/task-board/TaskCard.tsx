@@ -1,4 +1,4 @@
-import { GripVertical } from 'lucide-react';
+import { GripVertical, GitPullRequest } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { shortId } from '@/lib/utils';
 
@@ -55,6 +55,12 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCa
                         {task.project_id && (
                             <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-teal-900/50 text-teal-300 border border-teal-700">
                                 {projectNameMap?.[task.project_id] ?? shortId(task.project_id)}
+                            </span>
+                        )}
+                        {task.pr_urls?.length > 0 && (
+                            <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700">
+                                <GitPullRequest className="w-3 h-3" />
+                                {task.pr_urls.length === 1 ? 'PR' : `${task.pr_urls.length} PRs`}
                             </span>
                         )}
                     </div>

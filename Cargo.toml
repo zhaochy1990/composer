@@ -55,6 +55,8 @@ toml = "0.8"
 dirs = "6"
 tracing-appender = "0.2"
 tempfile = "3"
+regex = "1"
+once_cell = "1"
 
 [profile.release]
 strip = "symbols"
