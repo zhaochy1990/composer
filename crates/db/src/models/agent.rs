@@ -119,3 +119,113 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
         .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::test_pool;
+
+    #[tokio::test]
+    async fn create_agent_defaults() {
+        let pool = test_pool().await;
+        let agent = create(&pool, "Agent 1", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        assert_eq!(agent.name, "Agent 1");
+        assert!(matches!(agent.agent_type, AgentType::ClaudeCode));
+        assert!(matches!(agent.status, AgentStatus::Idle));
+        assert!(matches!(agent.auth_status, AuthStatus::Unknown));
+        assert!(agent.executable_path.is_none());
+    }
+
+    #[tokio::test]
+    async fn create_agent_with_path() {
+        let pool = test_pool().await;
+        let agent = create(&pool, "Agent", &AgentType::ClaudeCode, Some("/usr/bin/claude"))
+            .await
+            .unwrap();
+        assert_eq!(agent.executable_path.as_deref(), Some("/usr/bin/claude"));
+    }
+
+    #[tokio::test]
+    async fn find_by_id_returns_agent() {
+        let pool = test_pool().await;
+        let agent = create(&pool, "Find Me", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let found = find_by_id(&pool, &agent.id.to_string()).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name, "Find Me");
+    }
+
+    #[tokio::test]
+    async fn find_by_agent_type_returns_agent() {
+        let pool = test_pool().await;
+        create(&pool, "CC Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let found = find_by_agent_type(&pool, &AgentType::ClaudeCode)
+            .await
+            .unwrap();
+        assert!(found.is_some());
+    }
+
+    #[tokio::test]
+    async fn update_executable_path_works() {
+        let pool = test_pool().await;
+        let agent = create(&pool, "Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let id = agent.id.to_string();
+        update_executable_path(&pool, &id, "/new/path").await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(found.executable_path.as_deref(), Some("/new/path"));
+    }
+
+    #[tokio::test]
+    async fn update_status_works() {
+        let pool = test_pool().await;
+        let agent = create(&pool, "Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let id = agent.id.to_string();
+        update_status(&pool, &id, &AgentStatus::Busy).await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert!(matches!(found.status, AgentStatus::Busy));
+    }
+
+    #[tokio::test]
+    async fn update_auth_status_works() {
+        let pool = test_pool().await;
+        let agent = create(&pool, "Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let id = agent.id.to_string();
+        update_auth_status(&pool, &id, &AuthStatus::Authenticated)
+            .await
+            .unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert!(matches!(found.auth_status, AuthStatus::Authenticated));
+    }
+
+    #[tokio::test]
+    async fn list_all_returns_agents() {
+        let pool = test_pool().await;
+        create(&pool, "Agent 1", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let agents = list_all(&pool).await.unwrap();
+        assert_eq!(agents.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn delete_agent_removes() {
+        let pool = test_pool().await;
+        let agent = create(&pool, "Delete Me", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let id = agent.id.to_string();
+        delete(&pool, &id).await.unwrap();
+        assert!(find_by_id(&pool, &id).await.unwrap().is_none());
+    }
+}

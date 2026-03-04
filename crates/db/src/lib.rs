@@ -1,5 +1,8 @@
 pub mod models;
 
+#[cfg(test)]
+pub mod test_utils;
+
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
 pub struct Database {
@@ -32,5 +35,27 @@ impl Database {
             .run(&self.pool)
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn connect_and_migrate() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.run_migrations().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn wal_mode_pragma() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let row: (String,) = sqlx::query_as("PRAGMA journal_mode")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        // In-memory SQLite may report "memory" instead of "wal"
+        assert!(row.0 == "wal" || row.0 == "memory");
     }
 }

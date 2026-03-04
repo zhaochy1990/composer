@@ -87,6 +87,28 @@ export class ApiClient {
     return this.fetch<Session[]>(`/tasks/${taskId}/sessions`);
   }
 
+  async getTask(id: string): Promise<Task> {
+    return this.fetch<Task>(`/tasks/${id}`);
+  }
+
+  async updateTask(id: string, data: Partial<{ title: string; description: string; priority: number; status: string; position: number }>): Promise<Task> {
+    return this.fetch<Task>(`/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async moveTask(id: string, status: string, position?: number): Promise<Task> {
+    return this.fetch<Task>(`/tasks/${id}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ status, position }),
+    });
+  }
+
+  async getAgent(id: string): Promise<Agent> {
+    return this.fetch<Agent>(`/agents/${id}`);
+  }
+
   // --- Cleanup ---
 
   async resetAllData(): Promise<void> {

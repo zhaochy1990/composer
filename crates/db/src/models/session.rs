@@ -170,3 +170,142 @@ pub async fn update_result(pool: &SqlitePool, id: &str, result_summary: Option<&
     .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::test_pool;
+
+    /// Helper: create an agent so FK constraints are satisfied
+    async fn setup_agent(pool: &sqlx::SqlitePool) -> String {
+        let agent = crate::models::agent::create(pool, "Test Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        agent.id.to_string()
+    }
+
+    #[tokio::test]
+    async fn create_session_defaults() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let session = create(&pool, &agent_id, None, None, "do stuff").await.unwrap();
+        assert!(matches!(session.status, SessionStatus::Created));
+        assert_eq!(session.prompt.as_deref(), Some("do stuff"));
+        assert!(session.task_id.is_none());
+        assert!(session.worktree_id.is_none());
+        assert!(session.started_at.is_none());
+        assert!(session.completed_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn create_with_status_running() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let id = uuid::Uuid::new_v4().to_string();
+        let session = create_with_status(
+            &pool, &id, &agent_id, None, None, "run it", &SessionStatus::Running,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(session.status, SessionStatus::Running));
+        assert!(session.started_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn create_with_status_created() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let id = uuid::Uuid::new_v4().to_string();
+        let session = create_with_status(
+            &pool, &id, &agent_id, None, None, "pending", &SessionStatus::Created,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(session.status, SessionStatus::Created));
+        assert!(session.started_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn find_by_id_hit_and_miss() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let session = create(&pool, &agent_id, None, None, "prompt").await.unwrap();
+        let found = find_by_id(&pool, &session.id.to_string()).await.unwrap();
+        assert!(found.is_some());
+        let miss = find_by_id(&pool, "00000000-0000-0000-0000-000000000000")
+            .await
+            .unwrap();
+        assert!(miss.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_by_agent_filters() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        create(&pool, &agent_id, None, None, "s1").await.unwrap();
+        create(&pool, &agent_id, None, None, "s2").await.unwrap();
+        let sessions = list_by_agent(&pool, &agent_id).await.unwrap();
+        assert_eq!(sessions.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn list_by_task_filters() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let task = crate::models::task::create(&pool, "Task", None, None, None)
+            .await
+            .unwrap();
+        let task_id = task.id.to_string();
+        create(&pool, &agent_id, Some(&task_id), None, "s1")
+            .await
+            .unwrap();
+        let sessions = list_by_task(&pool, &task_id).await.unwrap();
+        assert_eq!(sessions.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn update_status_completed_sets_timestamp() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let id = uuid::Uuid::new_v4().to_string();
+        create_with_status(
+            &pool, &id, &agent_id, None, None, "run", &SessionStatus::Running,
+        )
+        .await
+        .unwrap();
+        update_status(&pool, &id, &SessionStatus::Completed).await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert!(matches!(found.status, SessionStatus::Completed));
+        assert!(found.completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn update_status_failed_sets_timestamp() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let id = uuid::Uuid::new_v4().to_string();
+        create_with_status(
+            &pool, &id, &agent_id, None, None, "run", &SessionStatus::Running,
+        )
+        .await
+        .unwrap();
+        update_status(&pool, &id, &SessionStatus::Failed).await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert!(matches!(found.status, SessionStatus::Failed));
+        assert!(found.completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn update_result_sets_summary() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let session = create(&pool, &agent_id, None, None, "prompt").await.unwrap();
+        let id = session.id.to_string();
+        update_result(&pool, &id, Some("All done"), Some("resume-123"))
+            .await
+            .unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(found.result_summary.as_deref(), Some("All done"));
+        assert_eq!(found.resume_session_id.as_deref(), Some("resume-123"));
+    }
+}

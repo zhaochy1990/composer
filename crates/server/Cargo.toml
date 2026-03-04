@@ -3,6 +3,10 @@ name = "composer-server"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "composer_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "composer-server"
 path = "src/main.rs"
@@ -24,3 +28,8 @@ composer-api-types = { path = "../api-types" }
 composer-db = { path = "../db" }
 composer-services = { path = "../services" }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

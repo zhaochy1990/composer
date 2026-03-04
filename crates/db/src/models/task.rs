@@ -159,3 +159,169 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
         .bind(id).execute(pool).await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::test_pool;
+
+    #[tokio::test]
+    async fn create_task_defaults() {
+        let pool = test_pool().await;
+        let task = create(&pool, "Test Task", None, None, None).await.unwrap();
+        assert_eq!(task.title, "Test Task");
+        assert!(task.description.is_none());
+        assert_eq!(task.priority, 0);
+        assert!(matches!(task.status, TaskStatus::Backlog));
+        assert!(task.assigned_agent_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn create_task_with_all_fields() {
+        let pool = test_pool().await;
+        let task = create(
+            &pool,
+            "Full Task",
+            Some("A description"),
+            Some(3),
+            Some(&TaskStatus::InProgress),
+        )
+        .await
+        .unwrap();
+        assert_eq!(task.title, "Full Task");
+        assert_eq!(task.description.as_deref(), Some("A description"));
+        assert_eq!(task.priority, 3);
+        assert!(matches!(task.status, TaskStatus::InProgress));
+    }
+
+    #[tokio::test]
+    async fn find_by_id_hit() {
+        let pool = test_pool().await;
+        let task = create(&pool, "Find Me", None, None, None).await.unwrap();
+        let found = find_by_id(&pool, &task.id.to_string()).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().title, "Find Me");
+    }
+
+    #[tokio::test]
+    async fn find_by_id_miss() {
+        let pool = test_pool().await;
+        let found = find_by_id(&pool, "00000000-0000-0000-0000-000000000000")
+            .await
+            .unwrap();
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_all_empty() {
+        let pool = test_pool().await;
+        let tasks = list_all(&pool).await.unwrap();
+        assert!(tasks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_all_returns_tasks() {
+        let pool = test_pool().await;
+        create(&pool, "Task 1", None, None, None).await.unwrap();
+        create(&pool, "Task 2", None, None, None).await.unwrap();
+        let tasks = list_all(&pool).await.unwrap();
+        assert_eq!(tasks.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn list_by_status_filters() {
+        let pool = test_pool().await;
+        create(&pool, "Backlog Task", None, None, Some(&TaskStatus::Backlog))
+            .await
+            .unwrap();
+        create(&pool, "Done Task", None, None, Some(&TaskStatus::Done))
+            .await
+            .unwrap();
+        let backlog = list_by_status(&pool, &TaskStatus::Backlog).await.unwrap();
+        assert_eq!(backlog.len(), 1);
+        assert_eq!(backlog[0].title, "Backlog Task");
+    }
+
+    #[tokio::test]
+    async fn update_partial_fields() {
+        let pool = test_pool().await;
+        let task = create(&pool, "Original", None, None, None).await.unwrap();
+        let id = task.id.to_string();
+        let updated = update(&pool, &id, Some("Updated"), None, None, None, None)
+            .await
+            .unwrap();
+        assert_eq!(updated.title, "Updated");
+        assert!(updated.description.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_status_changes_status() {
+        let pool = test_pool().await;
+        let task = create(&pool, "Move Me", None, None, None).await.unwrap();
+        let id = task.id.to_string();
+        update_status(&pool, &id, &TaskStatus::Done).await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert!(matches!(found.status, TaskStatus::Done));
+    }
+
+    #[tokio::test]
+    async fn update_assigned_agent_sets_and_clears() {
+        let pool = test_pool().await;
+        let agent = crate::models::agent::create(
+            &pool,
+            "Agent",
+            &composer_api_types::AgentType::ClaudeCode,
+            None,
+        )
+        .await
+        .unwrap();
+        let agent_id = agent.id.to_string();
+
+        let task = create(&pool, "Assign Me", None, None, None).await.unwrap();
+        let id = task.id.to_string();
+
+        update_assigned_agent(&pool, &id, Some(&agent_id)).await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert!(found.assigned_agent_id.is_some());
+
+        update_assigned_agent(&pool, &id, None).await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap().unwrap();
+        assert!(found.assigned_agent_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn delete_task() {
+        let pool = test_pool().await;
+        let task = create(&pool, "Delete Me", None, None, None).await.unwrap();
+        let id = task.id.to_string();
+        delete(&pool, &id).await.unwrap();
+        let found = find_by_id(&pool, &id).await.unwrap();
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn position_auto_increment() {
+        let pool = test_pool().await;
+        let t1 = create(&pool, "First", None, None, Some(&TaskStatus::Backlog))
+            .await
+            .unwrap();
+        let t2 = create(&pool, "Second", None, None, Some(&TaskStatus::Backlog))
+            .await
+            .unwrap();
+        assert!(t2.position > t1.position);
+    }
+
+    #[tokio::test]
+    async fn position_independent_per_status() {
+        let pool = test_pool().await;
+        let backlog = create(&pool, "Backlog", None, None, Some(&TaskStatus::Backlog))
+            .await
+            .unwrap();
+        let done = create(&pool, "Done", None, None, Some(&TaskStatus::Done))
+            .await
+            .unwrap();
+        // Both should start at position 1.0 since they're in different columns
+        assert_eq!(backlog.position, 1.0);
+        assert_eq!(done.position, 1.0);
+    }
+}

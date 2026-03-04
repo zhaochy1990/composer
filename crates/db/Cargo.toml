@@ -13,3 +13,6 @@ tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 composer-api-types = { path = "../api-types" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

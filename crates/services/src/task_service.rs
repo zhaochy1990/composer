@@ -89,3 +89,148 @@ impl TaskService {
         Ok(task)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event_bus::EventBus;
+
+    async fn setup() -> (TaskService, tokio::sync::broadcast::Receiver<WsEvent>) {
+        let db = composer_db::Database::connect("sqlite::memory:").await.unwrap();
+        db.run_migrations().await.unwrap();
+        let event_bus = EventBus::new();
+        let rx = event_bus.subscribe();
+        let svc = TaskService::new(std::sync::Arc::new(db), event_bus);
+        (svc, rx)
+    }
+
+    #[tokio::test]
+    async fn create_task_broadcasts_event() {
+        let (svc, mut rx) = setup().await;
+        let task = svc
+            .create(CreateTaskRequest {
+                title: "New Task".to_string(),
+                description: None,
+                priority: None,
+                status: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(task.title, "New Task");
+        let event = rx.recv().await.unwrap();
+        assert!(matches!(event, WsEvent::TaskCreated(_)));
+    }
+
+    #[tokio::test]
+    async fn list_all_empty() {
+        let (svc, _rx) = setup().await;
+        let tasks = svc.list_all().await.unwrap();
+        assert!(tasks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_existing_task() {
+        let (svc, _rx) = setup().await;
+        let task = svc
+            .create(CreateTaskRequest {
+                title: "T".to_string(),
+                description: None,
+                priority: None,
+                status: None,
+            })
+            .await
+            .unwrap();
+        let found = svc.get(&task.id.to_string()).await.unwrap();
+        assert!(found.is_some());
+    }
+
+    #[tokio::test]
+    async fn get_nonexistent_task() {
+        let (svc, _rx) = setup().await;
+        let found = svc
+            .get("00000000-0000-0000-0000-000000000000")
+            .await
+            .unwrap();
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_task_broadcasts() {
+        let (svc, mut rx) = setup().await;
+        let task = svc
+            .create(CreateTaskRequest {
+                title: "Old".to_string(),
+                description: None,
+                priority: None,
+                status: None,
+            })
+            .await
+            .unwrap();
+        let _ = rx.recv().await; // consume TaskCreated
+
+        let updated = svc
+            .update(
+                &task.id.to_string(),
+                UpdateTaskRequest {
+                    title: Some("New".to_string()),
+                    description: None,
+                    priority: None,
+                    status: None,
+                    position: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.title, "New");
+        let event = rx.recv().await.unwrap();
+        assert!(matches!(event, WsEvent::TaskUpdated(_)));
+    }
+
+    #[tokio::test]
+    async fn delete_task_broadcasts() {
+        let (svc, mut rx) = setup().await;
+        let task = svc
+            .create(CreateTaskRequest {
+                title: "Del".to_string(),
+                description: None,
+                priority: None,
+                status: None,
+            })
+            .await
+            .unwrap();
+        let _ = rx.recv().await; // consume TaskCreated
+
+        svc.delete(&task.id.to_string()).await.unwrap();
+        let event = rx.recv().await.unwrap();
+        assert!(matches!(event, WsEvent::TaskDeleted { .. }));
+    }
+
+    #[tokio::test]
+    async fn move_task_changes_status() {
+        let (svc, mut rx) = setup().await;
+        let task = svc
+            .create(CreateTaskRequest {
+                title: "Move".to_string(),
+                description: None,
+                priority: None,
+                status: None,
+            })
+            .await
+            .unwrap();
+        let _ = rx.recv().await; // consume TaskCreated
+
+        let moved = svc
+            .move_task(
+                &task.id.to_string(),
+                MoveTaskRequest {
+                    status: TaskStatus::Done,
+                    position: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(moved.status, TaskStatus::Done));
+        let event = rx.recv().await.unwrap();
+        assert!(matches!(event, WsEvent::TaskMoved { .. }));
+    }
+}

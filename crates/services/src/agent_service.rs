@@ -111,3 +111,64 @@ impl AgentService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event_bus::EventBus;
+
+    async fn setup() -> AgentService {
+        let db = composer_db::Database::connect("sqlite::memory:").await.unwrap();
+        db.run_migrations().await.unwrap();
+        let event_bus = EventBus::new();
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        AgentService::new(Arc::new(db), event_bus, pm)
+    }
+
+    #[tokio::test]
+    async fn create_and_list() {
+        let svc = setup().await;
+        svc.create(CreateAgentRequest {
+            name: "Agent 1".to_string(),
+            agent_type: None,
+        })
+        .await
+        .unwrap();
+        let agents = svc.list_all().await.unwrap();
+        assert_eq!(agents.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn health_check_returns_info() {
+        let svc = setup().await;
+        let agent = svc
+            .create(CreateAgentRequest {
+                name: "HC Agent".to_string(),
+                agent_type: None,
+            })
+            .await
+            .unwrap();
+        let health = svc.health_check(&agent.id.to_string()).await.unwrap();
+        assert_eq!(health.agent_id, agent.id);
+        assert!(!health.is_installed); // no executable_path set
+        assert!(!health.is_authenticated);
+    }
+
+    #[tokio::test]
+    async fn update_status_broadcasts() {
+        let svc = setup().await;
+        let mut rx = svc.event_bus.subscribe();
+        let agent = svc
+            .create(CreateAgentRequest {
+                name: "Status Agent".to_string(),
+                agent_type: None,
+            })
+            .await
+            .unwrap();
+        svc.update_status(&agent.id.to_string(), &AgentStatus::Error)
+            .await
+            .unwrap();
+        let event = rx.recv().await.unwrap();
+        assert!(matches!(event, WsEvent::AgentStatusChanged { .. }));
+    }
+}
