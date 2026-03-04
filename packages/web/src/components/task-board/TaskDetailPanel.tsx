@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Trash2, Square, Play, Send } from 'lucide-react';
+import { X, Trash2, Square, Play, Send, RotateCcw } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
-import { useSession, useInterruptSession, useResumeSession, useSendSessionInput } from '@/hooks/use-sessions';
+import { useSession, useInterruptSession, useResumeSession, useSendSessionInput, useRetrySession } from '@/hooks/use-sessions';
 import { useAgents } from '@/hooks/use-agents';
 import { useProjects } from '@/hooks/use-projects';
 import { SessionOutput } from '@/components/sessions/SessionOutput';
@@ -47,6 +47,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const interruptMutation = useInterruptSession();
     const resumeMutation = useResumeSession();
     const sendInputMutation = useSendSessionInput();
+    const retryMutation = useRetrySession();
     const [messageInput, setMessageInput] = useState('');
 
     // Default to first available agent if not set
@@ -124,6 +125,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
 
     const isRunning = selectedSession?.status === 'running';
     const isPaused = selectedSession?.status === 'paused';
+    const isFailed = selectedSession?.status === 'failed';
 
     return (
         <>
@@ -384,6 +386,17 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                     >
                                         <Play className="w-3.5 h-3.5" />
                                         {resumeMutation.isPending ? 'Resuming...' : 'Resume'}
+                                    </button>
+                                )}
+                                {isFailed && (
+                                    <button
+                                        type="button"
+                                        onClick={() => retryMutation.mutate({ id: selectedSession.id })}
+                                        disabled={retryMutation.isPending}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-orange-900/40 text-orange-300 border border-orange-700 hover:bg-orange-900/60 transition-colors disabled:opacity-50"
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        {retryMutation.isPending ? 'Retrying...' : 'Retry'}
                                     </button>
                                 )}
                             </div>

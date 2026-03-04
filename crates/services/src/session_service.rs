@@ -96,8 +96,8 @@ impl SessionService {
                         ).await {
                             tracing::error!("Failed to update session error result: {}", e);
                         }
-                        // Reset agent to idle and cleanup worktree
-                        Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
+                        // Only reset agent to idle — preserve worktree so retry/resume is possible
+                        Self::reset_agent_only(&db, &id_str).await;
                     }
                     _ => {}
                 }
@@ -147,6 +147,21 @@ impl SessionService {
                     }
                 }
             }
+        }
+    }
+
+    /// Resets only the session's agent to idle, preserving the worktree for retry.
+    async fn reset_agent_only(db: &Database, session_id: &str) {
+        if let Ok(Some(session)) =
+            composer_db::models::session::find_by_id(&db.pool, session_id).await
+        {
+            let agent_id_str = session.agent_id.to_string();
+            let _ = composer_db::models::agent::update_status(
+                &db.pool,
+                &agent_id_str,
+                &AgentStatus::Idle,
+            )
+            .await;
         }
     }
 
@@ -327,6 +342,80 @@ impl SessionService {
         composer_db::models::session::find_by_id(&self.db.pool, id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Session not found"))
+    }
+
+    pub async fn retry_session(&self, id: &str, req: ResumeSessionRequest) -> anyhow::Result<Session> {
+        let session = composer_db::models::session::find_by_id(&self.db.pool, id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
+
+        if !matches!(session.status, SessionStatus::Failed) {
+            return Err(anyhow::anyhow!(
+                "Only failed sessions can be retried, current status: {:?}",
+                session.status
+            ));
+        }
+
+        // Check if worktree is still usable for resume
+        let worktree_usable = if let Some(wt_id) = &session.worktree_id {
+            if let Ok(Some(wt)) =
+                composer_db::models::worktree::find_by_id(&self.db.pool, &wt_id.to_string()).await
+            {
+                matches!(wt.status, WorktreeStatus::Active)
+                    && std::path::Path::new(&wt.worktree_path).exists()
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        // Save prompt before potentially moving req
+        let saved_prompt = req.prompt.clone();
+
+        if worktree_usable {
+            // Try to resume the failed session (reuses existing worktree + conversation context)
+            match self.resume_session(id, req).await {
+                Ok(session) => return Ok(session),
+                Err(e) => {
+                    tracing::warn!("Resume failed during retry, falling back to new session: {}", e);
+                    // Fall through to create a new session
+                }
+            }
+        }
+
+        // Fallback: clean up old worktree and create a brand new session
+        let task_id = session
+            .task_id
+            .ok_or_else(|| anyhow::anyhow!("Session has no task_id, cannot retry"))?;
+        let prompt = saved_prompt
+            .or(session.prompt.clone())
+            .unwrap_or_else(|| "Continue the task.".to_string());
+
+        // Get repo_path from worktree before cleaning up
+        let repo_path = if let Some(wt_id) = &session.worktree_id {
+            let wt_id_str = wt_id.to_string();
+            let repo = composer_db::models::worktree::find_by_id(&self.db.pool, &wt_id_str)
+                .await?
+                .map(|wt| wt.repo_path);
+            // Clean up old worktree
+            let _ = self.worktree_service.cleanup(&wt_id_str).await;
+            repo
+        } else {
+            None
+        };
+
+        let repo_path = repo_path
+            .ok_or_else(|| anyhow::anyhow!("Cannot determine repo_path for retry"))?;
+
+        self.create_session(CreateSessionRequest {
+            agent_id: session.agent_id,
+            task_id,
+            prompt,
+            repo_path,
+            auto_approve: Some(true),
+        })
+        .await
     }
 
     pub async fn list_all(&self) -> anyhow::Result<Vec<Session>> {

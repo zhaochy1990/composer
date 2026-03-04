@@ -69,6 +69,22 @@ export function useSendSessionInput() {
     });
 }
 
+export function useRetrySession() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, prompt }: { id: string; prompt?: string }) =>
+            apiFetch<Session>(`/sessions/${id}/retry`, {
+                method: 'POST',
+                body: JSON.stringify({ prompt }),
+            }),
+        onSuccess: (_data, { id }) => {
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['sessions', id] });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        },
+    });
+}
+
 export function useSessionLogs(id: string | undefined) {
     return useQuery({
         queryKey: ['sessions', id, 'logs'],

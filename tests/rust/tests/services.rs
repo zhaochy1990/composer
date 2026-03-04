@@ -385,7 +385,7 @@ mod session_service_tests {
     }
 
     #[tokio::test]
-    async fn session_failed_resets_agent_and_cleans_worktree() {
+    async fn session_failed_resets_agent_but_preserves_worktree() {
         let (_svc, db, event_bus) = setup_with_internals().await;
 
         // Create agent in Busy state
@@ -428,9 +428,36 @@ mod session_service_tests {
         let ag_after = agent::find_by_id(&db.pool, &agent_id).await.unwrap().unwrap();
         assert_eq!(ag_after.status, AgentStatus::Idle);
 
-        // Verify worktree is marked Deleted in DB
+        // Verify worktree is still Active (preserved for retry)
         let wt_after = worktree::find_by_id(&db.pool, &wt_id).await.unwrap().unwrap();
-        assert_eq!(wt_after.status, WorktreeStatus::Deleted);
+        assert_eq!(wt_after.status, WorktreeStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn retry_non_failed_session_is_rejected() {
+        let (_svc, db, _event_bus) = setup_with_internals().await;
+
+        // Create agent
+        let ag = agent::create(&db.pool, "Test Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let agent_id = ag.id.to_string();
+
+        // Create session in Running status
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let sess = session::create_with_status(
+            &db.pool, &session_id, &agent_id, None, None,
+            "do work", &SessionStatus::Running,
+        )
+        .await
+        .unwrap();
+
+        // Try to retry a running session — should fail
+        let result = _svc
+            .retry_session(&sess.id.to_string(), ResumeSessionRequest { prompt: None })
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Only failed sessions can be retried"));
     }
 }
 
