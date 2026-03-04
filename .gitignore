@@ -2,8 +2,11 @@
 node_modules
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 packages/web/dist
 .sqlx
 .claude/
+.composer/
 packages/web/playwright-report/
 packages/web/test-results/
