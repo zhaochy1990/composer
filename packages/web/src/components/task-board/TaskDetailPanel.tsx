@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Trash2, Plus, Square, Play } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
 import { useUpdateTask, useDeleteTask } from '@/hooks/use-tasks';
@@ -69,13 +69,16 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
         return list;
     }, [sessions]);
 
-    // Auto-select active session
+    // Auto-select active session (once, on first data load)
+    const hasAutoSelected = useRef(false);
     useEffect(() => {
+        if (hasAutoSelected.current) return;
         const active = sortedSessions.find(s => s.status === 'running' || s.status === 'paused');
-        if (active && !selectedSessionId) {
+        if (active) {
             setSelectedSessionId(active.id);
+            hasAutoSelected.current = true;
         }
-    }, [sortedSessions, selectedSessionId]);
+    }, [sortedSessions]);
 
     const { data: selectedSession, isLoading: selectedSessionLoading } = useSession(selectedSessionId ?? undefined);
 

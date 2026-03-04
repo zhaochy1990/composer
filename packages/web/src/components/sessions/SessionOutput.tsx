@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { useSessionOutputStore } from '@/stores/session-output-store';
+import { useSessionOutputStore, type SessionLogEntry } from '@/stores/session-output-store';
 import { cn } from '@/lib/utils';
+
+const EMPTY_OUTPUT: SessionLogEntry[] = [];
 
 interface SessionOutputProps {
     sessionId: string;
@@ -8,7 +10,7 @@ interface SessionOutputProps {
 
 export function SessionOutput({ sessionId }: SessionOutputProps) {
     const output = useSessionOutputStore(
-        (state) => state.outputs[sessionId] ?? [],
+        (state) => state.outputs[sessionId] ?? EMPTY_OUTPUT,
     );
     const scrollRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
