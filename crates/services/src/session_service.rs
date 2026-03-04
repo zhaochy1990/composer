@@ -74,15 +74,8 @@ impl SessionService {
                         ).await {
                             tracing::error!("Failed to update session result: {}", e);
                         }
-                        // Reset agent to idle
-                        if let Ok(Some(session)) = composer_db::models::session::find_by_id(&db.pool, &id_str).await {
-                            let agent_id_str = session.agent_id.to_string();
-                            let _ = composer_db::models::agent::update_status(
-                                &db.pool,
-                                &agent_id_str,
-                                &AgentStatus::Idle,
-                            ).await;
-                        }
+                        // Reset agent to idle and cleanup worktree
+                        Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
                     }
                     WsEvent::SessionFailed { session_id, ref error } => {
                         let id_str = session_id.to_string();
@@ -101,20 +94,58 @@ impl SessionService {
                         ).await {
                             tracing::error!("Failed to update session error result: {}", e);
                         }
-                        // Reset agent to idle
-                        if let Ok(Some(session)) = composer_db::models::session::find_by_id(&db.pool, &id_str).await {
-                            let agent_id_str = session.agent_id.to_string();
-                            let _ = composer_db::models::agent::update_status(
-                                &db.pool,
-                                &agent_id_str,
-                                &AgentStatus::Idle,
-                            ).await;
-                        }
+                        // Reset agent to idle and cleanup worktree
+                        Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
                     }
                     _ => {}
                 }
             } // end loop
         });
+    }
+
+    /// Resets the session's agent to idle and cleans up the associated worktree.
+    async fn reset_agent_and_cleanup_worktree(db: &Database, session_id: &str) {
+        if let Ok(Some(session)) =
+            composer_db::models::session::find_by_id(&db.pool, session_id).await
+        {
+            let agent_id_str = session.agent_id.to_string();
+            let _ = composer_db::models::agent::update_status(
+                &db.pool,
+                &agent_id_str,
+                &AgentStatus::Idle,
+            )
+            .await;
+
+            // Cleanup worktree
+            if let Some(wt_id) = &session.worktree_id {
+                let wt_id_str = wt_id.to_string();
+                if let Ok(Some(wt)) =
+                    composer_db::models::worktree::find_by_id(&db.pool, &wt_id_str).await
+                {
+                    if wt.status != WorktreeStatus::Deleted {
+                        let remove_result = composer_git::worktree::remove_worktree(
+                            std::path::Path::new(&wt.repo_path),
+                            std::path::Path::new(&wt.worktree_path),
+                            &wt.branch_name,
+                        )
+                        .await;
+                        if let Err(e) = &remove_result {
+                            tracing::warn!(
+                                "Failed to cleanup worktree {} on session end: {}",
+                                wt_id_str,
+                                e
+                            );
+                        }
+                        let _ = composer_db::models::worktree::update_status(
+                            &db.pool,
+                            &wt_id_str,
+                            &WorktreeStatus::Deleted,
+                        )
+                        .await;
+                    }
+                }
+            }
+        }
     }
 
     pub async fn create_session(&self, req: CreateSessionRequest) -> anyhow::Result<Session> {
@@ -155,57 +186,74 @@ impl SessionService {
             )
             .await?;
 
-        // Create session in DB directly with Running status (fix #24)
-        let session = composer_db::models::session::create_with_status(
-            &self.db.pool,
-            &session_id_str,
-            &agent.id.to_string(),
-            Some(&req.task_id.to_string()),
-            Some(&worktree.id.to_string()),
-            &req.prompt,
-            &SessionStatus::Running,
-        )
-        .await?;
+        // Wrap all remaining operations — any failure after worktree creation triggers cleanup
+        let result = async {
+            // Create session in DB directly with Running status (fix #24)
+            let session = composer_db::models::session::create_with_status(
+                &self.db.pool,
+                &session_id_str,
+                &agent.id.to_string(),
+                Some(&req.task_id.to_string()),
+                Some(&worktree.id.to_string()),
+                &req.prompt,
+                &SessionStatus::Running,
+            )
+            .await?;
 
-        composer_db::models::agent::update_status(
-            &self.db.pool,
-            &agent.id.to_string(),
-            &AgentStatus::Busy,
-        )
-        .await?;
+            composer_db::models::agent::update_status(
+                &self.db.pool,
+                &agent.id.to_string(),
+                &AgentStatus::Busy,
+            )
+            .await?;
 
-        composer_db::models::task::update_status(
-            &self.db.pool,
-            &req.task_id.to_string(),
-            &TaskStatus::InProgress,
-        )
-        .await?;
+            composer_db::models::task::update_status(
+                &self.db.pool,
+                &req.task_id.to_string(),
+                &TaskStatus::InProgress,
+            )
+            .await?;
 
-        // Spawn agent process — rollback on failure (fix #2, #3)
-        if let Err(e) = self.process_manager
-            .spawn(SpawnOptions {
-                session_id: session.id,
-                agent_id: agent.id,
-                task_id: Some(req.task_id),
-                prompt: req.prompt.clone(),
-                working_dir: worktree.worktree_path.clone(),
-                auto_approve: req.auto_approve.unwrap_or(false),
-                resume_session_id: None,
-            })
-            .await
-        {
-            // Rollback: set session to Failed, agent to Idle, cleanup worktree
-            let _ = composer_db::models::session::update_status(
-                &self.db.pool, &session_id_str, &SessionStatus::Failed,
-            ).await;
-            let _ = composer_db::models::agent::update_status(
-                &self.db.pool, &agent.id.to_string(), &AgentStatus::Idle,
-            ).await;
-            let _ = self.worktree_service.cleanup(&worktree.id.to_string()).await;
-            return Err(anyhow::anyhow!("Failed to spawn agent: {}", e));
+            self.process_manager
+                .spawn(SpawnOptions {
+                    session_id: session.id,
+                    agent_id: agent.id,
+                    task_id: Some(req.task_id),
+                    prompt: req.prompt.clone(),
+                    working_dir: worktree.worktree_path.clone(),
+                    auto_approve: req.auto_approve.unwrap_or(false),
+                    resume_session_id: None,
+                })
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to spawn agent: {}", e))?;
+
+            Ok::<_, anyhow::Error>(session)
         }
+        .await;
 
-        Ok(session)
+        match result {
+            Ok(session) => Ok(session),
+            Err(e) => {
+                // Rollback: set session to Failed, agent to Idle, cleanup worktree
+                let _ = composer_db::models::session::update_status(
+                    &self.db.pool,
+                    &session_id_str,
+                    &SessionStatus::Failed,
+                )
+                .await;
+                let _ = composer_db::models::agent::update_status(
+                    &self.db.pool,
+                    &agent.id.to_string(),
+                    &AgentStatus::Idle,
+                )
+                .await;
+                let _ = self
+                    .worktree_service
+                    .cleanup(&worktree.id.to_string())
+                    .await;
+                Err(e)
+            }
+        }
     }
 
     pub async fn resume_session(&self, id: &str, req: ResumeSessionRequest) -> anyhow::Result<Session> {

@@ -38,7 +38,7 @@ impl WorktreeService {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create worktree: {}", e))?;
 
-        let worktree = composer_db::models::worktree::create(
+        let worktree = match composer_db::models::worktree::create(
             &self.db.pool,
             agent_id,
             session_id,
@@ -46,7 +46,20 @@ impl WorktreeService {
             &info.worktree_path.to_string_lossy(),
             &info.branch_name,
         )
-        .await?;
+        .await
+        {
+            Ok(wt) => wt,
+            Err(e) => {
+                // Best-effort cleanup: remove the git worktree we just created
+                let _ = composer_git::worktree::remove_worktree(
+                    std::path::Path::new(repo_path),
+                    &info.worktree_path,
+                    &info.branch_name,
+                )
+                .await;
+                return Err(e);
+            }
+        };
 
         Ok(worktree)
     }
@@ -56,20 +69,26 @@ impl WorktreeService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Worktree not found"))?;
 
-        composer_git::worktree::remove_worktree(
+        let remove_result = composer_git::worktree::remove_worktree(
             std::path::Path::new(&wt.repo_path),
             std::path::Path::new(&wt.worktree_path),
             &wt.branch_name,
         )
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to remove worktree: {}", e))?;
+        .await;
+        if let Err(e) = &remove_result {
+            tracing::warn!("Failed to remove worktree from disk: {}", e);
+        }
 
+        // Always mark as deleted in DB, even if filesystem removal failed
         composer_db::models::worktree::update_status(
             &self.db.pool,
             worktree_id,
             &WorktreeStatus::Deleted,
         )
         .await?;
+
+        // Propagate git removal error after DB is updated
+        remove_result.map_err(|e| anyhow::anyhow!("Failed to remove worktree: {}", e))?;
 
         Ok(())
     }

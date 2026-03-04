@@ -5,6 +5,7 @@ use composer_services::event_bus::EventBus;
 use composer_services::task_service::TaskService;
 use composer_services::agent_service::AgentService;
 use composer_services::session_service::SessionService;
+use composer_services::worktree_service::WorktreeService;
 use composer_executors::process_manager::AgentProcessManager;
 
 // ---------------------------------------------------------------------------
@@ -272,6 +273,7 @@ mod agent_service_tests {
 
 mod session_service_tests {
     use super::*;
+    use composer_db::models::{agent, session, worktree};
 
     async fn setup() -> SessionService {
         let db = Database::connect("sqlite::memory:").await.unwrap();
@@ -279,6 +281,17 @@ mod session_service_tests {
         let event_bus = EventBus::new();
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
         SessionService::new(Arc::new(db), event_bus, pm)
+    }
+
+    /// Setup that returns the DB and event bus for event-driven tests.
+    async fn setup_with_internals() -> (SessionService, Arc<Database>, EventBus) {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.run_migrations().await.unwrap();
+        let db = Arc::new(db);
+        let event_bus = EventBus::new();
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let svc = SessionService::new(db.clone(), event_bus.clone(), pm);
+        (svc, db, event_bus)
     }
 
     #[tokio::test]
@@ -296,5 +309,198 @@ mod session_service_tests {
             .await
             .unwrap();
         assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn session_completed_resets_agent_and_cleans_worktree() {
+        let (_svc, db, event_bus) = setup_with_internals().await;
+
+        // Create agent in Busy state
+        let ag = agent::create(&db.pool, "Test Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let agent_id = ag.id.to_string();
+        agent::update_status(&db.pool, &agent_id, &AgentStatus::Busy)
+            .await
+            .unwrap();
+
+        // Create session with a worktree record
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let wt = worktree::create(
+            &db.pool, &agent_id, &session_id,
+            "/nonexistent/repo", "/nonexistent/repo/wt", "branch",
+        )
+        .await
+        .unwrap();
+        let wt_id = wt.id.to_string();
+
+        let sess = session::create_with_status(
+            &db.pool, &session_id, &agent_id, None, Some(&wt_id),
+            "do work", &SessionStatus::Running,
+        )
+        .await
+        .unwrap();
+
+        // Broadcast SessionCompleted event
+        event_bus.broadcast(WsEvent::SessionCompleted {
+            session_id: sess.id,
+            result_summary: Some("done".to_string()),
+        });
+
+        // Give the background event listener time to process
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Verify agent is reset to Idle
+        let ag_after = agent::find_by_id(&db.pool, &agent_id).await.unwrap().unwrap();
+        assert_eq!(ag_after.status, AgentStatus::Idle);
+
+        // Verify worktree is marked Deleted in DB
+        let wt_after = worktree::find_by_id(&db.pool, &wt_id).await.unwrap().unwrap();
+        assert_eq!(wt_after.status, WorktreeStatus::Deleted);
+    }
+
+    #[tokio::test]
+    async fn session_failed_resets_agent_and_cleans_worktree() {
+        let (_svc, db, event_bus) = setup_with_internals().await;
+
+        // Create agent in Busy state
+        let ag = agent::create(&db.pool, "Test Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        let agent_id = ag.id.to_string();
+        agent::update_status(&db.pool, &agent_id, &AgentStatus::Busy)
+            .await
+            .unwrap();
+
+        // Create session with a worktree record
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let wt = worktree::create(
+            &db.pool, &agent_id, &session_id,
+            "/nonexistent/repo", "/nonexistent/repo/wt", "branch",
+        )
+        .await
+        .unwrap();
+        let wt_id = wt.id.to_string();
+
+        let sess = session::create_with_status(
+            &db.pool, &session_id, &agent_id, None, Some(&wt_id),
+            "do work", &SessionStatus::Running,
+        )
+        .await
+        .unwrap();
+
+        // Broadcast SessionFailed event
+        event_bus.broadcast(WsEvent::SessionFailed {
+            session_id: sess.id,
+            error: "something broke".to_string(),
+        });
+
+        // Give the background event listener time to process
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Verify agent is reset to Idle
+        let ag_after = agent::find_by_id(&db.pool, &agent_id).await.unwrap().unwrap();
+        assert_eq!(ag_after.status, AgentStatus::Idle);
+
+        // Verify worktree is marked Deleted in DB
+        let wt_after = worktree::find_by_id(&db.pool, &wt_id).await.unwrap().unwrap();
+        assert_eq!(wt_after.status, WorktreeStatus::Deleted);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WorktreeService tests
+// ---------------------------------------------------------------------------
+
+mod worktree_service_tests {
+    use super::*;
+    use composer_db::models::{agent, session, worktree};
+
+    async fn setup() -> (WorktreeService, sqlx::SqlitePool) {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.run_migrations().await.unwrap();
+        let db = Arc::new(db);
+        let svc = WorktreeService::new(db.clone());
+        (svc, db.pool.clone())
+    }
+
+    async fn setup_agent(pool: &sqlx::SqlitePool) -> String {
+        let a = agent::create(pool, "Agent", &AgentType::ClaudeCode, None)
+            .await
+            .unwrap();
+        a.id.to_string()
+    }
+
+    async fn setup_session(pool: &sqlx::SqlitePool, agent_id: &str) -> String {
+        let s = session::create(pool, agent_id, None, None, "test")
+            .await
+            .unwrap();
+        s.id.to_string()
+    }
+
+    #[tokio::test]
+    async fn list_all_empty() {
+        let (svc, _pool) = setup().await;
+        let all = svc.list_all().await.unwrap();
+        assert!(all.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_all_returns_worktrees() {
+        let (svc, pool) = setup().await;
+        let agent_id = setup_agent(&pool).await;
+        let s1 = setup_session(&pool, &agent_id).await;
+        let s2 = setup_session(&pool, &agent_id).await;
+        worktree::create(&pool, &agent_id, &s1, "/repo", "/repo/wt1", "b1")
+            .await
+            .unwrap();
+        worktree::create(&pool, &agent_id, &s2, "/repo", "/repo/wt2", "b2")
+            .await
+            .unwrap();
+        let all = svc.list_all().await.unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn cleanup_nonexistent_worktree_returns_error() {
+        let (svc, _pool) = setup().await;
+        let result = svc.cleanup("00000000-0000-0000-0000-000000000000").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Worktree not found"));
+    }
+
+    #[tokio::test]
+    async fn cleanup_marks_db_deleted_even_when_git_removal_fails() {
+        // Fix 3: cleanup() should always update DB status to Deleted,
+        // even if the git worktree removal fails (e.g. path doesn't exist on disk).
+        let (svc, pool) = setup().await;
+        let agent_id = setup_agent(&pool).await;
+        let session_id = setup_session(&pool, &agent_id).await;
+        let wt = worktree::create(
+            &pool, &agent_id, &session_id,
+            "/nonexistent/repo", "/nonexistent/repo/wt", "branch",
+        )
+        .await
+        .unwrap();
+        let wt_id = wt.id.to_string();
+
+        // cleanup should return error (git removal fails on nonexistent path)
+        // but DB status should still be updated to Deleted
+        let result = svc.cleanup(&wt_id).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Failed to remove worktree"));
+
+        // Verify DB status is Deleted despite the error
+        let found = worktree::find_by_id(&pool, &wt_id).await.unwrap().unwrap();
+        assert_eq!(found.status, WorktreeStatus::Deleted);
+    }
+
+    #[tokio::test]
+    async fn worktree_status_partial_eq() {
+        // Verify the PartialEq derive works correctly
+        assert_eq!(WorktreeStatus::Active, WorktreeStatus::Active);
+        assert_eq!(WorktreeStatus::Deleted, WorktreeStatus::Deleted);
+        assert_ne!(WorktreeStatus::Active, WorktreeStatus::Deleted);
+        assert_ne!(WorktreeStatus::Active, WorktreeStatus::Stale);
     }
 }

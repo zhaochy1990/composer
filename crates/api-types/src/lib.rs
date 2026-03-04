@@ -18,7 +18,7 @@ pub enum AgentType {
     ClaudeCode,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
 pub enum AgentStatus {
@@ -58,7 +58,7 @@ pub enum SessionStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
 pub enum WorktreeStatus {
