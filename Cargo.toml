@@ -49,6 +49,7 @@ tokio-stream = "0.1"
 dashmap = "6"
 tokio-util = "0.7"
 which = "7"
+command-group = { version = "5.0", features = ["with-tokio"] }
 mime_guess = "2"
 toml = "0.8"
 dirs = "6"

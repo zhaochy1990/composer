@@ -83,6 +83,7 @@ pub enum LogType {
     Stderr,
     Control,
     Status,
+    UserInput,
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +245,12 @@ pub struct CreateSessionRequest {
 #[ts(export)]
 pub struct ResumeSessionRequest {
     pub prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct SendSessionInputRequest {
+    pub message: String,
 }
 
 #[derive(Debug, Deserialize, TS)]

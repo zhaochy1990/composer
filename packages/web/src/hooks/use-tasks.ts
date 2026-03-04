@@ -21,7 +21,7 @@ export function useCreateTask() {
 export function useUpdateTask() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, ...data }: { id: string; title?: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string }) =>
+        mutationFn: ({ id, ...data }: { id: string; title?: string; description?: string; priority?: number; status?: string; assigned_agent_id?: string; project_id?: string }) =>
             apiFetch<Task>(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     });

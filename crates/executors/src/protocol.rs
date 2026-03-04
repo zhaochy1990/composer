@@ -1,4 +1,4 @@
-use crate::types::CliMessage;
+use crate::types::{CliMessage, SDKControlRequest, SDKControlRequestType};
 use crate::error::ExecutorError;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout};
@@ -23,6 +23,12 @@ impl ProtocolPeer {
         stdin.write_all(b"\n").await.map_err(ExecutorError::Io)?;
         stdin.flush().await.map_err(ExecutorError::Io)?;
         Ok(())
+    }
+
+    /// Send an interrupt control request to Claude Code so it can save state
+    /// and produce a final Result message before exiting.
+    pub async fn interrupt(&self) -> Result<(), ExecutorError> {
+        self.send_message(&SDKControlRequest::new(SDKControlRequestType::Interrupt {})).await
     }
 }
 

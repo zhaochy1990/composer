@@ -81,4 +81,25 @@ describe('useSessionOutputStore', () => {
         expect(state._seqCounters['s1']).toBe(2);
         expect(state._seqCounters['s2']).toBe(1);
     });
+
+    it('stores user_input log type entries', () => {
+        const { append } = useSessionOutputStore.getState();
+        append('s1', { session_id: 's1', log_type: 'user_input', content: 'hello agent' });
+        const state = useSessionOutputStore.getState();
+        expect(state.outputs['s1']).toHaveLength(1);
+        expect(state.outputs['s1'][0].log_type).toBe('user_input');
+        expect(state.outputs['s1'][0].content).toBe('hello agent');
+    });
+
+    it('interleaves user_input with other log types', () => {
+        const { append } = useSessionOutputStore.getState();
+        append('s1', { session_id: 's1', log_type: 'stdout', content: 'output line' });
+        append('s1', { session_id: 's1', log_type: 'user_input', content: 'user message' });
+        append('s1', { session_id: 's1', log_type: 'stdout', content: 'response' });
+        const state = useSessionOutputStore.getState();
+        expect(state.outputs['s1']).toHaveLength(3);
+        expect(state.outputs['s1'][0].log_type).toBe('stdout');
+        expect(state.outputs['s1'][1].log_type).toBe('user_input');
+        expect(state.outputs['s1'][2].log_type).toBe('stdout');
+    });
 });

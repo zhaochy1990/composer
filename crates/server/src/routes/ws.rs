@@ -75,6 +75,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
     // Read from WebSocket client (for commands like subscribe/unsubscribe)
     let sub_clone2 = subscriptions.clone();
+    let state_clone = state.clone();
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
@@ -85,6 +86,12 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         }
                         Ok(WsCommand::UnsubscribeSession { session_id }) => {
                             sub_clone2.lock().await.remove(&session_id);
+                        }
+                        Ok(WsCommand::SendInput { session_id, message }) => {
+                            let id_str = session_id.to_string();
+                            if let Err(e) = state_clone.services.sessions.send_input(&id_str, message).await {
+                                tracing::warn!("Failed to send input to session {}: {}", id_str, e);
+                            }
                         }
                         Ok(WsCommand::Ping) => {
                             // No-op — just keep the connection alive

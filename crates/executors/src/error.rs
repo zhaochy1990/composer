@@ -8,6 +8,8 @@ pub enum ExecutorError {
     CommunicationError(String),
     #[error("agent process not found for session: {0}")]
     ProcessNotFound(String),
+    #[error("no running process for session: {0}")]
+    NotRunning(String),
     #[error("protocol error: {0}")]
     ProtocolError(String),
     #[error("io error: {0}")]

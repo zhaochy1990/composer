@@ -13,11 +13,12 @@ interface TaskCardProps {
     task: Task;
     onClick: (task: Task) => void;
     agentNameMap?: Record<string, string>;
+    projectNameMap?: Record<string, string>;
     onStart?: (taskId: string) => void;
     startingTaskId?: string | null;
 }
 
-export function TaskCard({ task, onClick, agentNameMap, onStart, startingTaskId }: TaskCardProps) {
+export function TaskCard({ task, onClick, agentNameMap, projectNameMap, onStart, startingTaskId }: TaskCardProps) {
     const priority = priorityConfig[task.priority] ?? priorityConfig[0];
     const canStart = task.status === 'backlog';
     const isStarting = startingTaskId === task.id;
@@ -50,6 +51,11 @@ export function TaskCard({ task, onClick, agentNameMap, onStart, startingTaskId 
                         {task.assigned_agent_id && (
                             <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-300 border border-purple-700">
                                 {agentNameMap?.[task.assigned_agent_id] ?? shortId(task.assigned_agent_id)}
+                            </span>
+                        )}
+                        {task.project_id && (
+                            <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-teal-900/50 text-teal-300 border border-teal-700">
+                                {projectNameMap?.[task.project_id] ?? shortId(task.project_id)}
                             </span>
                         )}
                         {canStart && onStart && (

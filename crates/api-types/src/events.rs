@@ -17,8 +17,8 @@ pub enum WsEvent {
     TaskDeleted { task_id: Uuid },
     TaskMoved { task_id: Uuid, from_status: TaskStatus, to_status: TaskStatus },
     SessionStarted { session_id: Uuid, agent_id: Uuid, task_id: Option<Uuid> },
-    SessionCompleted { session_id: Uuid, result_summary: Option<String> },
-    SessionFailed { session_id: Uuid, error: String },
+    SessionCompleted { session_id: Uuid, result_summary: Option<String>, claude_session_id: Option<String> },
+    SessionFailed { session_id: Uuid, error: String, claude_session_id: Option<String> },
     SessionPaused { session_id: Uuid },
     SessionOutput { session_id: Uuid, log_type: LogType, content: String },
     WorktreeCreated(Worktree),
@@ -36,5 +36,6 @@ pub enum WsEvent {
 pub enum WsCommand {
     SubscribeSession { session_id: Uuid },
     UnsubscribeSession { session_id: Uuid },
+    SendInput { session_id: Uuid, message: String },
     Ping,
 }

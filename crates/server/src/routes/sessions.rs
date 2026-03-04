@@ -15,6 +15,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/sessions/{id}", get(get_session))
         .route("/sessions/{id}/interrupt", post(interrupt_session))
         .route("/sessions/{id}/resume", post(resume_session))
+        .route("/sessions/{id}/input", post(send_session_input))
         .route("/sessions/{id}/logs", get(get_session_logs))
 }
 
@@ -42,6 +43,11 @@ async fn interrupt_session(State(state): State<Arc<AppState>>, Path(id): Path<St
 async fn resume_session(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<ResumeSessionRequest>) -> Result<Json<Session>, ServiceError> {
     let session = state.services.sessions.resume_session(&id, req).await?;
     Ok(Json(session))
+}
+
+async fn send_session_input(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<SendSessionInputRequest>) -> Result<(), ServiceError> {
+    state.services.sessions.send_input(&id, req.message).await?;
+    Ok(())
 }
 
 #[derive(Deserialize)]

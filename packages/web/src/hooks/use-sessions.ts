@@ -59,6 +59,16 @@ export function useResumeSession() {
     });
 }
 
+export function useSendSessionInput() {
+    return useMutation({
+        mutationFn: ({ id, message }: { id: string; message: string }) =>
+            apiFetch<void>(`/sessions/${id}/input`, {
+                method: 'POST',
+                body: JSON.stringify({ message }),
+            }),
+    });
+}
+
 export function useSessionLogs(id: string | undefined) {
     return useQuery({
         queryKey: ['sessions', id, 'logs'],

@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Trash2, Square, Play } from 'lucide-react';
+import { X, Trash2, Square, Play, Send } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
-import { useSession, useInterruptSession, useResumeSession } from '@/hooks/use-sessions';
+import { useSession, useInterruptSession, useResumeSession, useSendSessionInput } from '@/hooks/use-sessions';
 import { useAgents } from '@/hooks/use-agents';
+import { useProjects } from '@/hooks/use-projects';
 import { SessionOutput } from '@/components/sessions/SessionOutput';
 import { StatusBadge } from '@/components/sessions/StatusBadge';
 import { shortId, formatDuration, formatTime } from '@/lib/utils';
@@ -21,6 +22,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const [priority, setPriority] = useState(task.priority);
 
     const [assignedAgentId, setAssignedAgentId] = useState(task.assigned_agent_id ?? '');
+    const [projectId, setProjectId] = useState(task.project_id ?? '');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => {
@@ -28,6 +30,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
         setDescription(task.description ?? '');
         setPriority(task.priority);
         setAssignedAgentId(task.assigned_agent_id ?? '');
+        setProjectId(task.project_id ?? '');
         setShowDeleteConfirm(false);
     }, [task.id, task.updated_at]);
 
@@ -38,10 +41,13 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     // --- Sessions ---
     const { data: sessions } = useTaskSessions(task.id);
     const { data: agents } = useAgents();
+    const { data: projects } = useProjects();
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
     const interruptMutation = useInterruptSession();
     const resumeMutation = useResumeSession();
+    const sendInputMutation = useSendSessionInput();
+    const [messageInput, setMessageInput] = useState('');
 
     // Default to first available agent if not set
     useEffect(() => {
@@ -106,6 +112,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                 description: description.trim() || undefined,
                 priority,
                 assigned_agent_id: assignedAgentId || undefined,
+                project_id: projectId || undefined,
             },
             { onSuccess: () => setSaved(true) },
         );
@@ -208,6 +215,22 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                     </select>
                                 </div>
 
+                                <div>
+                                    <label htmlFor="edit-project" className="block text-sm font-medium text-gray-300 mb-1">
+                                        Project
+                                    </label>
+                                    <select
+                                        id="edit-project"
+                                        value={projectId}
+                                        onChange={e => setProjectId(e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    >
+                                        <option value="">None</option>
+                                        {projects?.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="text-xs text-gray-500">
@@ -272,18 +295,32 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                     <div className="px-6 py-4 border-b border-gray-800">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Sessions</h3>
-                            {task.status === 'backlog' && (
-                                <button
-                                    type="button"
-                                    onClick={() => startTask.mutate(task.id, {
-                                        onSuccess: (data) => setSelectedSessionId(data.session.id),
-                                    })}
-                                    disabled={startTask.isPending}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50"
-                                >
-                                    <Play className="w-3.5 h-3.5" />
-                                    {startTask.isPending ? 'Starting...' : 'Start'}
-                                </button>
+                            {task.status === 'backlog' && (() => {
+                                const missingAgent = !task.assigned_agent_id;
+                                const missingProject = !task.project_id;
+                                const canStart = !missingAgent && !missingProject;
+                                const tooltip = missingAgent && missingProject
+                                    ? 'Assign an agent and project first'
+                                    : missingAgent ? 'Assign an agent first'
+                                    : missingProject ? 'Assign a project first'
+                                    : undefined;
+                                return (
+                                    <button
+                                        type="button"
+                                        title={tooltip}
+                                        onClick={() => startTask.mutate(task.id, {
+                                            onSuccess: (data) => setSelectedSessionId(data.session.id),
+                                        })}
+                                        disabled={!canStart || startTask.isPending}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Play className="w-3.5 h-3.5" />
+                                        {startTask.isPending ? 'Starting...' : 'Start'}
+                                    </button>
+                                );
+                            })()}
+                            {startTask.isError && (
+                                <p className="text-xs text-red-400 mt-1">{(startTask.error as Error).message}</p>
                             )}
                         </div>
 
@@ -374,6 +411,38 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                     <SessionOutput sessionId={selectedSessionId} />
                                 </div>
                             </div>
+
+                            {/* Message input for running sessions */}
+                            {isRunning && (
+                                <form
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const msg = messageInput.trim();
+                                        if (!msg) return;
+                                        sendInputMutation.mutate(
+                                            { id: selectedSession.id, message: msg },
+                                            { onSuccess: () => setMessageInput('') },
+                                        );
+                                    }}
+                                    className="flex items-center gap-2"
+                                >
+                                    <input
+                                        type="text"
+                                        value={messageInput}
+                                        onChange={(e) => setMessageInput(e.target.value)}
+                                        placeholder="Send a message to the session..."
+                                        className="flex-1 bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!messageInput.trim() || sendInputMutation.isPending}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium bg-green-700 text-white hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Send className="w-3.5 h-3.5" />
+                                        Send
+                                    </button>
+                                </form>
+                            )}
                         </div>
                     )}
                     {!selectedSessionId && sortedSessions.length > 0 && (

@@ -57,7 +57,7 @@ impl SessionService {
                             tracing::warn!("Failed to persist session log: {}", e);
                         }
                     }
-                    WsEvent::SessionCompleted { session_id, ref result_summary } => {
+                    WsEvent::SessionCompleted { session_id, ref result_summary, ref claude_session_id } => {
                         let id_str = session_id.to_string();
                         if let Err(e) = composer_db::models::session::update_status(
                             &db.pool,
@@ -66,18 +66,19 @@ impl SessionService {
                         ).await {
                             tracing::error!("Failed to update session status to completed: {}", e);
                         }
+                        // Persist Claude Code's session_id from event payload for --resume support
                         if let Err(e) = composer_db::models::session::update_result(
                             &db.pool,
                             &id_str,
                             result_summary.as_deref(),
-                            None,
+                            claude_session_id.as_deref(),
                         ).await {
                             tracing::error!("Failed to update session result: {}", e);
                         }
                         // Reset agent to idle and cleanup worktree
                         Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
                     }
-                    WsEvent::SessionFailed { session_id, ref error } => {
+                    WsEvent::SessionFailed { session_id, ref error, ref claude_session_id } => {
                         let id_str = session_id.to_string();
                         if let Err(e) = composer_db::models::session::update_status(
                             &db.pool,
@@ -86,11 +87,12 @@ impl SessionService {
                         ).await {
                             tracing::error!("Failed to update session status to failed: {}", e);
                         }
+                        // Persist Claude Code's session_id from event payload for --resume
                         if let Err(e) = composer_db::models::session::update_result(
                             &db.pool,
                             &id_str,
                             Some(error.as_str()),
-                            None,
+                            claude_session_id.as_deref(),
                         ).await {
                             tracing::error!("Failed to update session error result: {}", e);
                         }
@@ -223,6 +225,7 @@ impl SessionService {
                     working_dir: worktree.worktree_path.clone(),
                     auto_approve: req.auto_approve.unwrap_or(false),
                     resume_session_id: None,
+                    resume_at_message_id: None,
                 })
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to spawn agent: {}", e))?;
@@ -280,7 +283,10 @@ impl SessionService {
             return Err(anyhow::anyhow!("Session has no worktree, cannot resume"));
         };
 
-        let prompt = req.prompt.unwrap_or_else(|| "Continue from where you left off.".to_string());
+        // Use explicit prompt, or consume a queued message, or fallback to default
+        let prompt = req.prompt
+            .or_else(|| self.process_manager.take_queued_message(&session.id))
+            .unwrap_or_else(|| "Continue from where you left off.".to_string());
 
         // The resume_session_id is the Claude Code session ID, which we may have stored
         // from the original session. For now, use the session's own ID as a reference.
@@ -304,6 +310,7 @@ impl SessionService {
                 working_dir,
                 auto_approve: true,
                 resume_session_id: Some(resume_id),
+                resume_at_message_id: None,
             })
             .await
         {
@@ -366,6 +373,31 @@ impl SessionService {
         offset: Option<i64>,
     ) -> anyhow::Result<Vec<SessionLog>> {
         composer_db::models::session_log::list_by_session(&self.db.pool, session_id, since, limit, offset).await
+    }
+
+    pub async fn send_input(&self, id: &str, message: String) -> anyhow::Result<()> {
+        let session = composer_db::models::session::find_by_id(&self.db.pool, id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
+
+        if !matches!(session.status, SessionStatus::Running) {
+            return Err(anyhow::anyhow!("Session is not running (status: {:?})", session.status));
+        }
+
+        // Broadcast the user input as session output so it gets persisted and shown in the UI
+        self.event_bus.broadcast(WsEvent::SessionOutput {
+            session_id: session.id,
+            log_type: LogType::UserInput,
+            content: message.clone(),
+        });
+
+        // Send the message to the running Claude Code process
+        self.process_manager
+            .send_input(session.id, message)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send input: {}", e))?;
+
+        Ok(())
     }
 
     pub fn process_manager(&self) -> &AgentProcessManager {

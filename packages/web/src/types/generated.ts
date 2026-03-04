@@ -12,7 +12,7 @@ export type TaskStatus = "backlog" | "in_progress" | "waiting" | "done";
 export type SessionStatus = "created" | "running" | "paused" | "completed" | "failed";
 export type RepositoryRole = "primary" | "dependency";
 export type WorktreeStatus = "active" | "stale" | "deleted";
-export type LogType = "stdout" | "stderr" | "control" | "status";
+export type LogType = "stdout" | "stderr" | "control" | "status" | "user_input";
 
 // ---------------------------------------------------------------------------
 // Model structs
@@ -147,6 +147,10 @@ export interface ResumeSessionRequest {
     prompt?: string;
 }
 
+export interface SendSessionInputRequest {
+    message: string;
+}
+
 export interface CreateProjectRequest {
     name: string;
     description?: string;
@@ -215,8 +219,8 @@ export type WsEvent =
     | { type: "TaskDeleted"; payload: { task_id: string } }
     | { type: "TaskMoved"; payload: { task_id: string; from_status: TaskStatus; to_status: TaskStatus } }
     | { type: "SessionStarted"; payload: { session_id: string; agent_id: string; task_id?: string } }
-    | { type: "SessionCompleted"; payload: { session_id: string; result_summary?: string } }
-    | { type: "SessionFailed"; payload: { session_id: string; error: string } }
+    | { type: "SessionCompleted"; payload: { session_id: string; result_summary?: string; claude_session_id?: string } }
+    | { type: "SessionFailed"; payload: { session_id: string; error: string; claude_session_id?: string } }
     | { type: "SessionPaused"; payload: { session_id: string } }
     | { type: "SessionOutput"; payload: { session_id: string; log_type: LogType; content: string } }
     | { type: "WorktreeCreated"; payload: Worktree }
@@ -230,4 +234,5 @@ export type WsEvent =
 export type WsCommand =
     | { type: "SubscribeSession"; payload: { session_id: string } }
     | { type: "UnsubscribeSession"; payload: { session_id: string } }
+    | { type: "SendInput"; payload: { session_id: string; message: string } }
     | { type: "Ping" };

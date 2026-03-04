@@ -3,6 +3,7 @@ import { Plus, RefreshCw } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
 import { useTasks, useStartTask } from '@/hooks/use-tasks';
 import { useAgents } from '@/hooks/use-agents';
+import { useProjects } from '@/hooks/use-projects';
 import { TaskColumn } from './TaskColumn';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskDetailPanel } from './TaskDetailPanel';
@@ -17,6 +18,7 @@ const columns: { status: TaskStatus; title: string }[] = [
 export function TaskBoard() {
     const { data: tasks, isLoading, isError, error, refetch } = useTasks();
     const { data: agents } = useAgents();
+    const { data: projects } = useProjects();
     const startTask = useStartTask();
 
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -44,6 +46,17 @@ export function TaskBoard() {
         }
         return map;
     }, [agents]);
+
+    // Build project ID → name map for display in task cards
+    const projectNameMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        if (projects) {
+            for (const p of projects) {
+                map[p.id] = p.name;
+            }
+        }
+        return map;
+    }, [projects]);
 
     const tasksByStatus = useMemo(() => {
         const grouped: Record<TaskStatus, Task[]> = {
@@ -148,6 +161,7 @@ export function TaskBoard() {
                                 onCreateTask={handleCreateTask}
                                 onEditTask={handleEditTask}
                                 agentNameMap={agentNameMap}
+                                projectNameMap={projectNameMap}
                                 onStartTask={handleStartTask}
                                 startingTaskId={startingTaskId}
                             />

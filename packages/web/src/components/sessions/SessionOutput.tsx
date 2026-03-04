@@ -59,11 +59,13 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
                         line.log_type === 'control' && 'text-blue-400',
                         line.log_type === 'status' && 'text-yellow-400',
                         line.log_type === 'stdout' && 'text-gray-200',
-                        !['stderr', 'control', 'status', 'stdout'].includes(
+                        line.log_type === 'user_input' && 'text-green-400',
+                        !['stderr', 'control', 'status', 'stdout', 'user_input'].includes(
                             line.log_type,
                         ) && 'text-gray-300',
                     )}
                 >
+                    {line.log_type === 'user_input' && <span className="text-green-600 mr-1">&gt;</span>}
                     {line.content}
                 </div>
             ))}

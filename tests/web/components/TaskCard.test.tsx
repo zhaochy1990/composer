@@ -12,6 +12,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         status: 'backlog',
         priority: 0,
         assigned_agent_id: null,
+        project_id: null,
         auto_approve: true,
         position: 1.0,
         created_at: '2024-01-01T00:00:00Z',
@@ -69,6 +70,23 @@ describe('TaskCard', () => {
             />,
         );
         expect(screen.getByText('Claude')).toBeInTheDocument();
+    });
+
+    it('shows project name from projectNameMap', () => {
+        const task = makeTask({ project_id: 'proj-456' });
+        render(
+            <TaskCard
+                task={task}
+                onClick={() => {}}
+                projectNameMap={{ 'proj-456': 'My Project' }}
+            />,
+        );
+        expect(screen.getByText('My Project')).toBeInTheDocument();
+    });
+
+    it('does not show project badge when project_id is null', () => {
+        render(<TaskCard task={makeTask()} onClick={() => {}} projectNameMap={{ 'proj-456': 'My Project' }} />);
+        expect(screen.queryByText('My Project')).not.toBeInTheDocument();
     });
 
     it('shows Start button when task is backlog', () => {

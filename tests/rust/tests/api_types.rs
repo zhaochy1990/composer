@@ -93,6 +93,7 @@ fn log_type_serde_roundtrip() {
         (LogType::Stderr, "stderr"),
         (LogType::Control, "control"),
         (LogType::Status, "status"),
+        (LogType::UserInput, "user_input"),
     ] {
         let json = serde_json::to_string(&variant).unwrap();
         assert_eq!(json, format!("\"{expected}\""));
@@ -162,6 +163,20 @@ fn agent_health_optional_version() {
     assert!(json.contains("\"version\":null"));
     let parsed: AgentHealth = serde_json::from_str(&json).unwrap();
     assert!(parsed.version.is_none());
+}
+
+#[test]
+fn send_session_input_request_deser() {
+    let json = r#"{"message": "Hello agent"}"#;
+    let req: SendSessionInputRequest = serde_json::from_str(json).unwrap();
+    assert_eq!(req.message, "Hello agent");
+}
+
+#[test]
+fn send_session_input_request_missing_message_fails() {
+    let json = r#"{}"#;
+    let result = serde_json::from_str::<SendSessionInputRequest>(json);
+    assert!(result.is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -244,4 +259,46 @@ fn ws_event_roundtrip() {
         WsEvent::TaskDeleted { task_id } => assert_eq!(task_id, uuid::Uuid::nil()),
         _ => panic!("Wrong variant"),
     }
+}
+
+#[test]
+fn ws_command_send_input_shape() {
+    let cmd = WsCommand::SendInput {
+        session_id: uuid::Uuid::nil(),
+        message: "do something".to_string(),
+    };
+    let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
+    assert_eq!(json["type"], "SendInput");
+    assert_eq!(json["payload"]["message"], "do something");
+    assert_eq!(json["payload"]["session_id"], uuid::Uuid::nil().to_string());
+}
+
+#[test]
+fn ws_command_send_input_roundtrip() {
+    let cmd = WsCommand::SendInput {
+        session_id: uuid::Uuid::nil(),
+        message: "hello".to_string(),
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    let parsed: WsCommand = serde_json::from_str(&json).unwrap();
+    match parsed {
+        WsCommand::SendInput { session_id, message } => {
+            assert_eq!(session_id, uuid::Uuid::nil());
+            assert_eq!(message, "hello");
+        }
+        _ => panic!("Wrong variant"),
+    }
+}
+
+#[test]
+fn ws_event_session_output_user_input() {
+    let event = WsEvent::SessionOutput {
+        session_id: uuid::Uuid::nil(),
+        log_type: LogType::UserInput,
+        content: "user message".to_string(),
+    };
+    let json: serde_json::Value = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "SessionOutput");
+    assert_eq!(json["payload"]["log_type"], "user_input");
+    assert_eq!(json["payload"]["content"], "user message");
 }

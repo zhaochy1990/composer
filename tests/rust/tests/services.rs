@@ -369,6 +369,7 @@ mod session_service_tests {
         event_bus.broadcast(WsEvent::SessionCompleted {
             session_id: sess.id,
             result_summary: Some("done".to_string()),
+            claude_session_id: None,
         });
 
         // Give the background event listener time to process
@@ -417,6 +418,7 @@ mod session_service_tests {
         event_bus.broadcast(WsEvent::SessionFailed {
             session_id: sess.id,
             error: "something broke".to_string(),
+            claude_session_id: None,
         });
 
         // Give the background event listener time to process

@@ -9,11 +9,12 @@ interface TaskColumnProps {
     onCreateTask: (status: TaskStatus) => void;
     onEditTask: (task: Task) => void;
     agentNameMap?: Record<string, string>;
+    projectNameMap?: Record<string, string>;
     onStartTask?: (taskId: string) => void;
     startingTaskId?: string | null;
 }
 
-export function TaskColumn({ status, title, tasks, onCreateTask, onEditTask, agentNameMap, onStartTask, startingTaskId }: TaskColumnProps) {
+export function TaskColumn({ status, title, tasks, onCreateTask, onEditTask, agentNameMap, projectNameMap, onStartTask, startingTaskId }: TaskColumnProps) {
     return (
         <div className="flex-1 min-w-[280px] flex flex-col">
             <div className="flex items-center justify-between mb-3 px-1">
@@ -39,7 +40,7 @@ export function TaskColumn({ status, title, tasks, onCreateTask, onEditTask, age
                     <p className="text-xs text-gray-600 p-4 text-center">No tasks</p>
                 ) : (
                     tasks.map(task => (
-                        <TaskCard key={task.id} task={task} onClick={onEditTask} agentNameMap={agentNameMap} onStart={onStartTask} startingTaskId={startingTaskId} />
+                        <TaskCard key={task.id} task={task} onClick={onEditTask} agentNameMap={agentNameMap} projectNameMap={projectNameMap} onStart={onStartTask} startingTaskId={startingTaskId} />
                     ))
                 )}
             </div>

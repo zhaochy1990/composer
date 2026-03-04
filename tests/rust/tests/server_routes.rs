@@ -480,6 +480,24 @@ async fn agent_health_not_found() {
 
 // --- Sessions ---
 
+/// Setup app + return a DB handle for direct test data seeding.
+async fn setup_app_with_db() -> (axum::Router, Arc<composer_db::Database>) {
+    let db = Arc::new(
+        composer_db::Database::connect("sqlite::memory:")
+            .await
+            .unwrap(),
+    );
+    db.run_migrations().await.unwrap();
+    let event_bus = composer_services::event_bus::EventBus::new();
+    let services = composer_services::ServiceContainer::new(db.clone(), event_bus.clone());
+    let state = Arc::new(AppState {
+        services,
+        event_bus,
+    });
+    let default_origins = composer_config::ComposerConfig::default().cors.origins;
+    (build_app(state, &default_origins), db)
+}
+
 #[tokio::test]
 async fn session_get_not_found() {
     let app = setup_app().await;
@@ -511,6 +529,162 @@ async fn session_logs_not_found() {
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp.into_body()).await;
     assert!(json.as_array().unwrap().is_empty());
+}
+
+// --- Session input ---
+
+#[tokio::test]
+async fn session_input_nonexistent_session_returns_error() {
+    let app = setup_app().await;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sessions/00000000-0000-0000-0000-000000000000/input")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"message":"hello"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(resp.status().is_server_error());
+    let json = body_json(resp.into_body()).await;
+    assert!(json["error"].as_str().unwrap().contains("not found"));
+}
+
+#[tokio::test]
+async fn session_input_missing_message_field_returns_422() {
+    let app = setup_app().await;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/sessions/00000000-0000-0000-0000-000000000000/input")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Missing required field "message" → 422 Unprocessable Entity
+    assert!(resp.status().is_client_error());
+}
+
+#[tokio::test]
+async fn session_input_on_non_running_session_returns_error() {
+    let (app, db) = setup_app_with_db().await;
+
+    // Seed an agent and a session with "paused" status directly in DB
+    let agent = composer_db::models::agent::create(
+        &db.pool, "TestAgent", &composer_api_types::AgentType::ClaudeCode, None,
+    ).await.unwrap();
+    let agent_id = agent.id.to_string();
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    composer_db::models::session::create_with_status(
+        &db.pool,
+        &session_id,
+        &agent_id,
+        None,
+        None,
+        "test prompt",
+        &composer_api_types::SessionStatus::Paused,
+    )
+    .await
+    .unwrap();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/sessions/{}/input", session_id))
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"message":"hello"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(resp.status().is_server_error());
+    let json = body_json(resp.into_body()).await;
+    assert!(json["error"].as_str().unwrap().contains("not running"));
+}
+
+#[tokio::test]
+async fn session_input_on_completed_session_returns_error() {
+    let (app, db) = setup_app_with_db().await;
+
+    let agent = composer_db::models::agent::create(
+        &db.pool, "TestAgent", &composer_api_types::AgentType::ClaudeCode, None,
+    ).await.unwrap();
+    let agent_id = agent.id.to_string();
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    composer_db::models::session::create_with_status(
+        &db.pool,
+        &session_id,
+        &agent_id,
+        None,
+        None,
+        "test prompt",
+        &composer_api_types::SessionStatus::Completed,
+    )
+    .await
+    .unwrap();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/sessions/{}/input", session_id))
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"message":"hello"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(resp.status().is_server_error());
+    let json = body_json(resp.into_body()).await;
+    assert!(json["error"].as_str().unwrap().contains("not running"));
+}
+
+#[tokio::test]
+async fn session_input_on_running_session_without_process_returns_error() {
+    let (app, db) = setup_app_with_db().await;
+
+    let agent = composer_db::models::agent::create(
+        &db.pool, "TestAgent", &composer_api_types::AgentType::ClaudeCode, None,
+    ).await.unwrap();
+    let agent_id = agent.id.to_string();
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    composer_db::models::session::create_with_status(
+        &db.pool,
+        &session_id,
+        &agent_id,
+        None,
+        None,
+        "test prompt",
+        &composer_api_types::SessionStatus::Running,
+    )
+    .await
+    .unwrap();
+
+    // Session is Running in DB but no real process exists.
+    // send_input will fail because no process is in the DashMap.
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/sessions/{}/input", session_id))
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"message":"hello"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(resp.status().is_server_error());
+    let json = body_json(resp.into_body()).await;
+    assert!(json["error"].as_str().unwrap().contains("Failed to send input"));
 }
 
 // --- Error response shape ---
