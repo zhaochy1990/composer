@@ -40,7 +40,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
     }
 
     return (
-        <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+        <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) { setTitle(''); setDescription(''); setPriority(0); onClose(); } }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
                 <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6">

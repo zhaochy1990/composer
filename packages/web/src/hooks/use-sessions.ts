@@ -15,7 +15,12 @@ export function useSession(id: string | undefined) {
         queryKey: ['sessions', id],
         queryFn: () => apiFetch<Session>(`/sessions/${id}`),
         enabled: !!id,
-        refetchInterval: 5_000,
+        // Fix #27: Stop polling for terminal session states
+        refetchInterval: (query) => {
+            const status = query.state.data?.status;
+            if (status === 'completed' || status === 'failed') return false;
+            return 5_000;
+        },
     });
 }
 

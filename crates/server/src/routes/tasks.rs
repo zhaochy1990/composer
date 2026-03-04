@@ -6,7 +6,7 @@ use axum::{
 use std::sync::Arc;
 use composer_api_types::*;
 use crate::AppState;
-use crate::error::AppError;
+use crate::error::ServiceError;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -16,38 +16,38 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/tasks/{id}/move", post(move_task))
 }
 
-async fn list_tasks(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Task>>, AppError> {
+async fn list_tasks(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Task>>, ServiceError> {
     let tasks = state.services.tasks.list_all().await?;
     Ok(Json(tasks))
 }
 
-async fn create_task(State(state): State<Arc<AppState>>, Json(req): Json<CreateTaskRequest>) -> Result<Json<Task>, AppError> {
+async fn create_task(State(state): State<Arc<AppState>>, Json(req): Json<CreateTaskRequest>) -> Result<Json<Task>, ServiceError> {
     let task = state.services.tasks.create(req).await?;
     Ok(Json(task))
 }
 
-async fn get_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Task>, AppError> {
+async fn get_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Task>, ServiceError> {
     let task = state.services.tasks.get(&id).await?
-        .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+        .ok_or_else(|| ServiceError::NotFound(format!("Task {} not found", id)))?;
     Ok(Json(task))
 }
 
-async fn update_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<UpdateTaskRequest>) -> Result<Json<Task>, AppError> {
+async fn update_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<UpdateTaskRequest>) -> Result<Json<Task>, ServiceError> {
     let task = state.services.tasks.update(&id, req).await?;
     Ok(Json(task))
 }
 
-async fn delete_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), AppError> {
+async fn delete_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), ServiceError> {
     state.services.tasks.delete(&id).await?;
     Ok(())
 }
 
-async fn assign_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<AssignTaskRequest>) -> Result<Json<Task>, AppError> {
+async fn assign_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<AssignTaskRequest>) -> Result<Json<Task>, ServiceError> {
     let task = state.services.tasks.assign_agent(&id, &req.agent_id.to_string()).await?;
     Ok(Json(task))
 }
 
-async fn move_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<MoveTaskRequest>) -> Result<Json<Task>, AppError> {
+async fn move_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<MoveTaskRequest>) -> Result<Json<Task>, ServiceError> {
     let task = state.services.tasks.move_task(&id, req).await?;
     Ok(Json(task))
 }

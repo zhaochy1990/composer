@@ -1,5 +1,6 @@
 import { GripVertical } from 'lucide-react';
 import type { Task } from '@/types/generated';
+import { shortId } from '@/lib/utils';
 
 const priorityConfig: Record<number, { label: string; className: string }> = {
     3: { label: 'High', className: 'bg-red-900/60 text-red-300 border-red-700' },
@@ -11,9 +12,10 @@ const priorityConfig: Record<number, { label: string; className: string }> = {
 interface TaskCardProps {
     task: Task;
     onClick: (task: Task) => void;
+    agentNameMap?: Record<string, string>;
 }
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
+export function TaskCard({ task, onClick, agentNameMap }: TaskCardProps) {
     const priority = priorityConfig[task.priority] ?? priorityConfig[0];
 
     return (
@@ -41,7 +43,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
                         </span>
                         {task.assigned_agent_id && (
                             <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-300 border border-purple-700">
-                                {task.assigned_agent_id}
+                                {agentNameMap?.[task.assigned_agent_id] ?? shortId(task.assigned_agent_id)}
                             </span>
                         )}
                     </div>

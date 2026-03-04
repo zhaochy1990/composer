@@ -6,7 +6,7 @@ use axum::{
 use std::sync::Arc;
 use composer_api_types::*;
 use crate::AppState;
-use crate::error::AppError;
+use crate::error::ServiceError;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -14,12 +14,12 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/worktrees/{id}/cleanup", post(cleanup_worktree))
 }
 
-async fn list_worktrees(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Worktree>>, AppError> {
+async fn list_worktrees(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Worktree>>, ServiceError> {
     let worktrees = state.services.worktrees.list_all().await?;
     Ok(Json(worktrees))
 }
 
-async fn cleanup_worktree(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), AppError> {
+async fn cleanup_worktree(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), ServiceError> {
     state.services.worktrees.cleanup(&id).await?;
     Ok(())
 }

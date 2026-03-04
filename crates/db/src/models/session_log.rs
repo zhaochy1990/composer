@@ -47,20 +47,29 @@ pub async fn list_by_session(
     pool: &SqlitePool,
     session_id: &str,
     since: Option<&str>,
+    limit: Option<i64>,
+    offset: Option<i64>,
 ) -> anyhow::Result<Vec<SessionLog>> {
+    let limit = limit.unwrap_or(500).min(5000);
+    let offset = offset.unwrap_or(0);
+
     let rows = if let Some(since) = since {
         sqlx::query_as::<_, SessionLogRow>(
-            "SELECT * FROM session_logs WHERE session_id = ? AND timestamp > ? ORDER BY id ASC"
+            "SELECT * FROM session_logs WHERE session_id = ? AND timestamp > ? ORDER BY id ASC LIMIT ? OFFSET ?"
         )
         .bind(session_id)
         .bind(since)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(pool)
         .await?
     } else {
         sqlx::query_as::<_, SessionLogRow>(
-            "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC"
+            "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC LIMIT ? OFFSET ?"
         )
         .bind(session_id)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(pool)
         .await?
     };

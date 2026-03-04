@@ -123,6 +123,8 @@ export function useWebSocket() {
         ws.onmessage = handleMessage;
 
         ws.onclose = () => {
+            // Fix #15: Guard against StrictMode double-mount stale closures
+            if (wsRef.current !== ws) return;
             if (!mountedRef.current) return;
             setStatus('disconnected');
             wsRef.current = null;
@@ -130,6 +132,8 @@ export function useWebSocket() {
             // Exponential backoff reconnect
             const delay = reconnectDelayRef.current;
             reconnectTimerRef.current = setTimeout(() => {
+                // Fix #20: Null the timer ref when it fires
+                reconnectTimerRef.current = null;
                 connect();
             }, delay);
             reconnectDelayRef.current = Math.min(

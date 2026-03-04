@@ -32,7 +32,12 @@ pub async fn create_worktree(
         return Err(GitWorktreeError::AlreadyExists(worktree_dir));
     }
 
-    tokio::fs::create_dir_all(worktree_dir.parent().unwrap()).await?;
+    tokio::fs::create_dir_all(
+        worktree_dir.parent().ok_or_else(|| {
+            GitWorktreeError::CommandFailed("worktree path has no parent directory".to_string())
+        })?,
+    )
+    .await?;
 
     let mut cmd = Command::new("git");
     cmd.current_dir(repo_path);

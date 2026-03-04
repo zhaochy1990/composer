@@ -6,6 +6,7 @@ pub mod worktree_service;
 
 use std::sync::Arc;
 use composer_db::Database;
+use composer_executors::process_manager::AgentProcessManager;
 use crate::event_bus::EventBus;
 
 pub struct ServiceContainer {
@@ -17,10 +18,11 @@ pub struct ServiceContainer {
 
 impl ServiceContainer {
     pub fn new(db: Arc<Database>, event_bus: EventBus) -> Self {
+        let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender()));
         Self {
             tasks: task_service::TaskService::new(db.clone(), event_bus.clone()),
-            agents: agent_service::AgentService::new(db.clone(), event_bus.clone()),
-            sessions: session_service::SessionService::new(db.clone(), event_bus.clone()),
+            agents: agent_service::AgentService::new(db.clone(), event_bus.clone(), process_manager.clone()),
+            sessions: session_service::SessionService::new(db.clone(), event_bus.clone(), process_manager),
             worktrees: worktree_service::WorktreeService::new(db.clone()),
         }
     }

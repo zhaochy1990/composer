@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Trash2 } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
@@ -15,6 +15,17 @@ export function TaskEditDialog({ task, onClose }: TaskEditDialogProps) {
     const [priority, setPriority] = useState(task?.priority ?? 0);
     const [status, setStatus] = useState<TaskStatus>(task?.status ?? 'backlog');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+    // Fix #29: Sync form state when the task prop changes
+    useEffect(() => {
+        if (task) {
+            setTitle(task.title);
+            setDescription(task.description ?? '');
+            setPriority(task.priority);
+            setStatus(task.status);
+            setShowDeleteConfirm(false);
+        }
+    }, [task?.id, task?.updated_at]);
 
     const updateTask = useUpdateTask();
     const deleteTask = useDeleteTask();

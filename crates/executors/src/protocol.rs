@@ -29,6 +29,7 @@ impl ProtocolPeer {
 pub async fn read_stdout_lines(
     stdout: ChildStdout,
     mut on_message: impl FnMut(CliMessage, &str),
+    mut on_raw_line: impl FnMut(&str),
 ) {
     let reader = BufReader::new(stdout);
     let mut lines = reader.lines();
@@ -42,6 +43,7 @@ pub async fn read_stdout_lines(
             Ok(msg) => on_message(msg, trimmed),
             Err(_) => {
                 tracing::trace!("Non-JSON stdout: {}", trimmed);
+                on_raw_line(trimmed);
             }
         }
     }

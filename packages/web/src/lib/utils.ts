@@ -32,6 +32,7 @@ export function formatTime(isoString?: string): string {
     const date = new Date(isoString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return 'just now';
     const diffMinutes = Math.floor(diffMs / 60000);
 
     if (diffMinutes < 1) return 'just now';

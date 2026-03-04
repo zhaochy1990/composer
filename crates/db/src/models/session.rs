@@ -62,6 +62,41 @@ pub async fn create(
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create session"))
 }
 
+pub async fn create_with_status(
+    pool: &SqlitePool,
+    id: &str,
+    agent_id: &str,
+    task_id: Option<&str>,
+    worktree_id: Option<&str>,
+    prompt: &str,
+    status: &SessionStatus,
+) -> anyhow::Result<Session> {
+    let status_str = match status {
+        SessionStatus::Created => "created",
+        SessionStatus::Running => "running",
+        SessionStatus::Paused => "paused",
+        SessionStatus::Completed => "completed",
+        SessionStatus::Failed => "failed",
+    };
+
+    sqlx::query(
+        "INSERT INTO sessions (id, agent_id, task_id, worktree_id, prompt, status, \
+         started_at) VALUES (?, ?, ?, ?, ?, ?, \
+         CASE WHEN ? = 'running' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END)"
+    )
+    .bind(id)
+    .bind(agent_id)
+    .bind(task_id)
+    .bind(worktree_id)
+    .bind(prompt)
+    .bind(status_str)
+    .bind(status_str)
+    .execute(pool)
+    .await?;
+
+    find_by_id(pool, id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create session"))
+}
+
 pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Session>> {
     let row = sqlx::query_as::<_, SessionRow>("SELECT * FROM sessions WHERE id = ?")
         .bind(id)

@@ -3,23 +3,33 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
 
-pub struct AppError(pub anyhow::Error);
+pub enum ServiceError {
+    NotFound(String),
+    BadRequest(String),
+    Conflict(String),
+    Internal(anyhow::Error),
+}
 
-impl IntoResponse for AppError {
+impl IntoResponse for ServiceError {
     fn into_response(self) -> Response {
-        tracing::error!("Request error: {:?}", self.0);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": self.0.to_string() })),
-        ).into_response()
+        let (status, message) = match &self {
+            ServiceError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            ServiceError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            ServiceError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            ServiceError::Internal(err) => {
+                tracing::error!("Internal error: {:?}", err);
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            }
+        };
+        (status, Json(json!({ "error": message }))).into_response()
     }
 }
 
-impl<E> From<E> for AppError
+impl<E> From<E> for ServiceError
 where
     E: Into<anyhow::Error>,
 {
     fn from(err: E) -> Self {
-        Self(err.into())
+        Self::Internal(err.into())
     }
 }

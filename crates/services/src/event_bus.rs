@@ -8,7 +8,7 @@ pub struct EventBus {
 
 impl EventBus {
     pub fn new() -> Self {
-        let (tx, _) = broadcast::channel(1024);
+        let (tx, _) = broadcast::channel(16384);
         Self { tx }
     }
 

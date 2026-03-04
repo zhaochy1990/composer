@@ -13,7 +13,10 @@
         "build": "pnpm run build:web && pnpm run build:server",
         "generate-types": "cargo test --package composer-api-types -- export_bindings",
         "lint": "cd packages/web && pnpm run lint",
-        "format": "cargo fmt --all && cd packages/web && pnpm run format"
+        "format": "cargo fmt --all && cd packages/web && pnpm run format",
+        "test:e2e": "cd packages/web && npx playwright test",
+        "test:e2e:ui": "cd packages/web && npx playwright test --ui",
+        "test:e2e:headed": "cd packages/web && npx playwright test --headed"
     },
     "devDependencies": {
         "concurrently": "^9.0.0"

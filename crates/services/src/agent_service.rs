@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use composer_api_types::*;
 use composer_db::Database;
+use composer_executors::process_manager::AgentProcessManager;
 use composer_executors::discovery;
 use crate::event_bus::EventBus;
 
@@ -8,11 +9,12 @@ use crate::event_bus::EventBus;
 pub struct AgentService {
     db: Arc<Database>,
     event_bus: EventBus,
+    process_manager: Arc<AgentProcessManager>,
 }
 
 impl AgentService {
-    pub fn new(db: Arc<Database>, event_bus: EventBus) -> Self {
-        Self { db, event_bus }
+    pub fn new(db: Arc<Database>, event_bus: EventBus, process_manager: Arc<AgentProcessManager>) -> Self {
+        Self { db, event_bus, process_manager }
     }
 
     pub async fn create(&self, req: CreateAgentRequest) -> anyhow::Result<Agent> {
@@ -29,6 +31,13 @@ impl AgentService {
     }
 
     pub async fn delete(&self, id: &str) -> anyhow::Result<()> {
+        // Interrupt any running sessions for this agent before deletion
+        let sessions = composer_db::models::session::list_by_agent(&self.db.pool, id).await?;
+        for session in &sessions {
+            if matches!(session.status, SessionStatus::Running) {
+                let _ = self.process_manager.interrupt(session.id).await;
+            }
+        }
         composer_db::models::agent::delete(&self.db.pool, id).await
     }
 

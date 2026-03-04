@@ -48,12 +48,14 @@ pub async fn create(
         .flatten()
         .unwrap_or_else(|| "backlog".to_string());
 
-    // Get next position for the target column
+    // Fix #26: Wrap position MAX query + INSERT in BEGIN IMMEDIATE transaction
+    let mut tx = pool.begin().await?;
+
     let max_pos: Option<(f64,)> = sqlx::query_as(
         "SELECT COALESCE(MAX(position), 0.0) FROM tasks WHERE status = ?"
     )
     .bind(&status_str)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
     let position = max_pos.map(|r| r.0).unwrap_or(0.0) + 1.0;
 
@@ -66,8 +68,10 @@ pub async fn create(
     .bind(&status_str)
     .bind(priority)
     .bind(position)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
 }
@@ -99,6 +103,7 @@ pub async fn list_by_status(pool: &SqlitePool, status: &TaskStatus) -> anyhow::R
     rows.into_iter().map(Task::try_from).collect()
 }
 
+/// Fix #13: Single UPDATE statement using COALESCE pattern
 pub async fn update(
     pool: &SqlitePool,
     id: &str,
@@ -108,28 +113,30 @@ pub async fn update(
     status: Option<&TaskStatus>,
     position: Option<f64>,
 ) -> anyhow::Result<Task> {
-    if let Some(title) = title {
-        sqlx::query("UPDATE tasks SET title = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-            .bind(title).bind(id).execute(pool).await?;
-    }
-    if let Some(desc) = description {
-        sqlx::query("UPDATE tasks SET description = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-            .bind(desc).bind(id).execute(pool).await?;
-    }
-    if let Some(pri) = priority {
-        sqlx::query("UPDATE tasks SET priority = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-            .bind(pri).bind(id).execute(pool).await?;
-    }
-    if let Some(status) = status {
-        let status_str = serde_json::to_value(status)?
-            .as_str().unwrap_or("backlog").to_string();
-        sqlx::query("UPDATE tasks SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-            .bind(&status_str).bind(id).execute(pool).await?;
-    }
-    if let Some(pos) = position {
-        sqlx::query("UPDATE tasks SET position = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-            .bind(pos).bind(id).execute(pool).await?;
-    }
+    let status_str: Option<String> = status
+        .map(|s| serde_json::to_value(s).ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string())))
+        .flatten();
+
+    sqlx::query(
+        "UPDATE tasks SET \
+         title = COALESCE(?, title), \
+         description = COALESCE(?, description), \
+         priority = COALESCE(?, priority), \
+         status = COALESCE(?, status), \
+         position = COALESCE(?, position), \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+         WHERE id = ?"
+    )
+    .bind(title)
+    .bind(description)
+    .bind(priority)
+    .bind(status_str.as_deref())
+    .bind(position)
+    .bind(id)
+    .execute(pool)
+    .await?;
+
     find_by_id(pool, id).await?.ok_or_else(|| anyhow::anyhow!("Task not found"))
 }
 

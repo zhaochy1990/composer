@@ -41,16 +41,16 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
     return (
         <div
             ref={scrollRef}
-            className="h-[500px] overflow-y-auto bg-gray-950 rounded-lg p-4 font-mono text-sm border border-gray-800"
+            className="h-full overflow-y-auto bg-gray-950 rounded-lg p-4 font-mono text-sm border border-gray-800"
         >
             {output.length === 0 && (
                 <p className="text-gray-600 italic">
                     Waiting for output...
                 </p>
             )}
-            {output.map((line, i) => (
+            {output.map((line) => (
                 <div
-                    key={i}
+                    key={line.seq}
                     className={cn(
                         'py-0.5 whitespace-pre-wrap break-all leading-relaxed',
                         line.log_type === 'stderr' && 'text-red-400',

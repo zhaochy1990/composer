@@ -1,21 +1,15 @@
-use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use composer_api_types::*;
 use composer_db::Database;
 
 #[derive(Clone)]
 pub struct WorktreeService {
     db: Arc<Database>,
-    creation_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 impl WorktreeService {
     pub fn new(db: Arc<Database>) -> Self {
-        Self {
-            db,
-            creation_locks: Arc::new(Mutex::new(HashMap::new())),
-        }
+        Self { db }
     }
 
     pub async fn create_for_session(
@@ -26,17 +20,15 @@ impl WorktreeService {
         session_id: &str,
     ) -> anyhow::Result<Worktree> {
         let short_id = &session_id[..8.min(session_id.len())];
-        let worktree_name = format!("{}-{}", agent_name, short_id);
-
-        // Acquire per-name lock to prevent concurrent creation of same worktree
-        let lock = {
-            let mut locks = self.creation_locks.lock().await;
-            locks
-                .entry(worktree_name.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
-                .clone()
-        };
-        let _guard = lock.lock().await;
+        // Sanitize agent_name: only keep [a-zA-Z0-9_-]
+        let safe_name: String = agent_name
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect::<String>()
+            .trim_matches('-')
+            .to_lowercase();
+        let safe_name = if safe_name.is_empty() { "agent".to_string() } else { safe_name };
+        let worktree_name = format!("{}-{}", safe_name, short_id);
 
         let info = composer_git::worktree::create_worktree(
             std::path::Path::new(repo_path),

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
 import { useTasks } from '@/hooks/use-tasks';
+import { useAgents } from '@/hooks/use-agents';
 import { TaskColumn } from './TaskColumn';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskEditDialog } from './TaskEditDialog';
@@ -15,10 +16,22 @@ const columns: { status: TaskStatus; title: string }[] = [
 
 export function TaskBoard() {
     const { data: tasks, isLoading, isError, error, refetch } = useTasks();
+    const { data: agents } = useAgents();
 
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>('backlog');
     const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+    // Build agent ID → name map for display in task cards
+    const agentNameMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        if (agents) {
+            for (const agent of agents) {
+                map[agent.id] = agent.name;
+            }
+        }
+        return map;
+    }, [agents]);
 
     const tasksByStatus = useMemo(() => {
         const grouped: Record<TaskStatus, Task[]> = {
@@ -115,6 +128,7 @@ export function TaskBoard() {
                                 tasks={tasksByStatus[col.status]}
                                 onCreateTask={handleCreateTask}
                                 onEditTask={handleEditTask}
+                                agentNameMap={agentNameMap}
                             />
                         ))}
                     </div>
