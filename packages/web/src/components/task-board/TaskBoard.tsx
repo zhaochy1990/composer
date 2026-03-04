@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
-import { useTasks, useStartTask } from '@/hooks/use-tasks';
+import { useTasks } from '@/hooks/use-tasks';
 import { useAgents } from '@/hooks/use-agents';
 import { useProjects } from '@/hooks/use-projects';
 import { TaskColumn } from './TaskColumn';
@@ -19,12 +19,10 @@ export function TaskBoard() {
     const { data: tasks, isLoading, isError, error, refetch } = useTasks();
     const { data: agents } = useAgents();
     const { data: projects } = useProjects();
-    const startTask = useStartTask();
 
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>('backlog');
     const [editingTask, setEditingTask] = useState<Task | null>(null);
-    const [startingTaskId, setStartingTaskId] = useState<string | null>(null);
 
     // Keep editingTask in sync with latest query data
     useEffect(() => {
@@ -87,13 +85,6 @@ export function TaskBoard() {
 
     function handleEditTask(task: Task) {
         setEditingTask(task);
-    }
-
-    function handleStartTask(taskId: string) {
-        setStartingTaskId(taskId);
-        startTask.mutate(taskId, {
-            onSettled: () => setStartingTaskId(null),
-        });
     }
 
     return (
@@ -162,8 +153,6 @@ export function TaskBoard() {
                                 onEditTask={handleEditTask}
                                 agentNameMap={agentNameMap}
                                 projectNameMap={projectNameMap}
-                                onStartTask={handleStartTask}
-                                startingTaskId={startingTaskId}
                             />
                         ))}
                     </div>

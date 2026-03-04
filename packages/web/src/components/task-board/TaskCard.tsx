@@ -1,4 +1,4 @@
-import { GripVertical, Play } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { shortId } from '@/lib/utils';
 
@@ -14,14 +14,10 @@ interface TaskCardProps {
     onClick: (task: Task) => void;
     agentNameMap?: Record<string, string>;
     projectNameMap?: Record<string, string>;
-    onStart?: (taskId: string) => void;
-    startingTaskId?: string | null;
 }
 
-export function TaskCard({ task, onClick, agentNameMap, projectNameMap, onStart, startingTaskId }: TaskCardProps) {
+export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCardProps) {
     const priority = priorityConfig[task.priority] ?? priorityConfig[0];
-    const canStart = task.status === 'backlog';
-    const isStarting = startingTaskId === task.id;
 
     return (
         <div
@@ -42,7 +38,7 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap, onStart,
                             {task.description}
                         </p>
                     )}
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                         <span
                             className={`inline-flex items-center text-xs px-1.5 py-0.5 rounded border ${priority.className}`}
                         >
@@ -57,17 +53,6 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap, onStart,
                             <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-teal-900/50 text-teal-300 border border-teal-700">
                                 {projectNameMap?.[task.project_id] ?? shortId(task.project_id)}
                             </span>
-                        )}
-                        {canStart && onStart && (
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); onStart(task.id); }}
-                                disabled={isStarting}
-                                className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50"
-                            >
-                                <Play className="w-3 h-3" />
-                                {isStarting ? 'Starting...' : 'Start'}
-                            </button>
                         )}
                     </div>
                 </div>

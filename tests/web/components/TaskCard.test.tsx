@@ -88,33 +88,4 @@ describe('TaskCard', () => {
         render(<TaskCard task={makeTask()} onClick={() => {}} projectNameMap={{ 'proj-456': 'My Project' }} />);
         expect(screen.queryByText('My Project')).not.toBeInTheDocument();
     });
-
-    it('shows Start button when task is backlog', () => {
-        const task = makeTask();
-        const onStart = vi.fn();
-        render(<TaskCard task={task} onClick={() => {}} onStart={onStart} />);
-        expect(screen.getByText('Start')).toBeInTheDocument();
-    });
-
-    it('hides Start button when not backlog', () => {
-        const task = makeTask({ status: 'in_progress' });
-        render(<TaskCard task={task} onClick={() => {}} onStart={() => {}} />);
-        expect(screen.queryByText('Start')).not.toBeInTheDocument();
-    });
-
-    it('calls onStart when Start button clicked', async () => {
-        const task = makeTask();
-        const onStart = vi.fn();
-        const onClick = vi.fn();
-        render(<TaskCard task={task} onClick={onClick} onStart={onStart} />);
-        await userEvent.click(screen.getByText('Start'));
-        expect(onStart).toHaveBeenCalledWith(task.id);
-        expect(onClick).not.toHaveBeenCalled(); // stopPropagation
-    });
-
-    it('shows Starting... when startingTaskId matches', () => {
-        const task = makeTask();
-        render(<TaskCard task={task} onClick={() => {}} onStart={() => {}} startingTaskId={task.id} />);
-        expect(screen.getByText('Starting...')).toBeInTheDocument();
-    });
 });
