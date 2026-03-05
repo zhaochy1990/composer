@@ -127,6 +127,7 @@ export interface WorkflowStepDefinition {
     name: string;
     prompt_template?: string;
     max_retries?: number;
+    loop_back_to?: number;
 }
 
 export interface WorkflowRun {

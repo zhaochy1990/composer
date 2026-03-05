@@ -1,14 +1,13 @@
-use std::sync::Arc;
-use composer_api_types::*;
-use composer_db::Database;
 use crate::event_bus::EventBus;
 use crate::session_service::SessionService;
+use composer_api_types::*;
+use composer_db::Database;
+use std::sync::Arc;
 
-/// The built-in "Feat-Common" workflow definition matching the 10-step feature development flow:
+/// The built-in "Feat-Common" workflow definition with review-fix loops:
 /// 1. Plan → 2. Human review plan → 3. Implement + build/test + PR →
-/// 4. PR review (separate session) → 5. Fix review findings →
-/// 6. Loop 4-5 → 7. Human review PR → 8. Fix human comments →
-/// 9. Loop 7-8 → 10. Done
+/// 4. PR review (separate session) → 5. Fix review findings → loop back to 4 (max 3 retries) →
+/// 6. Human review PR → 7. Fix human comments → loop back to 6 → Done
 pub fn feat_common_definition() -> WorkflowDefinition {
     WorkflowDefinition {
         steps: vec![
@@ -17,54 +16,88 @@ pub fn feat_common_definition() -> WorkflowDefinition {
                 name: "Plan".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: None,
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::HumanGate,
                 name: "Review Plan".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: None,
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::Implement,
                 name: "Implement & Create PR".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: None,
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::PrReview,
                 name: "Automated PR Review".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: None,
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::Implement,
                 name: "Fix Review Findings".to_string(),
                 prompt_template: None,
-                max_retries: None,
+                max_retries: Some(3),
+                loop_back_to: Some(3), // Loop back to Automated PR Review
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::HumanReview,
                 name: "Human PR Review".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: None,
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::Implement,
                 name: "Fix Human Comments".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: Some(5), // Loop back to Human PR Review
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::CompletePr,
                 name: "Complete PR".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: None,
             },
         ],
     }
 }
 
 pub const FEAT_COMMON_NAME: &str = "Feat-Common";
+
+/// Validate that all `loop_back_to` references in a workflow definition are valid
+/// (non-negative and pointing to a preceding step).
+pub fn validate_workflow_definition(def: &WorkflowDefinition) -> anyhow::Result<()> {
+    for (i, step) in def.steps.iter().enumerate() {
+        if let Some(target) = step.loop_back_to {
+            if target < 0 {
+                return Err(anyhow::anyhow!(
+                    "Step {} '{}' has negative loop_back_to ({})",
+                    i,
+                    step.name,
+                    target
+                ));
+            }
+            if target >= i as i32 {
+                return Err(anyhow::anyhow!(
+                    "Step {} '{}' has loop_back_to ({}) that is not a preceding step",
+                    i,
+                    step.name,
+                    target
+                ));
+            }
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone)]
 pub struct WorkflowEngine {
@@ -75,7 +108,11 @@ pub struct WorkflowEngine {
 
 impl WorkflowEngine {
     pub fn new(db: Arc<Database>, event_bus: EventBus, session_service: SessionService) -> Self {
-        let engine = Self { db, event_bus, session_service };
+        let engine = Self {
+            db,
+            event_bus,
+            session_service,
+        };
 
         engine.spawn_startup_recovery();
 
@@ -87,25 +124,37 @@ impl WorkflowEngine {
     }
 
     /// Ensure the built-in "Feat-Common" workflow exists globally.
-    /// Updates the definition if the built-in step count has changed.
+    /// Also updates the definition if it's stale (e.g., missing loop_back_to fields).
     pub async fn ensure_builtin_workflow(&self) -> anyhow::Result<Workflow> {
-        let expected = feat_common_definition();
+        let canonical = feat_common_definition();
+        validate_workflow_definition(&canonical)?;
 
         if let Some(wf) = composer_db::models::workflow::find_by_name(&self.db.pool, FEAT_COMMON_NAME).await? {
-            if wf.definition.steps.len() != expected.steps.len() {
-                tracing::info!(
-                    "Updating built-in workflow '{}' ({} steps -> {} steps)",
-                    FEAT_COMMON_NAME,
-                    wf.definition.steps.len(),
-                    expected.steps.len()
-                );
-                let updated = composer_db::models::workflow::update(
-                    &self.db.pool,
-                    &wf.id.to_string(),
-                    None,
-                    Some(&expected),
-                ).await?;
-                return Ok(updated);
+            // Auto-update if the stored definition differs from the canonical one,
+            // but only if there are no active (running/paused) workflow runs using it.
+            if wf.definition != canonical {
+                let active_runs =
+                    composer_db::models::workflow_run::find_running(&self.db.pool).await?;
+                let has_active_runs = active_runs.iter().any(|r| r.workflow_id == wf.id);
+                if !has_active_runs {
+                    let updated = composer_db::models::workflow::update(
+                        &self.db.pool,
+                        &wf.id.to_string(),
+                        None,
+                        Some(&canonical),
+                    )
+                    .await?;
+                    tracing::info!(
+                        "Updated built-in workflow '{}'",
+                        FEAT_COMMON_NAME,
+                    );
+                    return Ok(updated);
+                } else {
+                    tracing::info!(
+                        "Skipping update of built-in workflow '{}' — active runs exist",
+                        FEAT_COMMON_NAME,
+                    );
+                }
             }
             return Ok(wf);
         }
@@ -113,7 +162,7 @@ impl WorkflowEngine {
         let wf = composer_db::models::workflow::create(
             &self.db.pool,
             FEAT_COMMON_NAME,
-            &expected,
+            &canonical,
         ).await?;
         tracing::info!("Created built-in workflow '{}'", FEAT_COMMON_NAME);
         Ok(wf)
@@ -150,14 +199,17 @@ impl WorkflowEngine {
                 &self.db.pool,
                 &run_id,
                 run.current_step_index,
-            ).await? {
+            )
+            .await?
+            {
                 if matches!(step_output.status, WorkflowStepStatus::Running) {
                     composer_db::models::workflow_step_output::update_status_and_output(
                         &self.db.pool,
                         &step_output.id.to_string(),
                         &WorkflowStepStatus::Failed,
                         Some("Server restarted while step was running"),
-                    ).await?;
+                    )
+                    .await?;
                 }
             }
 
@@ -166,18 +218,22 @@ impl WorkflowEngine {
                 &self.db.pool,
                 &run_id,
                 &WorkflowRunStatus::Paused,
-            ).await?;
+            )
+            .await?;
 
             // Set task to waiting so the user knows action is needed
             composer_db::models::task::update_status(
                 &self.db.pool,
                 &run.task_id.to_string(),
                 &TaskStatus::Waiting,
-            ).await?;
+            )
+            .await?;
 
             tracing::warn!(
                 "Workflow run {} (task {}) paused at step {} for recovery",
-                run_id, run.task_id, run.current_step_index
+                run_id,
+                run.task_id,
+                run.current_step_index
             );
         }
 
@@ -192,19 +248,27 @@ impl WorkflowEngine {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
 
-        if !matches!(run.status, WorkflowRunStatus::Paused | WorkflowRunStatus::Failed) {
-            return Err(anyhow::anyhow!("Workflow run cannot be resumed from status {:?}", run.status));
+        if !matches!(
+            run.status,
+            WorkflowRunStatus::Paused | WorkflowRunStatus::Failed
+        ) {
+            return Err(anyhow::anyhow!(
+                "Workflow run cannot be resumed from status {:?}",
+                run.status
+            ));
         }
 
-        let workflow = composer_db::models::workflow::find_by_id(&self.db.pool, &run.workflow_id.to_string())
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Workflow not found"))?;
+        let workflow =
+            composer_db::models::workflow::find_by_id(&self.db.pool, &run.workflow_id.to_string())
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Workflow not found"))?;
 
         let task = composer_db::models::task::find_by_id(&self.db.pool, &run.task_id.to_string())
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
 
-        let agent_id = task.assigned_agent_id
+        let agent_id = task
+            .assigned_agent_id
             .ok_or_else(|| anyhow::anyhow!("Task has no assigned agent"))?;
 
         // Move task back to in_progress
@@ -212,10 +276,12 @@ impl WorkflowEngine {
             &self.db.pool,
             &task.id.to_string(),
             &TaskStatus::InProgress,
-        ).await?;
+        )
+        .await?;
 
         // Re-execute the current step
-        self.execute_step(run_id, &workflow, &task, agent_id, run.current_step_index).await?;
+        self.execute_step(run_id, &workflow, &task, agent_id, run.current_step_index)
+            .await?;
 
         composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
@@ -229,10 +295,13 @@ impl WorkflowEngine {
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
 
         if !matches!(task.status, TaskStatus::Backlog) {
-            return Err(anyhow::anyhow!("Task must be in backlog to start a workflow"));
+            return Err(anyhow::anyhow!(
+                "Task must be in backlog to start a workflow"
+            ));
         }
 
-        let agent_id = task.assigned_agent_id
+        let agent_id = task
+            .assigned_agent_id
             .ok_or_else(|| anyhow::anyhow!("Task has no assigned agent"))?;
 
         let workflow = composer_db::models::workflow::find_by_id(&self.db.pool, workflow_id)
@@ -243,36 +312,36 @@ impl WorkflowEngine {
             return Err(anyhow::anyhow!("Workflow has no steps"));
         }
 
+        // Validate loop_back_to references
+        validate_workflow_definition(&workflow.definition)?;
+
         // Create workflow run
-        let run = composer_db::models::workflow_run::create(
-            &self.db.pool,
-            workflow_id,
-            task_id,
-        ).await?;
+        let run =
+            composer_db::models::workflow_run::create(&self.db.pool, workflow_id, task_id).await?;
 
         // Link run to task
         composer_db::models::task::update_workflow_run_id(
             &self.db.pool,
             task_id,
             &run.id.to_string(),
-        ).await?;
+        )
+        .await?;
 
         // Transition task from Backlog to InProgress before executing steps
-        composer_db::models::task::update_status(
-            &self.db.pool,
-            task_id,
-            &TaskStatus::InProgress,
-        ).await?;
+        composer_db::models::task::update_status(&self.db.pool, task_id, &TaskStatus::InProgress)
+            .await?;
         self.event_bus.broadcast(WsEvent::TaskMoved {
             task_id: task.id,
             from_status: TaskStatus::Backlog,
             to_status: TaskStatus::InProgress,
         });
 
-        self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(run.clone()));
+        self.event_bus
+            .broadcast(WsEvent::WorkflowRunUpdated(run.clone()));
 
         // Execute the first step
-        self.execute_step(&run.id.to_string(), &workflow, &task, agent_id, 0).await?;
+        self.execute_step(&run.id.to_string(), &workflow, &task, agent_id, 0)
+            .await?;
 
         // Re-fetch after step execution
         composer_db::models::workflow_run::find_by_id(&self.db.pool, &run.id.to_string())
@@ -289,23 +358,31 @@ impl WorkflowEngine {
         agent_id: uuid::Uuid,
         step_index: i32,
     ) -> anyhow::Result<()> {
-        let step_def = workflow.definition.steps.get(step_index as usize)
+        let step_def = workflow
+            .definition
+            .steps
+            .get(step_index as usize)
             .ok_or_else(|| anyhow::anyhow!("Step index {} out of bounds", step_index))?;
 
-        composer_db::models::workflow_run::update_step_index(&self.db.pool, run_id, step_index).await?;
+        composer_db::models::workflow_run::update_step_index(&self.db.pool, run_id, step_index)
+            .await?;
 
         match step_def.step_type {
             WorkflowStepType::Plan => {
-                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, true).await?;
+                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, true)
+                    .await?;
             }
             WorkflowStepType::Implement => {
-                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false).await?;
+                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false)
+                    .await?;
             }
             WorkflowStepType::HumanGate | WorkflowStepType::HumanReview => {
-                self.execute_human_gate(run_id, task, step_index, &step_def).await?;
+                self.execute_human_gate(run_id, task, step_index, &step_def)
+                    .await?;
             }
             WorkflowStepType::PrReview => {
-                self.execute_pr_review(run_id, task, agent_id, step_index, &step_def).await?;
+                self.execute_pr_review(run_id, task, agent_id, step_index, &step_def)
+                    .await?;
             }
             WorkflowStepType::CompletePr => {
                 self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false).await?;
@@ -335,7 +412,8 @@ impl WorkflowEngine {
             &step_def.step_type,
             &WorkflowStepStatus::Running,
             None,
-        ).await?;
+        )
+        .await?;
 
         let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
@@ -346,28 +424,37 @@ impl WorkflowEngine {
             // Named "Plan & Implementation" because this session is reused (via --resume)
             // for both the initial plan step and subsequent implement/fix steps.
             let repo_path = self.get_repo_path(task).await?;
-            let session = self.session_service.create_session(CreateSessionRequest {
-                agent_id,
-                task_id: task.id,
-                prompt,
-                repo_path,
-                name: Some("Plan & Implementation".to_string()),
-                auto_approve: Some(task.auto_approve),
-                exit_on_result: true,
-            }).await?;
+            let session = self
+                .session_service
+                .create_session(CreateSessionRequest {
+                    agent_id,
+                    task_id: task.id,
+                    prompt,
+                    repo_path,
+                    name: Some("Plan & Implementation".to_string()),
+                    auto_approve: Some(task.auto_approve),
+                    exit_on_result: true,
+                })
+                .await?;
             composer_db::models::workflow_run::update_main_session(
                 &self.db.pool,
                 run_id,
                 &session.id.to_string(),
-            ).await?;
+            )
+            .await?;
             session
         } else {
             // Resume existing main session
             let main_session_id = run.main_session_id.unwrap().to_string();
-            self.session_service.resume_session(&main_session_id, ResumeSessionRequest {
-                prompt: Some(prompt),
-                exit_on_result: true,
-            }).await?
+            self.session_service
+                .resume_session(
+                    &main_session_id,
+                    ResumeSessionRequest {
+                        prompt: Some(prompt),
+                        exit_on_result: true,
+                    },
+                )
+                .await?
         };
 
         // Update step output with session_id
@@ -376,25 +463,30 @@ impl WorkflowEngine {
             &step_output.id.to_string(),
             &WorkflowStepStatus::Running,
             None,
-        ).await?;
+        )
+        .await?;
 
         // Update run status
         composer_db::models::workflow_run::update_status(
             &self.db.pool,
             run_id,
             &WorkflowRunStatus::Running,
-        ).await?;
+        )
+        .await?;
 
         let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
-        self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
+        self.event_bus
+            .broadcast(WsEvent::WorkflowRunUpdated(updated_run));
         self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
             workflow_run_id: run.id,
             step: composer_db::models::workflow_step_output::find_by_id(
                 &self.db.pool,
                 &step_output.id.to_string(),
-            ).await?.unwrap(),
+            )
+            .await?
+            .unwrap(),
         });
 
         let _ = session; // used above for session creation
@@ -416,21 +508,24 @@ impl WorkflowEngine {
             &step_def.step_type,
             &WorkflowStepStatus::WaitingForHuman,
             None,
-        ).await?;
+        )
+        .await?;
 
         // Pause the workflow run
         composer_db::models::workflow_run::update_status(
             &self.db.pool,
             run_id,
             &WorkflowRunStatus::Paused,
-        ).await?;
+        )
+        .await?;
 
         // Move task to waiting
         composer_db::models::task::update_status(
             &self.db.pool,
             &task.id.to_string(),
             &TaskStatus::Waiting,
-        ).await?;
+        )
+        .await?;
 
         let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
@@ -467,15 +562,18 @@ impl WorkflowEngine {
         let repo_path = self.get_repo_path(task).await?;
 
         // Create a NEW session for the reviewer (not the main session)
-        let session = self.session_service.create_session(CreateSessionRequest {
-            agent_id,
-            task_id: task.id,
-            prompt,
-            repo_path,
-            name: Some("PR Review".to_string()),
-            auto_approve: Some(task.auto_approve),
-            exit_on_result: true,
-        }).await?;
+        let session = self
+            .session_service
+            .create_session(CreateSessionRequest {
+                agent_id,
+                task_id: task.id,
+                prompt,
+                repo_path,
+                name: Some("PR Review".to_string()),
+                auto_approve: Some(task.auto_approve),
+                exit_on_result: true,
+            })
+            .await?;
 
         let step_output = composer_db::models::workflow_step_output::create(
             &self.db.pool,
@@ -484,13 +582,15 @@ impl WorkflowEngine {
             &step_def.step_type,
             &WorkflowStepStatus::Running,
             Some(&session.id.to_string()),
-        ).await?;
+        )
+        .await?;
 
         composer_db::models::workflow_run::update_status(
             &self.db.pool,
             run_id,
             &WorkflowRunStatus::Running,
-        ).await?;
+        )
+        .await?;
 
         let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
@@ -505,14 +605,22 @@ impl WorkflowEngine {
     }
 
     /// Called when a session completes. Determines if it belongs to a workflow and advances.
-    pub async fn on_session_completed(&self, session_id: &str, result_summary: Option<&str>) -> anyhow::Result<bool> {
+    pub async fn on_session_completed(
+        &self,
+        session_id: &str,
+        result_summary: Option<&str>,
+    ) -> anyhow::Result<bool> {
         // Check if this is the main session of a workflow run
-        let run = composer_db::models::workflow_run::find_by_session(&self.db.pool, session_id).await?;
+        let run =
+            composer_db::models::workflow_run::find_by_session(&self.db.pool, session_id).await?;
 
         // Or check if it's a review session referenced in step outputs
         let run = match run {
             Some(r) => Some(r),
-            None => composer_db::models::workflow_run::find_by_step_session(&self.db.pool, session_id).await?,
+            None => {
+                composer_db::models::workflow_run::find_by_step_session(&self.db.pool, session_id)
+                    .await?
+            }
         };
 
         let run = match run {
@@ -521,34 +629,43 @@ impl WorkflowEngine {
         };
 
         // Don't advance if workflow is already completed/failed
-        if matches!(run.status, WorkflowRunStatus::Completed | WorkflowRunStatus::Failed) {
+        if matches!(
+            run.status,
+            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed
+        ) {
             return Ok(true);
         }
 
         let run_id = run.id.to_string();
-        let workflow = composer_db::models::workflow::find_by_id(&self.db.pool, &run.workflow_id.to_string())
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Workflow not found for run"))?;
+        let workflow =
+            composer_db::models::workflow::find_by_id(&self.db.pool, &run.workflow_id.to_string())
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Workflow not found for run"))?;
 
         // Update current step output with the result
         if let Some(step_output) = composer_db::models::workflow_step_output::latest_for_step(
             &self.db.pool,
             &run_id,
             run.current_step_index,
-        ).await? {
+        )
+        .await?
+        {
             composer_db::models::workflow_step_output::update_status_and_output(
                 &self.db.pool,
                 &step_output.id.to_string(),
                 &WorkflowStepStatus::Completed,
                 result_summary,
-            ).await?;
+            )
+            .await?;
 
             self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
                 workflow_run_id: run.id,
                 step: composer_db::models::workflow_step_output::find_by_id(
                     &self.db.pool,
                     &step_output.id.to_string(),
-                ).await?.unwrap(),
+                )
+                .await?
+                .unwrap(),
             });
         }
 
@@ -560,12 +677,18 @@ impl WorkflowEngine {
 
     /// Called when a session fails. Marks the workflow step as failed.
     pub async fn on_session_failed(&self, session_id: &str, error: &str) -> anyhow::Result<bool> {
-        let run = composer_db::models::workflow_run::find_by_session(&self.db.pool, session_id).await?;
+        let run =
+            composer_db::models::workflow_run::find_by_session(&self.db.pool, session_id).await?;
         let run = match run {
             Some(r) => r,
             None => {
                 // Check review sessions
-                match composer_db::models::workflow_run::find_by_step_session(&self.db.pool, session_id).await? {
+                match composer_db::models::workflow_run::find_by_step_session(
+                    &self.db.pool,
+                    session_id,
+                )
+                .await?
+                {
                     Some(r) => r,
                     None => return Ok(false),
                 }
@@ -578,13 +701,16 @@ impl WorkflowEngine {
             &self.db.pool,
             &run_id,
             run.current_step_index,
-        ).await? {
+        )
+        .await?
+        {
             composer_db::models::workflow_step_output::update_status_and_output(
                 &self.db.pool,
                 &step_output.id.to_string(),
                 &WorkflowStepStatus::Failed,
                 Some(error),
-            ).await?;
+            )
+            .await?;
         }
 
         // For now, fail the whole workflow run on step failure
@@ -592,12 +718,14 @@ impl WorkflowEngine {
             &self.db.pool,
             &run_id,
             &WorkflowRunStatus::Failed,
-        ).await?;
+        )
+        .await?;
 
         let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
-        self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
+        self.event_bus
+            .broadcast(WsEvent::WorkflowRunUpdated(updated_run));
 
         Ok(true)
     }
@@ -614,14 +742,21 @@ impl WorkflowEngine {
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
 
         if !matches!(run.status, WorkflowRunStatus::Paused) {
-            return Err(anyhow::anyhow!("Workflow run is not paused (status: {:?})", run.status));
+            return Err(anyhow::anyhow!(
+                "Workflow run is not paused (status: {:?})",
+                run.status
+            ));
         }
 
-        let workflow = composer_db::models::workflow::find_by_id(&self.db.pool, &run.workflow_id.to_string())
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Workflow not found"))?;
+        let workflow =
+            composer_db::models::workflow::find_by_id(&self.db.pool, &run.workflow_id.to_string())
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Workflow not found"))?;
 
-        let _step_def = workflow.definition.steps.get(run.current_step_index as usize)
+        let _step_def = workflow
+            .definition
+            .steps
+            .get(run.current_step_index as usize)
             .ok_or_else(|| anyhow::anyhow!("Current step not found in workflow definition"))?;
 
         // Update step output
@@ -629,21 +764,30 @@ impl WorkflowEngine {
             &self.db.pool,
             run_id,
             run.current_step_index,
-        ).await? {
-            let status = if approved { WorkflowStepStatus::Completed } else { WorkflowStepStatus::Rejected };
+        )
+        .await?
+        {
+            let status = if approved {
+                WorkflowStepStatus::Completed
+            } else {
+                WorkflowStepStatus::Rejected
+            };
             composer_db::models::workflow_step_output::update_status_and_output(
                 &self.db.pool,
                 &step_output.id.to_string(),
                 &status,
                 comments,
-            ).await?;
+            )
+            .await?;
 
             self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
                 workflow_run_id: run.id,
                 step: composer_db::models::workflow_step_output::find_by_id(
                     &self.db.pool,
                     &step_output.id.to_string(),
-                ).await?.unwrap(),
+                )
+                .await?
+                .unwrap(),
             });
         }
 
@@ -653,7 +797,8 @@ impl WorkflowEngine {
                 &self.db.pool,
                 &run.task_id.to_string(),
                 &TaskStatus::InProgress,
-            ).await?;
+            )
+            .await?;
             self.event_bus.broadcast(WsEvent::TaskMoved {
                 task_id: run.task_id,
                 from_status: TaskStatus::Waiting,
@@ -665,21 +810,29 @@ impl WorkflowEngine {
         } else {
             // Find the preceding agent step to loop back to
             let loop_back_index = self.find_preceding_agent_step(&workflow, run.current_step_index);
-            let task = composer_db::models::task::find_by_id(&self.db.pool, &run.task_id.to_string())
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
-            let agent_id = task.assigned_agent_id
+            let task =
+                composer_db::models::task::find_by_id(&self.db.pool, &run.task_id.to_string())
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+            let agent_id = task
+                .assigned_agent_id
                 .ok_or_else(|| anyhow::anyhow!("Task has no assigned agent"))?;
 
             composer_db::models::workflow_run::increment_iteration(&self.db.pool, run_id).await?;
-            composer_db::models::workflow_run::update_step_index(&self.db.pool, run_id, loop_back_index).await?;
+            composer_db::models::workflow_run::update_step_index(
+                &self.db.pool,
+                run_id,
+                loop_back_index,
+            )
+            .await?;
 
             // Move task back to in_progress
             composer_db::models::task::update_status(
                 &self.db.pool,
                 &task.id.to_string(),
                 &TaskStatus::InProgress,
-            ).await?;
+            )
+            .await?;
 
             self.event_bus.broadcast(WsEvent::TaskMoved {
                 task_id: task.id,
@@ -688,7 +841,11 @@ impl WorkflowEngine {
             });
 
             // Re-execute the agent step with rejection context
-            let rejection_step_def = workflow.definition.steps.get(loop_back_index as usize).unwrap();
+            let rejection_step_def = workflow
+                .definition
+                .steps
+                .get(loop_back_index as usize)
+                .unwrap();
             self.execute_agent_step(
                 run_id,
                 &task,
@@ -696,7 +853,8 @@ impl WorkflowEngine {
                 loop_back_index,
                 rejection_step_def,
                 false, // resume existing session
-            ).await?;
+            )
+            .await?;
         }
 
         composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
@@ -710,7 +868,40 @@ impl WorkflowEngine {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
 
-        let next_index = run.current_step_index + 1;
+        // Check if the current step has a loop_back_to target
+        let next_index = if let Some(step_def) = workflow
+            .definition
+            .steps
+            .get(run.current_step_index as usize)
+        {
+            if let Some(loop_target) = step_def.loop_back_to {
+                if self
+                    .should_loop(run_id, workflow, step_def, loop_target)
+                    .await?
+                {
+                    tracing::info!(
+                        "Workflow run {}: looping from step {} back to step {}",
+                        run_id,
+                        run.current_step_index,
+                        loop_target
+                    );
+                    composer_db::models::workflow_run::increment_iteration(&self.db.pool, run_id)
+                        .await?;
+                    loop_target
+                } else {
+                    tracing::info!(
+                        "Workflow run {}: max retries reached at step {}, advancing linearly",
+                        run_id,
+                        run.current_step_index
+                    );
+                    run.current_step_index + 1
+                }
+            } else {
+                run.current_step_index + 1
+            }
+        } else {
+            run.current_step_index + 1
+        };
 
         if next_index as usize >= workflow.definition.steps.len() {
             // Workflow complete
@@ -718,21 +909,24 @@ impl WorkflowEngine {
                 &self.db.pool,
                 run_id,
                 &WorkflowRunStatus::Completed,
-            ).await?;
+            )
+            .await?;
             composer_db::models::task::update_status(
                 &self.db.pool,
                 &run.task_id.to_string(),
                 &TaskStatus::Done,
-            ).await?;
+            )
+            .await?;
 
             // Clean up all session worktrees (main + review sessions)
             if let Some(main_sid) = &run.main_session_id {
                 self.cleanup_worktree(&main_sid.to_string()).await;
             }
             // Clean up review session worktrees (stored in step outputs)
-            let step_outputs = composer_db::models::workflow_step_output::list_by_run(
-                &self.db.pool, run_id,
-            ).await.unwrap_or_default();
+            let step_outputs =
+                composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id)
+                    .await
+                    .unwrap_or_default();
             for step in &step_outputs {
                 if let Some(ref sid) = step.session_id {
                     let sid_str = sid.to_string();
@@ -750,7 +944,8 @@ impl WorkflowEngine {
                 workflow_run_id: run.id,
                 task_id: run.task_id,
             });
-            self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
+            self.event_bus
+                .broadcast(WsEvent::WorkflowRunUpdated(updated_run));
             self.event_bus.broadcast(WsEvent::TaskMoved {
                 task_id: run.task_id,
                 from_status: TaskStatus::InProgress,
@@ -762,10 +957,12 @@ impl WorkflowEngine {
         let task = composer_db::models::task::find_by_id(&self.db.pool, &run.task_id.to_string())
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
-        let agent_id = task.assigned_agent_id
+        let agent_id = task
+            .assigned_agent_id
             .ok_or_else(|| anyhow::anyhow!("Task has no assigned agent"))?;
 
-        self.execute_step(run_id, workflow, &task, agent_id, next_index).await
+        self.execute_step(run_id, workflow, &task, agent_id, next_index)
+            .await
     }
 
     /// Build the prompt for a step, injecting context from previous steps.
@@ -775,10 +972,8 @@ impl WorkflowEngine {
         task: &Task,
         step_def: &WorkflowStepDefinition,
     ) -> anyhow::Result<String> {
-        let step_outputs = composer_db::models::workflow_step_output::list_by_run(
-            &self.db.pool,
-            run_id,
-        ).await?;
+        let step_outputs =
+            composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
 
         let base_task_context = if let Some(ref desc) = task.description {
             format!("Task: {} - {}", task.title, desc)
@@ -819,13 +1014,19 @@ impl WorkflowEngine {
         match step_def.step_type {
             WorkflowStepType::Plan => {
                 // Check if this is a retry (rejection happened)
-                let rejections: Vec<&WorkflowStepOutput> = step_outputs.iter()
-                    .filter(|o| o.step_type == WorkflowStepType::HumanGate
-                        && o.status == WorkflowStepStatus::Rejected)
+                let rejections: Vec<&WorkflowStepOutput> = step_outputs
+                    .iter()
+                    .filter(|o| {
+                        o.step_type == WorkflowStepType::HumanGate
+                            && o.status == WorkflowStepStatus::Rejected
+                    })
                     .collect();
 
                 if let Some(last_rejection) = rejections.last() {
-                    let feedback = last_rejection.output.as_deref().unwrap_or("No specific feedback provided.");
+                    let feedback = last_rejection
+                        .output
+                        .as_deref()
+                        .unwrap_or("No specific feedback provided.");
                     Ok(format!(
                         "{} - The previous plan was rejected. Feedback: {} - Please revise the plan based on this feedback. Do NOT implement yet, only output the revised plan.",
                         task_context, feedback
@@ -839,20 +1040,32 @@ impl WorkflowEngine {
             }
             WorkflowStepType::Implement => {
                 // Find the approved plan
-                let plan_output = step_outputs.iter()
-                    .filter(|o| o.step_type == WorkflowStepType::Plan && o.status == WorkflowStepStatus::Completed)
+                let plan_output = step_outputs
+                    .iter()
+                    .filter(|o| {
+                        o.step_type == WorkflowStepType::Plan
+                            && o.status == WorkflowStepStatus::Completed
+                    })
                     .last()
                     .and_then(|o| o.output.as_deref());
 
                 // Check for PR review findings to fix
-                let review_findings: Vec<&str> = step_outputs.iter()
-                    .filter(|o| o.step_type == WorkflowStepType::PrReview && o.status == WorkflowStepStatus::Completed)
+                let review_findings: Vec<&str> = step_outputs
+                    .iter()
+                    .filter(|o| {
+                        o.step_type == WorkflowStepType::PrReview
+                            && o.status == WorkflowStepStatus::Completed
+                    })
                     .filter_map(|o| o.output.as_deref())
                     .collect();
 
                 // Check for human review comments to fix
-                let human_comments: Vec<&str> = step_outputs.iter()
-                    .filter(|o| o.step_type == WorkflowStepType::HumanReview && o.status == WorkflowStepStatus::Rejected)
+                let human_comments: Vec<&str> = step_outputs
+                    .iter()
+                    .filter(|o| {
+                        o.step_type == WorkflowStepType::HumanReview
+                            && o.status == WorkflowStepStatus::Rejected
+                    })
                     .filter_map(|o| o.output.as_deref())
                     .collect();
 
@@ -888,10 +1101,29 @@ impl WorkflowEngine {
                 } else {
                     format!("Review this PR: {}", pr_urls.join(", "))
                 };
-                Ok(format!(
-                    "{} - Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers.",
-                    pr_context
-                ))
+
+                // Check if this is a re-review (previous PrReview outputs exist)
+                let prior_reviews: Vec<&str> = step_outputs
+                    .iter()
+                    .filter(|o| {
+                        o.step_type == WorkflowStepType::PrReview
+                            && o.status == WorkflowStepStatus::Completed
+                    })
+                    .filter_map(|o| o.output.as_deref())
+                    .collect();
+
+                if !prior_reviews.is_empty() {
+                    let latest_review = prior_reviews.last().unwrap();
+                    Ok(format!(
+                        "{} - This is a re-review after fixes were applied. The previous review found these issues: {} - Check if they have been fixed and look for any new issues. Be specific about file names and line numbers.",
+                        pr_context, latest_review
+                    ))
+                } else {
+                    Ok(format!(
+                        "{} - Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers.",
+                        pr_context
+                    ))
+                }
             }
             WorkflowStepType::CompletePr => {
                 let pr_urls = &task.pr_urls;
@@ -926,22 +1158,86 @@ impl WorkflowEngine {
     fn find_preceding_agent_step(&self, workflow: &Workflow, current_index: i32) -> i32 {
         for i in (0..current_index).rev() {
             let step = &workflow.definition.steps[i as usize];
-            if matches!(step.step_type, WorkflowStepType::Plan | WorkflowStepType::Implement) {
+            if matches!(
+                step.step_type,
+                WorkflowStepType::Plan | WorkflowStepType::Implement
+            ) {
                 return i;
             }
         }
         0 // fallback to first step
     }
 
+    /// Determine whether a step with `loop_back_to` should actually loop back
+    /// or if the loop should terminate (max retries exhausted, or human approved).
+    pub async fn should_loop(
+        &self,
+        run_id: &str,
+        workflow: &Workflow,
+        step_def: &WorkflowStepDefinition,
+        loop_target: i32,
+    ) -> anyhow::Result<bool> {
+        // If the loop target is a human step (HumanReview/HumanGate), check if
+        // the most recent output for that step was approved (Completed).
+        // If approved, don't loop — the human is satisfied.
+        if let Some(target_step_def) = workflow.definition.steps.get(loop_target as usize) {
+            if matches!(
+                target_step_def.step_type,
+                WorkflowStepType::HumanReview | WorkflowStepType::HumanGate
+            ) {
+                // Use latest_for_step for deterministic ordering (ORDER BY attempt DESC LIMIT 1)
+                let latest_target_output =
+                    composer_db::models::workflow_step_output::latest_for_step(
+                        &self.db.pool,
+                        run_id,
+                        loop_target,
+                    )
+                    .await?;
+                if let Some(output) = latest_target_output {
+                    if output.status == WorkflowStepStatus::Completed {
+                        // Human approved at the target step — don't loop back
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+
+        // For automated loops, respect max_retries by counting completions
+        // of the loop target step (review step). The first execution is not a
+        // retry, so we stop when (completions - 1) >= max_retries.
+        if let Some(max) = step_def.max_retries {
+            let step_outputs =
+                composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id)
+                    .await?;
+            let target_completed_count = step_outputs
+                .iter()
+                .filter(|o| {
+                    o.step_index == loop_target && matches!(o.status, WorkflowStepStatus::Completed)
+                })
+                .count() as i32;
+
+            let retries_done = (target_completed_count - 1).max(0);
+            if retries_done >= max {
+                return Ok(false);
+            }
+        }
+
+        // No limit reached: loop back
+        Ok(true)
+    }
+
     /// Get the repo path for a task's project.
     async fn get_repo_path(&self, task: &Task) -> anyhow::Result<String> {
-        let project_id = task.project_id
+        let project_id = task
+            .project_id
             .ok_or_else(|| anyhow::anyhow!("Task has no project assigned"))?;
         let repos = composer_db::models::project_repository::list_by_project(
             &self.db.pool,
             &project_id.to_string(),
-        ).await?;
-        let primary_repo = repos.iter()
+        )
+        .await?;
+        let primary_repo = repos
+            .iter()
             .find(|r| r.role == RepositoryRole::Primary)
             .or_else(|| repos.first())
             .ok_or_else(|| anyhow::anyhow!("Project has no repositories configured"))?;
@@ -950,21 +1246,27 @@ impl WorkflowEngine {
 
     /// Clean up a session's worktree.
     async fn cleanup_worktree(&self, session_id: &str) {
-        if let Ok(Some(session)) = composer_db::models::session::find_by_id(&self.db.pool, session_id).await {
+        if let Ok(Some(session)) =
+            composer_db::models::session::find_by_id(&self.db.pool, session_id).await
+        {
             if let Some(wt_id) = &session.worktree_id {
                 let wt_id_str = wt_id.to_string();
-                if let Ok(Some(wt)) = composer_db::models::worktree::find_by_id(&self.db.pool, &wt_id_str).await {
+                if let Ok(Some(wt)) =
+                    composer_db::models::worktree::find_by_id(&self.db.pool, &wt_id_str).await
+                {
                     if wt.status != WorktreeStatus::Deleted {
                         let _ = composer_git::worktree::remove_worktree(
                             std::path::Path::new(&wt.repo_path),
                             std::path::Path::new(&wt.worktree_path),
                             &wt.branch_name,
-                        ).await;
+                        )
+                        .await;
                         let _ = composer_db::models::worktree::update_status(
                             &self.db.pool,
                             &wt_id_str,
                             &WorktreeStatus::Deleted,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
             }
@@ -972,11 +1274,15 @@ impl WorkflowEngine {
     }
 
     /// Get the workflow run with all step outputs for a task.
-    pub async fn get_run_with_steps(&self, run_id: &str) -> anyhow::Result<(WorkflowRun, Vec<WorkflowStepOutput>)> {
+    pub async fn get_run_with_steps(
+        &self,
+        run_id: &str,
+    ) -> anyhow::Result<(WorkflowRun, Vec<WorkflowStepOutput>)> {
         let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
-        let steps = composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
+        let steps =
+            composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
         Ok((run, steps))
     }
 }

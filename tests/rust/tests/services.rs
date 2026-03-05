@@ -1,12 +1,12 @@
-use std::sync::Arc;
 use composer_api_types::*;
 use composer_db::Database;
-use composer_services::event_bus::EventBus;
-use composer_services::task_service::TaskService;
-use composer_services::agent_service::AgentService;
-use composer_services::session_service::SessionService;
-use composer_services::worktree_service::WorktreeService;
 use composer_executors::process_manager::AgentProcessManager;
+use composer_services::agent_service::AgentService;
+use composer_services::event_bus::EventBus;
+use composer_services::session_service::SessionService;
+use composer_services::task_service::TaskService;
+use composer_services::worktree_service::WorktreeService;
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // EventBus tests (from crates/services/src/event_bus.rs)
@@ -49,7 +49,9 @@ mod event_bus_tests {
         let bus = EventBus::new();
         let mut rx1 = bus.subscribe();
         let mut rx2 = bus.subscribe();
-        bus.broadcast(WsEvent::TaskDeleted { task_id: uuid::Uuid::nil() });
+        bus.broadcast(WsEvent::TaskDeleted {
+            task_id: uuid::Uuid::nil(),
+        });
         assert!(rx1.recv().await.is_ok());
         assert!(rx2.recv().await.is_ok());
     }
@@ -92,7 +94,6 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
-
             })
             .await
             .unwrap();
@@ -119,7 +120,6 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
-
             })
             .await
             .unwrap();
@@ -148,7 +148,6 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
-
             })
             .await
             .unwrap();
@@ -165,7 +164,6 @@ mod task_service_tests {
                     position: None,
                     project_id: None,
                     assigned_agent_id: None,
-    
                 },
             )
             .await
@@ -186,7 +184,6 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
-
             })
             .await
             .unwrap();
@@ -208,7 +205,6 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
-
             })
             .await
             .unwrap();
@@ -354,8 +350,12 @@ mod session_service_tests {
         // Create session with a worktree record
         let session_id = uuid::Uuid::new_v4().to_string();
         let wt = worktree::create(
-            &db.pool, &agent_id, &session_id,
-            "/nonexistent/repo", "/nonexistent/repo/wt", "branch",
+            &db.pool,
+            &agent_id,
+            &session_id,
+            "/nonexistent/repo",
+            "/nonexistent/repo/wt",
+            "branch",
         )
         .await
         .unwrap();
@@ -379,11 +379,17 @@ mod session_service_tests {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         // Verify agent is reset to Idle
-        let ag_after = agent::find_by_id(&db.pool, &agent_id).await.unwrap().unwrap();
+        let ag_after = agent::find_by_id(&db.pool, &agent_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(ag_after.status, AgentStatus::Idle);
 
         // Verify worktree is marked Deleted in DB
-        let wt_after = worktree::find_by_id(&db.pool, &wt_id).await.unwrap().unwrap();
+        let wt_after = worktree::find_by_id(&db.pool, &wt_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(wt_after.status, WorktreeStatus::Deleted);
     }
 
@@ -403,8 +409,12 @@ mod session_service_tests {
         // Create session with a worktree record
         let session_id = uuid::Uuid::new_v4().to_string();
         let wt = worktree::create(
-            &db.pool, &agent_id, &session_id,
-            "/nonexistent/repo", "/nonexistent/repo/wt", "branch",
+            &db.pool,
+            &agent_id,
+            &session_id,
+            "/nonexistent/repo",
+            "/nonexistent/repo/wt",
+            "branch",
         )
         .await
         .unwrap();
@@ -428,11 +438,17 @@ mod session_service_tests {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         // Verify agent is reset to Idle
-        let ag_after = agent::find_by_id(&db.pool, &agent_id).await.unwrap().unwrap();
+        let ag_after = agent::find_by_id(&db.pool, &agent_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(ag_after.status, AgentStatus::Idle);
 
         // Verify worktree is still Active (preserved for retry)
-        let wt_after = worktree::find_by_id(&db.pool, &wt_id).await.unwrap().unwrap();
+        let wt_after = worktree::find_by_id(&db.pool, &wt_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(wt_after.status, WorktreeStatus::Active);
     }
 
@@ -457,10 +473,19 @@ mod session_service_tests {
 
         // Try to retry a running session — should fail
         let result = _svc
-            .retry_session(&sess.id.to_string(), ResumeSessionRequest { prompt: None, exit_on_result: false })
+            .retry_session(
+                &sess.id.to_string(),
+                ResumeSessionRequest {
+                    prompt: None,
+                    exit_on_result: false,
+                },
+            )
             .await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Only failed sessions can be retried"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Only failed sessions can be retried"));
     }
 }
 
@@ -522,7 +547,10 @@ mod worktree_service_tests {
         let (svc, _pool) = setup().await;
         let result = svc.cleanup("00000000-0000-0000-0000-000000000000").await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Worktree not found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Worktree not found"));
     }
 
     #[tokio::test]
@@ -533,8 +561,12 @@ mod worktree_service_tests {
         let agent_id = setup_agent(&pool).await;
         let session_id = setup_session(&pool, &agent_id).await;
         let wt = worktree::create(
-            &pool, &agent_id, &session_id,
-            "/nonexistent/repo", "/nonexistent/repo/wt", "branch",
+            &pool,
+            &agent_id,
+            &session_id,
+            "/nonexistent/repo",
+            "/nonexistent/repo/wt",
+            "branch",
         )
         .await
         .unwrap();
@@ -544,7 +576,10 @@ mod worktree_service_tests {
         // but DB status should still be updated to Deleted
         let result = svc.cleanup(&wt_id).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to remove worktree"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to remove worktree"));
 
         // Verify DB status is Deleted despite the error
         let found = worktree::find_by_id(&pool, &wt_id).await.unwrap().unwrap();
@@ -567,7 +602,7 @@ mod worktree_service_tests {
 
 mod workflow_tests {
     use super::*;
-    use composer_db::models::{workflow, workflow_run, workflow_step_output, project, task};
+    use composer_db::models::{project, task, workflow, workflow_run, workflow_step_output};
     use composer_services::workflow_engine::{self, WorkflowEngine, FEAT_COMMON_NAME};
 
     async fn setup() -> (WorkflowEngine, Arc<Database>, EventBus) {
@@ -644,27 +679,36 @@ mod workflow_tests {
     async fn workflow_crud() {
         let (_engine, db, _) = setup().await;
 
-        let def = WorkflowDefinition { steps: vec![
-            WorkflowStepDefinition {
+        let def = WorkflowDefinition {
+            steps: vec![WorkflowStepDefinition {
                 step_type: WorkflowStepType::Plan,
                 name: "Plan".to_string(),
                 prompt_template: None,
                 max_retries: None,
-            },
-        ]};
+                loop_back_to: None,
+            }],
+        };
 
         let wf = workflow::create(&db.pool, "Test WF", &def).await.unwrap();
         assert_eq!(wf.name, "Test WF");
         assert_eq!(wf.definition.steps.len(), 1);
 
-        let found = workflow::find_by_id(&db.pool, &wf.id.to_string()).await.unwrap();
+        let found = workflow::find_by_id(&db.pool, &wf.id.to_string())
+            .await
+            .unwrap();
         assert!(found.is_some());
 
-        let updated = workflow::update(&db.pool, &wf.id.to_string(), Some("Updated"), None).await.unwrap();
+        let updated = workflow::update(&db.pool, &wf.id.to_string(), Some("Updated"), None)
+            .await
+            .unwrap();
         assert_eq!(updated.name, "Updated");
 
-        workflow::delete(&db.pool, &wf.id.to_string()).await.unwrap();
-        let gone = workflow::find_by_id(&db.pool, &wf.id.to_string()).await.unwrap();
+        workflow::delete(&db.pool, &wf.id.to_string())
+            .await
+            .unwrap();
+        let gone = workflow::find_by_id(&db.pool, &wf.id.to_string())
+            .await
+            .unwrap();
         assert!(gone.is_none());
     }
 
@@ -674,32 +718,61 @@ mod workflow_tests {
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let task_obj = task::create(&db.pool, "Test Task", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(
+            &db.pool,
+            "Test Task",
+            None,
+            None,
+            None,
+            Some(&project_id),
+            None,
+        )
+        .await
+        .unwrap();
         let task_id = task_obj.id.to_string();
 
-        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id)
+            .await
+            .unwrap();
         assert_eq!(run.status, WorkflowRunStatus::Running);
         assert_eq!(run.current_step_index, 0);
         assert_eq!(run.iteration_count, 0);
         assert!(run.main_session_id.is_none());
 
         // Update step index
-        workflow_run::update_step_index(&db.pool, &run.id.to_string(), 3).await.unwrap();
-        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
+        workflow_run::update_step_index(&db.pool, &run.id.to_string(), 3)
+            .await
+            .unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.current_step_index, 3);
 
         // Update status
-        workflow_run::update_status(&db.pool, &run.id.to_string(), &WorkflowRunStatus::Paused).await.unwrap();
-        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
+        workflow_run::update_status(&db.pool, &run.id.to_string(), &WorkflowRunStatus::Paused)
+            .await
+            .unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.status, WorkflowRunStatus::Paused);
 
         // Increment iteration
-        workflow_run::increment_iteration(&db.pool, &run.id.to_string()).await.unwrap();
-        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
+        workflow_run::increment_iteration(&db.pool, &run.id.to_string())
+            .await
+            .unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.iteration_count, 1);
 
         // Find by task
-        let by_task = workflow_run::find_by_task(&db.pool, &task_id).await.unwrap();
+        let by_task = workflow_run::find_by_task(&db.pool, &task_id)
+            .await
+            .unwrap();
         assert!(by_task.is_some());
         assert_eq!(by_task.unwrap().id, run.id);
     }
@@ -715,34 +788,59 @@ mod workflow_tests {
 
         // Create step output
         let step = workflow_step_output::create(
-            &db.pool, &run_id, 0,
-            &WorkflowStepType::Plan, &WorkflowStepStatus::Running, None,
-        ).await.unwrap();
+            &db.pool,
+            &run_id,
+            0,
+            &WorkflowStepType::Plan,
+            &WorkflowStepStatus::Running,
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(step.step_index, 0);
         assert_eq!(step.attempt, 1);
         assert_eq!(step.status, WorkflowStepStatus::Running);
 
         // Update status and output
         workflow_step_output::update_status_and_output(
-            &db.pool, &step.id.to_string(), &WorkflowStepStatus::Completed, Some("Plan text here"),
-        ).await.unwrap();
-        let updated = workflow_step_output::find_by_id(&db.pool, &step.id.to_string()).await.unwrap().unwrap();
+            &db.pool,
+            &step.id.to_string(),
+            &WorkflowStepStatus::Completed,
+            Some("Plan text here"),
+        )
+        .await
+        .unwrap();
+        let updated = workflow_step_output::find_by_id(&db.pool, &step.id.to_string())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.status, WorkflowStepStatus::Completed);
         assert_eq!(updated.output.as_deref(), Some("Plan text here"));
 
         // Create another attempt for same step
         let step2 = workflow_step_output::create(
-            &db.pool, &run_id, 0,
-            &WorkflowStepType::Plan, &WorkflowStepStatus::Running, None,
-        ).await.unwrap();
+            &db.pool,
+            &run_id,
+            0,
+            &WorkflowStepType::Plan,
+            &WorkflowStepStatus::Running,
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(step2.attempt, 2);
 
         // latest_for_step returns the highest attempt
-        let latest = workflow_step_output::latest_for_step(&db.pool, &run_id, 0).await.unwrap().unwrap();
+        let latest = workflow_step_output::latest_for_step(&db.pool, &run_id, 0)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(latest.attempt, 2);
 
         // List all for the run
-        let all = workflow_step_output::list_by_run(&db.pool, &run_id).await.unwrap();
+        let all = workflow_step_output::list_by_run(&db.pool, &run_id)
+            .await
+            .unwrap();
         assert_eq!(all.len(), 2);
     }
 
@@ -765,9 +863,13 @@ mod workflow_tests {
 
         // Create a real session for the FK
         let session_id = create_agent_and_session(&db.pool).await;
-        workflow_run::update_main_session(&db.pool, &run_id, &session_id).await.unwrap();
+        workflow_run::update_main_session(&db.pool, &run_id, &session_id)
+            .await
+            .unwrap();
 
-        let found = workflow_run::find_by_session(&db.pool, &session_id).await.unwrap();
+        let found = workflow_run::find_by_session(&db.pool, &session_id)
+            .await
+            .unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, run.id);
     }
@@ -784,11 +886,19 @@ mod workflow_tests {
         // Create a real session for the FK, then reference it in a step output
         let review_session_id = create_agent_and_session(&db.pool).await;
         workflow_step_output::create(
-            &db.pool, &run_id, 3,
-            &WorkflowStepType::PrReview, &WorkflowStepStatus::Running, Some(&review_session_id),
-        ).await.unwrap();
+            &db.pool,
+            &run_id,
+            3,
+            &WorkflowStepType::PrReview,
+            &WorkflowStepStatus::Running,
+            Some(&review_session_id),
+        )
+        .await
+        .unwrap();
 
-        let found = workflow_run::find_by_step_session(&db.pool, &review_session_id).await.unwrap();
+        let found = workflow_run::find_by_step_session(&db.pool, &review_session_id)
+            .await
+            .unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, run.id);
     }
@@ -806,18 +916,30 @@ mod workflow_tests {
         let task_id = task_obj.id.to_string();
 
         // Simulate a running workflow run that was interrupted by server crash
-        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id)
+            .await
+            .unwrap();
         let run_id = run.id.to_string();
-        workflow_run::update_step_index(&db.pool, &run_id, 2).await.unwrap();
+        workflow_run::update_step_index(&db.pool, &run_id, 2)
+            .await
+            .unwrap();
 
         // Create a running step output
         workflow_step_output::create(
-            &db.pool, &run_id, 2,
-            &WorkflowStepType::Implement, &WorkflowStepStatus::Running, None,
-        ).await.unwrap();
+            &db.pool,
+            &run_id,
+            2,
+            &WorkflowStepType::Implement,
+            &WorkflowStepStatus::Running,
+            None,
+        )
+        .await
+        .unwrap();
 
         // Set task to in_progress
-        task::update_status(&db.pool, &task_id, &TaskStatus::InProgress).await.unwrap();
+        task::update_status(&db.pool, &task_id, &TaskStatus::InProgress)
+            .await
+            .unwrap();
 
         // Now create the WorkflowEngine — triggers startup recovery
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
@@ -828,7 +950,10 @@ mod workflow_tests {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         // Workflow run should be paused
-        let recovered = workflow_run::find_by_id(&db.pool, &run_id).await.unwrap().unwrap();
+        let recovered = workflow_run::find_by_id(&db.pool, &run_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(recovered.status, WorkflowRunStatus::Paused);
 
         // Task should be in waiting
@@ -836,7 +961,10 @@ mod workflow_tests {
         assert_eq!(task_after.status, TaskStatus::Waiting);
 
         // Step should be failed
-        let step = workflow_step_output::latest_for_step(&db.pool, &run_id, 2).await.unwrap().unwrap();
+        let step = workflow_step_output::latest_for_step(&db.pool, &run_id, 2)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(step.status, WorkflowStepStatus::Failed);
     }
 
@@ -850,8 +978,12 @@ mod workflow_tests {
 
         assert!(task_obj.workflow_run_id.is_none());
 
-        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
-        task::update_workflow_run_id(&db.pool, &task_id, &run.id.to_string()).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id)
+            .await
+            .unwrap();
+        task::update_workflow_run_id(&db.pool, &task_id, &run.id.to_string())
+            .await
+            .unwrap();
 
         let updated_task = task::find_by_id(&db.pool, &task_id).await.unwrap().unwrap();
         assert_eq!(updated_task.workflow_run_id, Some(run.id));
@@ -863,14 +995,24 @@ mod workflow_tests {
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None).await.unwrap();
-        let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None).await.unwrap();
+        let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None)
+            .await
+            .unwrap();
+        let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None)
+            .await
+            .unwrap();
 
-        let run1 = workflow_run::create(&db.pool, &wf_id, &t1.id.to_string()).await.unwrap();
-        let run2 = workflow_run::create(&db.pool, &wf_id, &t2.id.to_string()).await.unwrap();
+        let run1 = workflow_run::create(&db.pool, &wf_id, &t1.id.to_string())
+            .await
+            .unwrap();
+        let run2 = workflow_run::create(&db.pool, &wf_id, &t2.id.to_string())
+            .await
+            .unwrap();
 
         // run1 stays running, run2 is paused
-        workflow_run::update_status(&db.pool, &run2.id.to_string(), &WorkflowRunStatus::Paused).await.unwrap();
+        workflow_run::update_status(&db.pool, &run2.id.to_string(), &WorkflowRunStatus::Paused)
+            .await
+            .unwrap();
 
         let running = workflow_run::find_running(&db.pool).await.unwrap();
         assert_eq!(running.len(), 1);
@@ -884,10 +1026,14 @@ mod workflow_tests {
         let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
 
-        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
+            .await
+            .unwrap();
         // Run is in "running" status, not "paused"
 
-        let result = engine.submit_decision(&run.id.to_string(), true, None).await;
+        let result = engine
+            .submit_decision(&run.id.to_string(), true, None)
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not paused"));
     }
@@ -899,8 +1045,16 @@ mod workflow_tests {
         let wf_id = create_workflow_in_db(&db.pool).await;
 
         let task_obj = task::create(
-            &db.pool, "Test", None, None, Some(&TaskStatus::InProgress), Some(&project_id), None,
-        ).await.unwrap();
+            &db.pool,
+            "Test",
+            None,
+            None,
+            Some(&TaskStatus::InProgress),
+            Some(&project_id),
+            None,
+        )
+        .await
+        .unwrap();
 
         let result = engine.start(&task_obj.id.to_string(), &wf_id).await;
         assert!(result.is_err());
@@ -913,11 +1067,227 @@ mod workflow_tests {
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+            .await
+            .unwrap();
         // No agent assigned
 
         let result = engine.start(&task_obj.id.to_string(), &wf_id).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no assigned agent"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("no assigned agent"));
+    }
+
+    #[test]
+    fn feat_common_loop_back_to_fields() {
+        let def = workflow_engine::feat_common_definition();
+        // Steps 0-3 have no loop
+        assert_eq!(def.steps[0].loop_back_to, None);
+        assert_eq!(def.steps[1].loop_back_to, None);
+        assert_eq!(def.steps[2].loop_back_to, None);
+        assert_eq!(def.steps[3].loop_back_to, None);
+        // Step 4 (Fix Review Findings) loops back to step 3 (Automated PR Review)
+        assert_eq!(def.steps[4].loop_back_to, Some(3));
+        assert_eq!(def.steps[4].max_retries, Some(3));
+        // Step 5 has no loop
+        assert_eq!(def.steps[5].loop_back_to, None);
+        // Step 6 (Fix Human Comments) loops back to step 5 (Human PR Review)
+        assert_eq!(def.steps[6].loop_back_to, Some(5));
+        assert_eq!(def.steps[6].max_retries, None);
+        // Step 7 (Complete PR) has no loop
+        assert_eq!(def.steps[7].loop_back_to, None);
+    }
+
+    #[test]
+    fn validate_workflow_definition_accepts_valid() {
+        let def = workflow_engine::feat_common_definition();
+        assert!(workflow_engine::validate_workflow_definition(&def).is_ok());
+    }
+
+    #[test]
+    fn validate_workflow_definition_rejects_negative_loop_back_to() {
+        let def = WorkflowDefinition {
+            steps: vec![
+                WorkflowStepDefinition {
+                    step_type: WorkflowStepType::Plan,
+                    name: "Plan".to_string(),
+                    prompt_template: None,
+                    max_retries: None,
+                    loop_back_to: Some(-1),
+                },
+            ],
+        };
+        let result = workflow_engine::validate_workflow_definition(&def);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("negative"));
+    }
+
+    #[test]
+    fn validate_workflow_definition_rejects_non_preceding_loop_back_to() {
+        let def = WorkflowDefinition {
+            steps: vec![
+                WorkflowStepDefinition {
+                    step_type: WorkflowStepType::Plan,
+                    name: "Plan".to_string(),
+                    prompt_template: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                },
+                WorkflowStepDefinition {
+                    step_type: WorkflowStepType::Implement,
+                    name: "Implement".to_string(),
+                    prompt_template: None,
+                    max_retries: None,
+                    loop_back_to: Some(1), // Points to self, not preceding
+                },
+            ],
+        };
+        let result = workflow_engine::validate_workflow_definition(&def);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not a preceding step"));
+    }
+
+    #[tokio::test]
+    async fn should_loop_stops_after_max_retries() {
+        let (engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+            .await
+            .unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
+            .await
+            .unwrap();
+        let run_id = run.id.to_string();
+
+        let wf = workflow::find_by_id(&db.pool, &wf_id).await.unwrap().unwrap();
+
+        // Step 4 (Fix Review Findings) has loop_back_to=3, max_retries=3
+        let step_def = &wf.definition.steps[4];
+        assert_eq!(step_def.loop_back_to, Some(3));
+        assert_eq!(step_def.max_retries, Some(3));
+
+        // No completions of target step 3 yet → should loop
+        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
+        assert!(result, "should loop when target has no completions");
+
+        // Simulate 1 completion of step 3 (first execution, not a retry) → should loop
+        workflow_step_output::create(
+            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &WorkflowStepStatus::Completed, None,
+        ).await.unwrap();
+        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
+        assert!(result, "should loop after 1 completion (0 retries done)");
+
+        // Simulate 2nd and 3rd completions (retries 1 and 2)
+        workflow_step_output::create(
+            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &WorkflowStepStatus::Completed, None,
+        ).await.unwrap();
+        workflow_step_output::create(
+            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &WorkflowStepStatus::Completed, None,
+        ).await.unwrap();
+        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
+        assert!(result, "should loop after 3 completions (2 retries done, max is 3)");
+
+        // 4th completion (retry 3 = max_retries) → should NOT loop
+        workflow_step_output::create(
+            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &WorkflowStepStatus::Completed, None,
+        ).await.unwrap();
+        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
+        assert!(!result, "should stop looping after 4 completions (3 retries = max)");
+    }
+
+    #[tokio::test]
+    async fn should_loop_stops_when_human_approved() {
+        let (engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+            .await
+            .unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
+            .await
+            .unwrap();
+        let run_id = run.id.to_string();
+
+        let wf = workflow::find_by_id(&db.pool, &wf_id).await.unwrap().unwrap();
+
+        // Step 6 (Fix Human Comments) has loop_back_to=5, no max_retries
+        let step_def = &wf.definition.steps[6];
+        assert_eq!(step_def.loop_back_to, Some(5));
+        assert_eq!(step_def.max_retries, None);
+
+        // Step 5 (Human PR Review) is a HumanReview step
+        assert_eq!(wf.definition.steps[5].step_type, WorkflowStepType::HumanReview);
+
+        // Simulate human rejection at step 5 → should loop
+        let step5_output = workflow_step_output::create(
+            &db.pool, &run_id, 5, &WorkflowStepType::HumanReview,
+            &WorkflowStepStatus::WaitingForHuman, None,
+        ).await.unwrap();
+        workflow_step_output::update_status_and_output(
+            &db.pool, &step5_output.id.to_string(),
+            &WorkflowStepStatus::Rejected, Some("needs fixes"),
+        ).await.unwrap();
+        let result = engine.should_loop(&run_id, &wf, step_def, 5).await.unwrap();
+        assert!(result, "should loop when human rejected");
+
+        // Simulate human approval at step 5 (new attempt) → should NOT loop
+        let step5_output2 = workflow_step_output::create(
+            &db.pool, &run_id, 5, &WorkflowStepType::HumanReview,
+            &WorkflowStepStatus::WaitingForHuman, None,
+        ).await.unwrap();
+        workflow_step_output::update_status_and_output(
+            &db.pool, &step5_output2.id.to_string(),
+            &WorkflowStepStatus::Completed, Some("looks good"),
+        ).await.unwrap();
+        let result = engine.should_loop(&run_id, &wf, step_def, 5).await.unwrap();
+        assert!(!result, "should stop looping when human approved");
+    }
+
+    #[tokio::test]
+    async fn start_workflow_rejects_invalid_loop_back_to() {
+        let (engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+
+        // Create workflow with invalid loop_back_to (pointing to self)
+        let bad_def = WorkflowDefinition {
+            steps: vec![
+                WorkflowStepDefinition {
+                    step_type: WorkflowStepType::Plan,
+                    name: "Plan".to_string(),
+                    prompt_template: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                },
+                WorkflowStepDefinition {
+                    step_type: WorkflowStepType::Implement,
+                    name: "Implement".to_string(),
+                    prompt_template: None,
+                    max_retries: None,
+                    loop_back_to: Some(1), // self-loop is invalid
+                },
+            ],
+        };
+        let wf = workflow::create(&db.pool, "Bad WF", &bad_def).await.unwrap();
+
+        let agent = composer_db::models::agent::create(
+            &db.pool, "Agent", &AgentType::ClaudeCode, None,
+        ).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+            .await
+            .unwrap();
+        task::update_assigned_agent(
+            &db.pool, &task_obj.id.to_string(), Some(&agent.id.to_string()),
+        ).await.unwrap();
+
+        let result = engine.start(&task_obj.id.to_string(), &wf.id.to_string()).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not a preceding step"));
     }
 }

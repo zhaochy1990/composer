@@ -285,7 +285,10 @@ fn ws_command_send_input_roundtrip() {
     let json = serde_json::to_string(&cmd).unwrap();
     let parsed: WsCommand = serde_json::from_str(&json).unwrap();
     match parsed {
-        WsCommand::SendInput { session_id, message } => {
+        WsCommand::SendInput {
+            session_id,
+            message,
+        } => {
             assert_eq!(session_id, uuid::Uuid::nil());
             assert_eq!(message, "hello");
         }
@@ -351,12 +354,14 @@ fn workflow_definition_roundtrip() {
                 name: "Plan".to_string(),
                 prompt_template: Some("Do {{task}}".to_string()),
                 max_retries: Some(3),
+                loop_back_to: None,
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::HumanGate,
                 name: "Review".to_string(),
                 prompt_template: None,
                 max_retries: None,
+                loop_back_to: None,
             },
         ],
     };
@@ -364,7 +369,10 @@ fn workflow_definition_roundtrip() {
     let parsed: WorkflowDefinition = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.steps.len(), 2);
     assert_eq!(parsed.steps[0].step_type, WorkflowStepType::Plan);
-    assert_eq!(parsed.steps[0].prompt_template.as_deref(), Some("Do {{task}}"));
+    assert_eq!(
+        parsed.steps[0].prompt_template.as_deref(),
+        Some("Do {{task}}")
+    );
     assert_eq!(parsed.steps[1].step_type, WorkflowStepType::HumanGate);
 }
 

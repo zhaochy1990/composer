@@ -237,19 +237,23 @@ pub struct Workflow {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct WorkflowDefinition {
     pub steps: Vec<WorkflowStepDefinition>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct WorkflowStepDefinition {
     pub step_type: WorkflowStepType,
     pub name: String,
     pub prompt_template: Option<String>,
     pub max_retries: Option<i32>,
+    /// Step index to loop back to after this step completes.
+    /// Used for review-fix cycles (e.g., fix step loops back to review step).
+    #[serde(default)]
+    pub loop_back_to: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

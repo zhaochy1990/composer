@@ -47,7 +47,7 @@ function StepStatusBadge({ status }: { status: WorkflowStepStatus }) {
 
     return (
         <span className={`text-xs px-1.5 py-0.5 rounded border ${colors[status]}`}>
-            {status.replace('_', ' ')}
+            {status.replaceAll('_', ' ')}
         </span>
     );
 }
@@ -146,6 +146,11 @@ export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: Workf
                                     {latestOutput && latestOutput.attempt > 1 && (
                                         <span className="text-xs text-gray-500">
                                             (attempt {latestOutput.attempt})
+                                        </span>
+                                    )}
+                                    {step.loop_back_to != null && (
+                                        <span className="text-xs text-gray-500 flex items-center gap-0.5" title={`Loops back to step ${step.loop_back_to + 1}`}>
+                                            <RotateCcw className="w-3 h-3" />
                                         </span>
                                     )}
                                 </div>
