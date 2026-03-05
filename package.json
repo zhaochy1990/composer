@@ -5,6 +5,7 @@
     "packageManager": "pnpm@9.15.0",
     "engines": { "node": ">=20" },
     "scripts": {
+        "start": "pnpm run build && cargo run --release --bin composer-server",
         "dev": "concurrently \"pnpm run dev:web\" \"pnpm run dev:server\"",
         "dev:web": "cd packages/web && pnpm run dev",
         "kill:server": "powershell -Command \"Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }\"",
