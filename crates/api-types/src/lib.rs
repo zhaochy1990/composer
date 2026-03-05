@@ -105,6 +105,7 @@ pub enum WorkflowStepType {
     Implement,
     PrReview,
     HumanReview,
+    CompletePr,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]

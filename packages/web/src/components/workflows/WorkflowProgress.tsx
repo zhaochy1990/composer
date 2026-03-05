@@ -15,6 +15,7 @@ const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
     implement: 'Implement',
     pr_review: 'PR Review',
     human_review: 'Human Review',
+    complete_pr: 'Complete PR',
 };
 
 function StepStatusIcon({ status }: { status: WorkflowStepStatus }) {

@@ -9,6 +9,7 @@ const STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
     { value: 'implement', label: 'Implement' },
     { value: 'pr_review', label: 'PR Review' },
     { value: 'human_review', label: 'Human Review' },
+    { value: 'complete_pr', label: 'Complete PR' },
 ];
 
 interface WorkflowEditPanelProps {

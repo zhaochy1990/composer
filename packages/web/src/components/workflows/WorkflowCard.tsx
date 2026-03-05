@@ -7,6 +7,7 @@ const STEP_TYPE_LABELS: Record<string, string> = {
     implement: 'Implement',
     pr_review: 'PR Review',
     human_review: 'Human Review',
+    complete_pr: 'Complete PR',
 };
 
 const STEP_TYPE_COLORS: Record<string, string> = {
@@ -15,6 +16,7 @@ const STEP_TYPE_COLORS: Record<string, string> = {
     implement: 'bg-green-900/40 text-green-300 border-green-800',
     pr_review: 'bg-purple-900/40 text-purple-300 border-purple-800',
     human_review: 'bg-orange-900/40 text-orange-300 border-orange-800',
+    complete_pr: 'bg-teal-900/40 text-teal-300 border-teal-800',
 };
 
 interface WorkflowCardProps {
