@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, Circle, Clock, AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, RotateCcw } from 'lucide-react';
 import type { WorkflowRun, WorkflowStepType, WorkflowStepStatus, Workflow } from '@/types/generated';
 import { useWorkflowStepOutputs, useSubmitWorkflowDecision, useResumeWorkflowRun } from '@/hooks/use-workflows';
@@ -6,6 +6,7 @@ import { useWorkflowStepOutputs, useSubmitWorkflowDecision, useResumeWorkflowRun
 interface WorkflowProgressProps {
     workflowRun: WorkflowRun;
     workflow: Workflow;
+    onPlanContent?: (content: string | null) => void;
 }
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
@@ -50,7 +51,7 @@ function StepStatusBadge({ status }: { status: WorkflowStepStatus }) {
     );
 }
 
-export function WorkflowProgress({ workflowRun, workflow }: WorkflowProgressProps) {
+export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: WorkflowProgressProps) {
     const { data: stepOutputs } = useWorkflowStepOutputs(workflowRun.id);
     const submitDecision = useSubmitWorkflowDecision();
     const resumeRun = useResumeWorkflowRun();
@@ -68,6 +69,20 @@ export function WorkflowProgress({ workflowRun, workflow }: WorkflowProgressProp
     // Check if paused due to server crash (paused but no human gate waiting)
     const isPausedForRecovery = isWaitingForHuman && !currentHumanStep;
     const canResume = isPausedForRecovery || isFailed;
+
+    // Expose plan content to parent when at a human gate
+    useEffect(() => {
+        if (!onPlanContent) return;
+        if (currentHumanStep && stepOutputs) {
+            const planOutputs = stepOutputs
+                .filter(o => o.step_type === 'plan' && o.status === 'completed');
+            const planOutput = planOutputs.length > 0 ? planOutputs[planOutputs.length - 1] : null;
+            onPlanContent(planOutput?.output ?? null);
+        } else {
+            onPlanContent(null);
+        }
+        return () => onPlanContent(null);
+    }, [currentHumanStep, stepOutputs, onPlanContent]);
 
     function handleDecision(approved: boolean) {
         submitDecision.mutate({

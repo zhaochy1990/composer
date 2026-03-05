@@ -10,6 +10,7 @@ import { useWorkflows as useAllWorkflows, useWorkflowRun, useWorkflow, useStartW
 import { SessionOutput } from '@/components/sessions/SessionOutput';
 import { StatusBadge } from '@/components/sessions/StatusBadge';
 import { WorkflowProgress } from '@/components/workflows/WorkflowProgress';
+import { PlanReviewPanel } from '@/components/workflows/PlanReviewPanel';
 import { shortId, formatDuration, formatTime } from '@/lib/utils';
 
 interface TaskDetailPanelProps {
@@ -59,6 +60,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const startWorkflow = useStartWorkflow();
     const { data: workflowRun } = useWorkflowRun(task.workflow_run_id ?? undefined);
     const { data: workflow } = useWorkflow(workflowRun?.workflow_id ?? undefined);
+    const [planContent, setPlanContent] = useState<string | null>(null);
 
     // Default to first available agent if not set
     useEffect(() => {
@@ -146,6 +148,11 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                 onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
             />
 
+            {/* Plan Review Panel — left of task detail panel */}
+            {planContent && (
+                <PlanReviewPanel content={planContent} />
+            )}
+
             {/* Panel */}
             <div className="fixed inset-y-0 right-0 w-[900px] max-w-full z-50 bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
                 {/* Header */}
@@ -187,7 +194,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                 {/* Workflow Progress */}
                 {workflowRun && workflow && (
                     <div className="px-6 py-3 border-b border-gray-800 shrink-0">
-                        <WorkflowProgress workflowRun={workflowRun} workflow={workflow} />
+                        <WorkflowProgress workflowRun={workflowRun} workflow={workflow} onPlanContent={setPlanContent} />
                     </div>
                 )}
 
