@@ -750,10 +750,24 @@ impl WorkflowEngine {
             run_id,
         ).await?;
 
-        let task_context = if let Some(ref desc) = task.description {
+        let base_task_context = if let Some(ref desc) = task.description {
             format!("Task: {} - {}", task.title, desc)
         } else {
             format!("Task: {}", task.title)
+        };
+
+        // Prepend project instructions if any exist
+        let task_context = if let Some(ref pid) = task.project_id {
+            let instructions = composer_db::models::project_instruction::list_by_project(
+                &self.db.pool,
+                &pid.to_string(),
+            ).await?;
+            match composer_db::models::project_instruction::format_instructions_block(&instructions) {
+                Some(block) => format!("{} - {}", block, base_task_context),
+                None => base_task_context,
+            }
+        } else {
+            base_task_context
         };
 
         // Use custom template if provided, otherwise use defaults

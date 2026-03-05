@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { X, Plus, Trash2, GitBranch } from 'lucide-react';
-import type { Project } from '@/types/generated';
-import { useUpdateProject, useDeleteProject, useProjectRepositories, useRemoveProjectRepository } from '@/hooks/use-projects';
+import { X, Plus, Trash2, Pencil, GitBranch, BookOpen } from 'lucide-react';
+import type { Project, ProjectInstruction } from '@/types/generated';
+import { useUpdateProject, useDeleteProject, useProjectRepositories, useRemoveProjectRepository, useProjectInstructions, useRemoveProjectInstruction } from '@/hooks/use-projects';
 import { RepositoryAddDialog } from './RepositoryAddDialog';
+import { InstructionAddDialog } from './InstructionAddDialog';
 
 interface ProjectDetailPanelProps {
     project: Project;
@@ -14,11 +15,15 @@ export function ProjectDetailPanel({ project, onClose }: ProjectDetailPanelProps
     const [editName, setEditName] = useState(project.name);
     const [editDescription, setEditDescription] = useState(project.description ?? '');
     const [addRepoOpen, setAddRepoOpen] = useState(false);
+    const [addInstrOpen, setAddInstrOpen] = useState(false);
+    const [editingInstruction, setEditingInstruction] = useState<ProjectInstruction | undefined>();
 
     const updateProject = useUpdateProject();
     const deleteProject = useDeleteProject();
     const { data: repos } = useProjectRepositories(project.id);
     const removeRepo = useRemoveProjectRepository();
+    const { data: instructions } = useProjectInstructions(project.id);
+    const removeInstruction = useRemoveProjectInstruction();
 
     function handleSave() {
         updateProject.mutate(
@@ -150,12 +155,68 @@ export function ProjectDetailPanel({ project, onClose }: ProjectDetailPanelProps
                         </div>
                     )}
                 </div>
+
+                <div className="border-t border-gray-800 pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-medium text-gray-300">Instructions</h3>
+                        <button
+                            onClick={() => { setEditingInstruction(undefined); setAddInstrOpen(true); }}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded hover:bg-gray-700"
+                        >
+                            <Plus className="w-3 h-3" />
+                            Add
+                        </button>
+                    </div>
+
+                    {instructions && instructions.length === 0 && (
+                        <p className="text-sm text-gray-500">No instructions added yet.</p>
+                    )}
+
+                    {instructions && instructions.length > 0 && (
+                        <div className="space-y-2">
+                            {instructions.map(instr => (
+                                <div key={instr.id} className="p-2 bg-gray-800 rounded-md group">
+                                    <div className="flex items-start gap-2">
+                                        <BookOpen className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm text-gray-200 font-medium">{instr.title}</p>
+                                            <p className="text-xs text-gray-400 mt-1 line-clamp-2">{instr.content}</p>
+                                        </div>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => { setEditingInstruction(instr); setAddInstrOpen(true); }}
+                                                className="text-gray-600 hover:text-blue-400 p-1"
+                                                title="Edit instruction"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={() => removeInstruction.mutate({ projectId: project.id, instructionId: instr.id })}
+                                                disabled={removeInstruction.isPending}
+                                                className="text-gray-600 hover:text-red-400 p-1"
+                                                title="Remove instruction"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <RepositoryAddDialog
                 isOpen={addRepoOpen}
                 onClose={() => setAddRepoOpen(false)}
                 projectId={project.id}
+            />
+            <InstructionAddDialog
+                isOpen={addInstrOpen}
+                onClose={() => { setAddInstrOpen(false); setEditingInstruction(undefined); }}
+                projectId={project.id}
+                instruction={editingInstruction}
             />
         </div>
     );

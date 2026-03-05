@@ -135,4 +135,91 @@ impl ProjectService {
     pub async fn list_tasks(&self, project_id: &str) -> anyhow::Result<Vec<Task>> {
         composer_db::models::task::list_by_project(&self.db.pool, project_id).await
     }
+
+    // ---- Instruction sub-resource ----
+
+    pub async fn add_instruction(
+        &self,
+        project_id: &str,
+        req: AddProjectInstructionRequest,
+    ) -> anyhow::Result<ProjectInstruction> {
+        let title = req.title.trim().to_string();
+        let content = req.content.trim().to_string();
+        if title.is_empty() {
+            anyhow::bail!("Instruction title cannot be empty");
+        }
+        if content.is_empty() {
+            anyhow::bail!("Instruction content cannot be empty");
+        }
+
+        composer_db::models::project::find_by_id(&self.db.pool, project_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
+
+        let instruction = composer_db::models::project_instruction::create(
+            &self.db.pool,
+            project_id,
+            &title,
+            &content,
+            req.sort_order,
+        )
+        .await?;
+
+        let pid: uuid::Uuid = project_id.parse()?;
+        self.event_bus.broadcast(WsEvent::ProjectInstructionAdded {
+            project_id: pid,
+            instruction: instruction.clone(),
+        });
+        Ok(instruction)
+    }
+
+    pub async fn list_instructions(&self, project_id: &str) -> anyhow::Result<Vec<ProjectInstruction>> {
+        composer_db::models::project_instruction::list_by_project(&self.db.pool, project_id).await
+    }
+
+    pub async fn update_instruction(
+        &self,
+        project_id: &str,
+        instruction_id: &str,
+        req: UpdateProjectInstructionRequest,
+    ) -> anyhow::Result<ProjectInstruction> {
+        if let Some(ref t) = req.title {
+            if t.trim().is_empty() {
+                anyhow::bail!("Instruction title cannot be empty");
+            }
+        }
+        if let Some(ref c) = req.content {
+            if c.trim().is_empty() {
+                anyhow::bail!("Instruction content cannot be empty");
+            }
+        }
+
+        let instruction = composer_db::models::project_instruction::update(
+            &self.db.pool,
+            project_id,
+            instruction_id,
+            req.title.as_deref().map(str::trim),
+            req.content.as_deref().map(str::trim),
+            req.sort_order,
+        )
+        .await?;
+
+        let pid: uuid::Uuid = project_id.parse()?;
+        self.event_bus.broadcast(WsEvent::ProjectInstructionUpdated {
+            project_id: pid,
+            instruction: instruction.clone(),
+        });
+        Ok(instruction)
+    }
+
+    pub async fn remove_instruction(&self, project_id: &str, instruction_id: &str) -> anyhow::Result<()> {
+        let pid: uuid::Uuid = project_id.parse()?;
+        let iid: uuid::Uuid = instruction_id.parse()?;
+        composer_db::models::project_instruction::delete(&self.db.pool, project_id, instruction_id).await?;
+        self.event_bus.broadcast(WsEvent::ProjectInstructionRemoved {
+            project_id: pid,
+            instruction_id: iid,
+        });
+        Ok(())
+    }
 }

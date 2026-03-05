@@ -128,10 +128,20 @@ impl TaskService {
         // Build prompt from title + description
         // Use " - " separator instead of newlines because Windows npx.cmd
         // cannot handle newlines in batch file arguments
-        let prompt = if let Some(ref desc) = task.description {
+        let base_prompt = if let Some(ref desc) = task.description {
             format!("{} - {}", task.title, desc)
         } else {
             task.title.clone()
+        };
+
+        // Prepend project instructions if any exist
+        let instructions = composer_db::models::project_instruction::list_by_project(
+            &self.db.pool,
+            &project_id.to_string(),
+        ).await?;
+        let prompt = match composer_db::models::project_instruction::format_instructions_block(&instructions) {
+            Some(block) => format!("{} - {}", block, base_prompt),
+            None => base_prompt,
         };
 
         let session = self.session_service.create_session(CreateSessionRequest {

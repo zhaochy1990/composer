@@ -5,6 +5,7 @@ pub mod worktree;
 pub mod session_log;
 pub mod project;
 pub mod project_repository;
+pub mod project_instruction;
 pub mod workflow;
 pub mod workflow_run;
 pub mod workflow_step_output;

@@ -3,8 +3,8 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
-    AgentHealth, AgentStatus, LogType, Project, ProjectRepository, Task, TaskStatus,
-    WorkflowRun, WorkflowStepOutput, Worktree,
+    AgentHealth, AgentStatus, LogType, Project, ProjectInstruction, ProjectRepository, Task,
+    TaskStatus, WorkflowRun, WorkflowStepOutput, Worktree,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -30,6 +30,9 @@ pub enum WsEvent {
     ProjectDeleted { project_id: Uuid },
     ProjectRepositoryAdded { project_id: Uuid, repository: ProjectRepository },
     ProjectRepositoryRemoved { project_id: Uuid, repository_id: Uuid },
+    ProjectInstructionAdded { project_id: Uuid, instruction: ProjectInstruction },
+    ProjectInstructionUpdated { project_id: Uuid, instruction: ProjectInstruction },
+    ProjectInstructionRemoved { project_id: Uuid, instruction_id: Uuid },
     WorkflowRunUpdated(WorkflowRun),
     WorkflowStepChanged { workflow_run_id: Uuid, step: WorkflowStepOutput },
     WorkflowRunCompleted { workflow_run_id: Uuid, task_id: Uuid },

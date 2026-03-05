@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import type { Project, ProjectRepository } from '@/types/generated';
+import type { Project, ProjectInstruction, ProjectRepository } from '@/types/generated';
 
 export function useProjects() {
     return useQuery({
@@ -69,5 +69,43 @@ export function useRemoveProjectRepository() {
             apiFetch<void>(`/projects/${projectId}/repositories/${repoId}`, { method: 'DELETE' }),
         onSuccess: (_data, variables) =>
             queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'repositories'] }),
+    });
+}
+
+export function useProjectInstructions(projectId: string) {
+    return useQuery({
+        queryKey: ['projects', projectId, 'instructions'],
+        queryFn: () => apiFetch<ProjectInstruction[]>(`/projects/${projectId}/instructions`),
+        enabled: !!projectId,
+    });
+}
+
+export function useAddProjectInstruction() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ projectId, ...data }: { projectId: string; title: string; content: string; sort_order?: number }) =>
+            apiFetch<ProjectInstruction>(`/projects/${projectId}/instructions`, { method: 'POST', body: JSON.stringify(data) }),
+        onSuccess: (_data, variables) =>
+            queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'instructions'] }),
+    });
+}
+
+export function useUpdateProjectInstruction() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ projectId, instructionId, ...data }: { projectId: string; instructionId: string; title?: string; content?: string; sort_order?: number }) =>
+            apiFetch<ProjectInstruction>(`/projects/${projectId}/instructions/${instructionId}`, { method: 'PUT', body: JSON.stringify(data) }),
+        onSuccess: (_data, variables) =>
+            queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'instructions'] }),
+    });
+}
+
+export function useRemoveProjectInstruction() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ projectId, instructionId }: { projectId: string; instructionId: string }) =>
+            apiFetch<void>(`/projects/${projectId}/instructions/${instructionId}`, { method: 'DELETE' }),
+        onSuccess: (_data, variables) =>
+            queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'instructions'] }),
     });
 }

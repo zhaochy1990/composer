@@ -99,6 +99,16 @@ export interface ProjectRepository {
     updated_at: string;
 }
 
+export interface ProjectInstruction {
+    id: string;
+    project_id: string;
+    title: string;
+    content: string;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Workflow {
     id: string;
     name: string;
@@ -231,6 +241,18 @@ export interface UpdateProjectRepositoryRequest {
     display_name?: string;
 }
 
+export interface AddProjectInstructionRequest {
+    title: string;
+    content: string;
+    sort_order?: number;
+}
+
+export interface UpdateProjectInstructionRequest {
+    title?: string;
+    content?: string;
+    sort_order?: number;
+}
+
 export interface CreateWorkflowRequest {
     name: string;
     definition: WorkflowDefinition;
@@ -306,6 +328,9 @@ export type WsEvent =
     | { type: "ProjectDeleted"; payload: { project_id: string } }
     | { type: "ProjectRepositoryAdded"; payload: { project_id: string; repository: ProjectRepository } }
     | { type: "ProjectRepositoryRemoved"; payload: { project_id: string; repository_id: string } }
+    | { type: "ProjectInstructionAdded"; payload: { project_id: string; instruction: ProjectInstruction } }
+    | { type: "ProjectInstructionUpdated"; payload: { project_id: string; instruction: ProjectInstruction } }
+    | { type: "ProjectInstructionRemoved"; payload: { project_id: string; instruction_id: string } }
     | { type: "WorkflowRunUpdated"; payload: WorkflowRun }
     | { type: "WorkflowStepChanged"; payload: { workflow_run_id: string; step: WorkflowStepOutput } }
     | { type: "WorkflowRunCompleted"; payload: { workflow_run_id: string; task_id: string } }

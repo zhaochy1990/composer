@@ -215,6 +215,18 @@ pub struct ProjectRepository {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct ProjectInstruction {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub title: String,
+    pub content: String,
+    pub sort_order: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Workflow {
     pub id: Uuid,
     pub name: String,
@@ -383,6 +395,22 @@ pub struct UpdateProjectRepositoryRequest {
     pub remote_url: Option<String>,
     pub role: Option<RepositoryRole>,
     pub display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct AddProjectInstructionRequest {
+    pub title: String,
+    pub content: String,
+    pub sort_order: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateProjectInstructionRequest {
+    pub title: Option<String>,
+    pub content: Option<String>,
+    pub sort_order: Option<i32>,
 }
 
 #[derive(Debug, Deserialize, TS)]

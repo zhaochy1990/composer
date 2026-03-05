@@ -14,7 +14,36 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/projects/{id}", get(get_project).put(update_project).delete(delete_project))
         .route("/projects/{id}/repositories", get(list_repositories).post(add_repository))
         .route("/projects/{id}/repositories/{repo_id}", put(update_repository).delete(remove_repository))
+        .route("/projects/{id}/instructions", get(list_instructions).post(add_instruction))
+        .route("/projects/{id}/instructions/{instr_id}", put(update_instruction).delete(remove_instruction))
         .route("/projects/{id}/tasks", get(list_project_tasks))
+}
+
+async fn list_instructions(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Vec<ProjectInstruction>>, ServiceError> {
+    let instructions = state.services.projects.list_instructions(&id).await?;
+    Ok(Json(instructions))
+}
+
+async fn add_instruction(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<AddProjectInstructionRequest>) -> Result<Json<ProjectInstruction>, ServiceError> {
+    let instruction = state.services.projects.add_instruction(&id, req).await?;
+    Ok(Json(instruction))
+}
+
+async fn update_instruction(
+    State(state): State<Arc<AppState>>,
+    Path((id, instr_id)): Path<(String, String)>,
+    Json(req): Json<UpdateProjectInstructionRequest>,
+) -> Result<Json<ProjectInstruction>, ServiceError> {
+    let instruction = state.services.projects.update_instruction(&id, &instr_id, req).await?;
+    Ok(Json(instruction))
+}
+
+async fn remove_instruction(
+    State(state): State<Arc<AppState>>,
+    Path((id, instr_id)): Path<(String, String)>,
+) -> Result<(), ServiceError> {
+    state.services.projects.remove_instruction(&id, &instr_id).await?;
+    Ok(())
 }
 
 async fn list_projects(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Project>>, ServiceError> {

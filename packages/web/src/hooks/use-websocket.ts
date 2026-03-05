@@ -125,6 +125,15 @@ export function useWebSocket() {
                     break;
                 }
 
+                case 'ProjectInstructionAdded':
+                case 'ProjectInstructionUpdated':
+                case 'ProjectInstructionRemoved': {
+                    queryClient.invalidateQueries({
+                        queryKey: ['projects', parsed.payload.project_id, 'instructions'],
+                    });
+                    break;
+                }
+
                 default:
                     break;
             }
