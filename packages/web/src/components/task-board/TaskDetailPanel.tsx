@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest } from 'lucide-react';
+import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession, useSendSessionInput, useRetrySession } from '@/hooks/use-sessions';
 import { useAgents } from '@/hooks/use-agents';
 import { useProjects } from '@/hooks/use-projects';
+import { useWorkflowsByProject, useWorkflowRun, useWorkflow, useStartWorkflow } from '@/hooks/use-workflows';
 import { SessionOutput } from '@/components/sessions/SessionOutput';
 import { StatusBadge } from '@/components/sessions/StatusBadge';
+import { WorkflowProgress } from '@/components/workflows/WorkflowProgress';
 import { shortId, formatDuration, formatTime } from '@/lib/utils';
 
 interface TaskDetailPanelProps {
@@ -50,6 +52,13 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const sendInputMutation = useSendSessionInput();
     const retryMutation = useRetrySession();
     const [messageInput, setMessageInput] = useState('');
+
+    // --- Workflows ---
+    const { data: projectWorkflows } = useWorkflowsByProject(task.project_id ?? undefined);
+    const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('');
+    const startWorkflow = useStartWorkflow();
+    const { data: workflowRun } = useWorkflowRun(task.workflow_run_id ?? undefined);
+    const { data: workflow } = useWorkflow(workflowRun?.workflow_id ?? undefined);
 
     // Default to first available agent if not set
     useEffect(() => {
@@ -172,6 +181,13 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                 <ExternalLink className="w-3 h-3" />
                             </a>
                         ))}
+                    </div>
+                )}
+
+                {/* Workflow Progress */}
+                {workflowRun && workflow && (
+                    <div className="px-6 py-3 border-b border-gray-800 shrink-0">
+                        <WorkflowProgress workflowRun={workflowRun} workflow={workflow} />
                     </div>
                 )}
 
@@ -336,31 +352,67 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                             const missingAgent = !task.assigned_agent_id;
                             const missingProject = !task.project_id;
                             const canStart = !missingAgent && !missingProject;
+                            const hasWorkflows = projectWorkflows && projectWorkflows.length > 0;
                             const tooltip = missingAgent && missingProject
                                 ? 'Assign an agent and project first'
                                 : missingAgent ? 'Assign an agent first'
                                 : missingProject ? 'Assign a project first'
                                 : undefined;
                             return (
-                                <button
-                                    type="button"
-                                    title={tooltip}
-                                    onClick={() => startTask.mutate(task.id, {
-                                        onSuccess: (data) => {
-                                            setSelectedSessionId(data.session.id);
-                                            setFormCollapsed(true);
-                                        },
-                                    })}
-                                    disabled={!canStart || startTask.isPending}
-                                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <Play className="w-3 h-3" />
-                                    {startTask.isPending ? 'Starting...' : 'Start'}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {hasWorkflows && (
+                                        <>
+                                            <select
+                                                value={selectedWorkflowId}
+                                                onChange={(e) => setSelectedWorkflowId(e.target.value)}
+                                                className="bg-gray-800 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="">No workflow</option>
+                                                {projectWorkflows.map(wf => (
+                                                    <option key={wf.id} value={wf.id}>{wf.name}</option>
+                                                ))}
+                                            </select>
+                                            {selectedWorkflowId && (
+                                                <button
+                                                    type="button"
+                                                    title={tooltip}
+                                                    onClick={() => startWorkflow.mutate(
+                                                        { taskId: task.id, workflowId: selectedWorkflowId },
+                                                        {
+                                                            onSuccess: () => setFormCollapsed(true),
+                                                        },
+                                                    )}
+                                                    disabled={!canStart || startWorkflow.isPending}
+                                                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-purple-600 text-white hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    <WorkflowIcon className="w-3 h-3" />
+                                                    {startWorkflow.isPending ? 'Starting...' : 'Start Workflow'}
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                    {!selectedWorkflowId && (
+                                        <button
+                                            type="button"
+                                            title={tooltip}
+                                            onClick={() => startTask.mutate(task.id, {
+                                                onSuccess: (data) => {
+                                                    setSelectedSessionId(data.session.id);
+                                                    setFormCollapsed(true);
+                                                },
+                                            })}
+                                            disabled={!canStart || startTask.isPending}
+                                            className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <Play className="w-3 h-3" />
+                                            {startTask.isPending ? 'Starting...' : 'Start'}
+                                        </button>
+                                    )}
+                                </div>
                             );
                         })()}
-                        {startTask.isError && (
-                            <p className="text-xs text-red-400 mt-1">{(startTask.error as Error).message}</p>
+                        {(startTask.isError || startWorkflow.isError) && (
+                            <p className="text-xs text-red-400 mt-1">{((startTask.error || startWorkflow.error) as Error).message}</p>
                         )}
                     </div>
 

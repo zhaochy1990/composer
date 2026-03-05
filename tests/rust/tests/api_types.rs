@@ -197,6 +197,8 @@ fn ws_event_tagged_serialization_task_created() {
         position: 1.0,
         task_number: 0,
         simple_id: String::new(),
+        pr_urls: vec![],
+        workflow_run_id: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -302,4 +304,113 @@ fn ws_event_session_output_user_input() {
     assert_eq!(json["type"], "SessionOutput");
     assert_eq!(json["payload"]["log_type"], "user_input");
     assert_eq!(json["payload"]["content"], "user message");
+}
+
+// ---------------------------------------------------------------------------
+// Workflow type serialization tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn workflow_run_status_serialization() {
+    let status = WorkflowRunStatus::Running;
+    let json = serde_json::to_value(&status).unwrap();
+    assert_eq!(json, "running");
+
+    let status = WorkflowRunStatus::Paused;
+    let json = serde_json::to_value(&status).unwrap();
+    assert_eq!(json, "paused");
+}
+
+#[test]
+fn workflow_step_type_serialization() {
+    let step = WorkflowStepType::Plan;
+    assert_eq!(serde_json::to_value(&step).unwrap(), "plan");
+
+    let step = WorkflowStepType::HumanGate;
+    assert_eq!(serde_json::to_value(&step).unwrap(), "human_gate");
+
+    let step = WorkflowStepType::PrReview;
+    assert_eq!(serde_json::to_value(&step).unwrap(), "pr_review");
+}
+
+#[test]
+fn workflow_step_status_serialization() {
+    let status = WorkflowStepStatus::WaitingForHuman;
+    assert_eq!(serde_json::to_value(&status).unwrap(), "waiting_for_human");
+
+    let status = WorkflowStepStatus::Rejected;
+    assert_eq!(serde_json::to_value(&status).unwrap(), "rejected");
+}
+
+#[test]
+fn workflow_definition_roundtrip() {
+    let def = WorkflowDefinition {
+        steps: vec![
+            WorkflowStepDefinition {
+                step_type: WorkflowStepType::Plan,
+                name: "Plan".to_string(),
+                prompt_template: Some("Do {{task}}".to_string()),
+                max_retries: Some(3),
+            },
+            WorkflowStepDefinition {
+                step_type: WorkflowStepType::HumanGate,
+                name: "Review".to_string(),
+                prompt_template: None,
+                max_retries: None,
+            },
+        ],
+    };
+    let json = serde_json::to_string(&def).unwrap();
+    let parsed: WorkflowDefinition = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.steps.len(), 2);
+    assert_eq!(parsed.steps[0].step_type, WorkflowStepType::Plan);
+    assert_eq!(parsed.steps[0].prompt_template.as_deref(), Some("Do {{task}}"));
+    assert_eq!(parsed.steps[1].step_type, WorkflowStepType::HumanGate);
+}
+
+#[test]
+fn workflow_run_event_shape() {
+    let run = WorkflowRun {
+        id: uuid::Uuid::nil(),
+        workflow_id: uuid::Uuid::nil(),
+        task_id: uuid::Uuid::nil(),
+        status: WorkflowRunStatus::Running,
+        current_step_index: 2,
+        iteration_count: 1,
+        main_session_id: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+    let event = WsEvent::WorkflowRunUpdated(run);
+    let json: serde_json::Value = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "WorkflowRunUpdated");
+    assert_eq!(json["payload"]["current_step_index"], 2);
+    assert_eq!(json["payload"]["status"], "running");
+}
+
+#[test]
+fn workflow_waiting_event_shape() {
+    let event = WsEvent::WorkflowWaitingForHuman {
+        workflow_run_id: uuid::Uuid::nil(),
+        task_id: uuid::Uuid::nil(),
+        step_index: 1,
+    };
+    let json: serde_json::Value = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "WorkflowWaitingForHuman");
+    assert_eq!(json["payload"]["step_index"], 1);
+}
+
+#[test]
+fn workflow_decision_request_deserialization() {
+    let json = r#"{"approved": false, "comments": "Please add error handling"}"#;
+    let req: WorkflowDecisionRequest = serde_json::from_str(json).unwrap();
+    assert!(!req.approved);
+    assert_eq!(req.comments.as_deref(), Some("Please add error handling"));
+}
+
+#[test]
+fn start_workflow_request_deserialization() {
+    let json = r#"{"workflow_id": "00000000-0000-0000-0000-000000000000"}"#;
+    let req: StartWorkflowRequest = serde_json::from_str(json).unwrap();
+    assert_eq!(req.workflow_id, uuid::Uuid::nil());
 }

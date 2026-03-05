@@ -37,7 +37,7 @@ pub enum AuthStatus {
     Unauthenticated,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
 pub enum TaskStatus {
@@ -86,6 +86,39 @@ pub enum LogType {
     UserInput,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum WorkflowRunStatus {
+    Running,
+    Paused,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum WorkflowStepType {
+    Plan,
+    HumanGate,
+    Implement,
+    PrReview,
+    HumanReview,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum WorkflowStepStatus {
+    Pending,
+    Running,
+    WaitingForHuman,
+    Completed,
+    Rejected,
+    Failed,
+}
+
 // ---------------------------------------------------------------------------
 // Model structs
 // ---------------------------------------------------------------------------
@@ -119,6 +152,7 @@ pub struct Task {
     pub task_number: i32,
     pub simple_id: String,
     pub pr_urls: Vec<String>,
+    pub workflow_run_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -177,6 +211,60 @@ pub struct ProjectRepository {
     pub display_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Workflow {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub name: String,
+    pub definition: WorkflowDefinition,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkflowDefinition {
+    pub steps: Vec<WorkflowStepDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkflowStepDefinition {
+    pub step_type: WorkflowStepType,
+    pub name: String,
+    pub prompt_template: Option<String>,
+    pub max_retries: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkflowRun {
+    pub id: Uuid,
+    pub workflow_id: Uuid,
+    pub task_id: Uuid,
+    pub status: WorkflowRunStatus,
+    pub current_step_index: i32,
+    pub iteration_count: i32,
+    pub main_session_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkflowStepOutput {
+    pub id: Uuid,
+    pub workflow_run_id: Uuid,
+    pub step_index: i32,
+    pub step_type: WorkflowStepType,
+    pub output: Option<String>,
+    pub attempt: i32,
+    pub status: WorkflowStepStatus,
+    pub session_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -288,6 +376,34 @@ pub struct UpdateProjectRepositoryRequest {
     pub remote_url: Option<String>,
     pub role: Option<RepositoryRole>,
     pub display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct CreateWorkflowRequest {
+    pub project_id: Uuid,
+    pub name: String,
+    pub definition: WorkflowDefinition,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateWorkflowRequest {
+    pub name: Option<String>,
+    pub definition: Option<WorkflowDefinition>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct StartWorkflowRequest {
+    pub workflow_id: Uuid,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkflowDecisionRequest {
+    pub approved: bool,
+    pub comments: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,8 @@ mod event_bus_tests {
             position: 1.0,
             task_number: 0,
             simple_id: String::new(),
+            pr_urls: vec![],
+            workflow_run_id: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })
@@ -556,5 +558,362 @@ mod worktree_service_tests {
         assert_eq!(WorktreeStatus::Deleted, WorktreeStatus::Deleted);
         assert_ne!(WorktreeStatus::Active, WorktreeStatus::Deleted);
         assert_ne!(WorktreeStatus::Active, WorktreeStatus::Stale);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Workflow engine tests
+// ---------------------------------------------------------------------------
+
+mod workflow_tests {
+    use super::*;
+    use composer_db::models::{workflow, workflow_run, workflow_step_output, project, task};
+    use composer_services::workflow_engine::{self, WorkflowEngine, FEAT_COMMON_NAME};
+
+    async fn setup() -> (WorkflowEngine, Arc<Database>, EventBus) {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.run_migrations().await.unwrap();
+        let db = Arc::new(db);
+        let event_bus = EventBus::new();
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let session_service = SessionService::new(db.clone(), event_bus.clone(), pm);
+        let engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service);
+        (engine, db, event_bus)
+    }
+
+    async fn create_project(pool: &sqlx::SqlitePool) -> String {
+        let p = project::create(pool, "Test Project", None).await.unwrap();
+        p.id.to_string()
+    }
+
+    async fn create_workflow_in_db(pool: &sqlx::SqlitePool, project_id: &str) -> String {
+        let def = workflow_engine::feat_common_definition();
+        let wf = workflow::create(pool, project_id, FEAT_COMMON_NAME, &def).await.unwrap();
+        wf.id.to_string()
+    }
+
+    #[test]
+    fn feat_common_definition_has_expected_steps() {
+        let def = workflow_engine::feat_common_definition();
+        assert_eq!(def.steps.len(), 7);
+        assert_eq!(def.steps[0].step_type, WorkflowStepType::Plan);
+        assert_eq!(def.steps[1].step_type, WorkflowStepType::HumanGate);
+        assert_eq!(def.steps[2].step_type, WorkflowStepType::Implement);
+        assert_eq!(def.steps[3].step_type, WorkflowStepType::PrReview);
+        assert_eq!(def.steps[4].step_type, WorkflowStepType::Implement);
+        assert_eq!(def.steps[5].step_type, WorkflowStepType::HumanReview);
+        assert_eq!(def.steps[6].step_type, WorkflowStepType::Implement);
+    }
+
+    #[test]
+    fn feat_common_step_names() {
+        let def = workflow_engine::feat_common_definition();
+        assert_eq!(def.steps[0].name, "Plan");
+        assert_eq!(def.steps[1].name, "Review Plan");
+        assert_eq!(def.steps[2].name, "Implement & Create PR");
+        assert_eq!(def.steps[3].name, "Automated PR Review");
+        assert_eq!(def.steps[4].name, "Fix Review Findings");
+        assert_eq!(def.steps[5].name, "Human PR Review");
+        assert_eq!(def.steps[6].name, "Fix Human Comments");
+    }
+
+    #[tokio::test]
+    async fn ensure_builtin_workflow_creates_once() {
+        let (engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+
+        // First call creates
+        let wf1 = engine.ensure_builtin_workflow(&project_id).await.unwrap();
+        assert_eq!(wf1.name, FEAT_COMMON_NAME);
+
+        // Second call returns same
+        let wf2 = engine.ensure_builtin_workflow(&project_id).await.unwrap();
+        assert_eq!(wf1.id, wf2.id);
+
+        // Only one workflow exists
+        let all = workflow::list_by_project(&db.pool, &project_id).await.unwrap();
+        assert_eq!(all.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn workflow_crud() {
+        let (_engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+
+        let def = WorkflowDefinition { steps: vec![
+            WorkflowStepDefinition {
+                step_type: WorkflowStepType::Plan,
+                name: "Plan".to_string(),
+                prompt_template: None,
+                max_retries: None,
+            },
+        ]};
+
+        let wf = workflow::create(&db.pool, &project_id, "Test WF", &def).await.unwrap();
+        assert_eq!(wf.name, "Test WF");
+        assert_eq!(wf.definition.steps.len(), 1);
+
+        let found = workflow::find_by_id(&db.pool, &wf.id.to_string()).await.unwrap();
+        assert!(found.is_some());
+
+        let updated = workflow::update(&db.pool, &wf.id.to_string(), Some("Updated"), None).await.unwrap();
+        assert_eq!(updated.name, "Updated");
+
+        workflow::delete(&db.pool, &wf.id.to_string()).await.unwrap();
+        let gone = workflow::find_by_id(&db.pool, &wf.id.to_string()).await.unwrap();
+        assert!(gone.is_none());
+    }
+
+    #[tokio::test]
+    async fn workflow_run_crud() {
+        let (_engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+
+        let task_obj = task::create(&db.pool, "Test Task", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_id = task_obj.id.to_string();
+
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
+        assert_eq!(run.status, WorkflowRunStatus::Running);
+        assert_eq!(run.current_step_index, 0);
+        assert_eq!(run.iteration_count, 0);
+        assert!(run.main_session_id.is_none());
+
+        // Update step index
+        workflow_run::update_step_index(&db.pool, &run.id.to_string(), 3).await.unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
+        assert_eq!(updated.current_step_index, 3);
+
+        // Update status
+        workflow_run::update_status(&db.pool, &run.id.to_string(), &WorkflowRunStatus::Paused).await.unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
+        assert_eq!(updated.status, WorkflowRunStatus::Paused);
+
+        // Increment iteration
+        workflow_run::increment_iteration(&db.pool, &run.id.to_string()).await.unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
+        assert_eq!(updated.iteration_count, 1);
+
+        // Find by task
+        let by_task = workflow_run::find_by_task(&db.pool, &task_id).await.unwrap();
+        assert!(by_task.is_some());
+        assert_eq!(by_task.unwrap().id, run.id);
+    }
+
+    #[tokio::test]
+    async fn workflow_step_output_crud() {
+        let (_engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
+        let run_id = run.id.to_string();
+
+        // Create step output
+        let step = workflow_step_output::create(
+            &db.pool, &run_id, 0,
+            &WorkflowStepType::Plan, &WorkflowStepStatus::Running, None,
+        ).await.unwrap();
+        assert_eq!(step.step_index, 0);
+        assert_eq!(step.attempt, 1);
+        assert_eq!(step.status, WorkflowStepStatus::Running);
+
+        // Update status and output
+        workflow_step_output::update_status_and_output(
+            &db.pool, &step.id.to_string(), &WorkflowStepStatus::Completed, Some("Plan text here"),
+        ).await.unwrap();
+        let updated = workflow_step_output::find_by_id(&db.pool, &step.id.to_string()).await.unwrap().unwrap();
+        assert_eq!(updated.status, WorkflowStepStatus::Completed);
+        assert_eq!(updated.output.as_deref(), Some("Plan text here"));
+
+        // Create another attempt for same step
+        let step2 = workflow_step_output::create(
+            &db.pool, &run_id, 0,
+            &WorkflowStepType::Plan, &WorkflowStepStatus::Running, None,
+        ).await.unwrap();
+        assert_eq!(step2.attempt, 2);
+
+        // latest_for_step returns the highest attempt
+        let latest = workflow_step_output::latest_for_step(&db.pool, &run_id, 0).await.unwrap().unwrap();
+        assert_eq!(latest.attempt, 2);
+
+        // List all for the run
+        let all = workflow_step_output::list_by_run(&db.pool, &run_id).await.unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    use composer_db::models::{agent, session};
+
+    async fn create_agent_and_session(pool: &sqlx::SqlitePool) -> String {
+        let ag = agent::create(pool, "Test Agent", &AgentType::ClaudeCode, None).await.unwrap();
+        let sess = session::create(pool, &ag.id.to_string(), None, None, "test").await.unwrap();
+        sess.id.to_string()
+    }
+
+    #[tokio::test]
+    async fn workflow_run_find_by_session() {
+        let (_engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
+        let run_id = run.id.to_string();
+
+        // Create a real session for the FK
+        let session_id = create_agent_and_session(&db.pool).await;
+        workflow_run::update_main_session(&db.pool, &run_id, &session_id).await.unwrap();
+
+        let found = workflow_run::find_by_session(&db.pool, &session_id).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, run.id);
+    }
+
+    #[tokio::test]
+    async fn workflow_run_find_by_step_session() {
+        let (_engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
+        let run_id = run.id.to_string();
+
+        // Create a real session for the FK, then reference it in a step output
+        let review_session_id = create_agent_and_session(&db.pool).await;
+        workflow_step_output::create(
+            &db.pool, &run_id, 3,
+            &WorkflowStepType::PrReview, &WorkflowStepStatus::Running, Some(&review_session_id),
+        ).await.unwrap();
+
+        let found = workflow_run::find_by_step_session(&db.pool, &review_session_id).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, run.id);
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_pauses_running_workflows() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.run_migrations().await.unwrap();
+        let db = Arc::new(db);
+        let event_bus = EventBus::new();
+
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_id = task_obj.id.to_string();
+
+        // Simulate a running workflow run that was interrupted by server crash
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
+        let run_id = run.id.to_string();
+        workflow_run::update_step_index(&db.pool, &run_id, 2).await.unwrap();
+
+        // Create a running step output
+        workflow_step_output::create(
+            &db.pool, &run_id, 2,
+            &WorkflowStepType::Implement, &WorkflowStepStatus::Running, None,
+        ).await.unwrap();
+
+        // Set task to in_progress
+        task::update_status(&db.pool, &task_id, &TaskStatus::InProgress).await.unwrap();
+
+        // Now create the WorkflowEngine — triggers startup recovery
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let session_service = SessionService::new(db.clone(), event_bus.clone(), pm);
+        let _engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service);
+
+        // Give recovery time to run
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        // Workflow run should be paused
+        let recovered = workflow_run::find_by_id(&db.pool, &run_id).await.unwrap().unwrap();
+        assert_eq!(recovered.status, WorkflowRunStatus::Paused);
+
+        // Task should be in waiting
+        let task_after = task::find_by_id(&db.pool, &task_id).await.unwrap().unwrap();
+        assert_eq!(task_after.status, TaskStatus::Waiting);
+
+        // Step should be failed
+        let step = workflow_step_output::latest_for_step(&db.pool, &run_id, 2).await.unwrap().unwrap();
+        assert_eq!(step.status, WorkflowStepStatus::Failed);
+    }
+
+    #[tokio::test]
+    async fn task_workflow_run_id_link() {
+        let (_engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_id = task_obj.id.to_string();
+
+        assert!(task_obj.workflow_run_id.is_none());
+
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
+        task::update_workflow_run_id(&db.pool, &task_id, &run.id.to_string()).await.unwrap();
+
+        let updated_task = task::find_by_id(&db.pool, &task_id).await.unwrap().unwrap();
+        assert_eq!(updated_task.workflow_run_id, Some(run.id));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_find_running() {
+        let (_engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+
+        let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None).await.unwrap();
+        let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None).await.unwrap();
+
+        let run1 = workflow_run::create(&db.pool, &wf_id, &t1.id.to_string()).await.unwrap();
+        let run2 = workflow_run::create(&db.pool, &wf_id, &t2.id.to_string()).await.unwrap();
+
+        // run1 stays running, run2 is paused
+        workflow_run::update_status(&db.pool, &run2.id.to_string(), &WorkflowRunStatus::Paused).await.unwrap();
+
+        let running = workflow_run::find_running(&db.pool).await.unwrap();
+        assert_eq!(running.len(), 1);
+        assert_eq!(running[0].id, run1.id);
+    }
+
+    #[tokio::test]
+    async fn submit_decision_on_non_paused_workflow_fails() {
+        let (engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
+        // Run is in "running" status, not "paused"
+
+        let result = engine.submit_decision(&run.id.to_string(), true, None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not paused"));
+    }
+
+    #[tokio::test]
+    async fn start_workflow_on_non_backlog_task_fails() {
+        let (engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+
+        let task_obj = task::create(
+            &db.pool, "Test", None, None, Some(&TaskStatus::InProgress), Some(&project_id), None,
+        ).await.unwrap();
+
+        let result = engine.start(&task_obj.id.to_string(), &wf_id).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("backlog"));
+    }
+
+    #[tokio::test]
+    async fn start_workflow_without_agent_fails() {
+        let (engine, db, _) = setup().await;
+        let project_id = create_project(&db.pool).await;
+        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        // No agent assigned
+
+        let result = engine.start(&task_obj.id.to_string(), &wf_id).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no assigned agent"));
     }
 }

@@ -4,6 +4,7 @@ pub mod agent_service;
 pub mod session_service;
 pub mod worktree_service;
 pub mod project_service;
+pub mod workflow_engine;
 
 use std::sync::Arc;
 use composer_db::Database;
@@ -16,18 +17,25 @@ pub struct ServiceContainer {
     pub sessions: session_service::SessionService,
     pub worktrees: worktree_service::WorktreeService,
     pub projects: project_service::ProjectService,
+    pub workflows: workflow_engine::WorkflowEngine,
 }
 
 impl ServiceContainer {
     pub fn new(db: Arc<Database>, event_bus: EventBus) -> Self {
         let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender()));
         let sessions = session_service::SessionService::new(db.clone(), event_bus.clone(), process_manager.clone());
+        let workflows = workflow_engine::WorkflowEngine::new(db.clone(), event_bus.clone(), sessions.clone());
+
+        // Wire workflow engine into session service (breaks circular dependency)
+        sessions.set_workflow_engine(workflows.clone());
+
         Self {
             tasks: task_service::TaskService::new(db.clone(), event_bus.clone(), sessions.clone()),
             agents: agent_service::AgentService::new(db.clone(), event_bus.clone(), process_manager),
             sessions,
             worktrees: worktree_service::WorktreeService::new(db.clone()),
             projects: project_service::ProjectService::new(db.clone(), event_bus.clone()),
+            workflows,
         }
     }
 }

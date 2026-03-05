@@ -13,6 +13,9 @@ export type SessionStatus = "created" | "running" | "paused" | "completed" | "fa
 export type RepositoryRole = "primary" | "dependency";
 export type WorktreeStatus = "active" | "stale" | "deleted";
 export type LogType = "stdout" | "stderr" | "control" | "status" | "user_input";
+export type WorkflowRunStatus = "running" | "paused" | "completed" | "failed";
+export type WorkflowStepType = "plan" | "human_gate" | "implement" | "pr_review" | "human_review";
+export type WorkflowStepStatus = "pending" | "running" | "waiting_for_human" | "completed" | "rejected" | "failed";
 
 // ---------------------------------------------------------------------------
 // Model structs
@@ -43,6 +46,7 @@ export interface Task {
     task_number: number;
     simple_id: string;
     pr_urls: string[];
+    workflow_run_id?: string;
     created_at: string;
     updated_at: string;
 }
@@ -93,6 +97,50 @@ export interface ProjectRepository {
     display_name?: string;
     created_at: string;
     updated_at: string;
+}
+
+export interface Workflow {
+    id: string;
+    project_id: string;
+    name: string;
+    definition: WorkflowDefinition;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface WorkflowDefinition {
+    steps: WorkflowStepDefinition[];
+}
+
+export interface WorkflowStepDefinition {
+    step_type: WorkflowStepType;
+    name: string;
+    prompt_template?: string;
+    max_retries?: number;
+}
+
+export interface WorkflowRun {
+    id: string;
+    workflow_id: string;
+    task_id: string;
+    status: WorkflowRunStatus;
+    current_step_index: number;
+    iteration_count: number;
+    main_session_id?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface WorkflowStepOutput {
+    id: string;
+    workflow_run_id: string;
+    step_index: number;
+    step_type: WorkflowStepType;
+    output?: string;
+    attempt: number;
+    status: WorkflowStepStatus;
+    session_id?: string;
+    created_at: string;
 }
 
 export interface SessionLog {
@@ -180,6 +228,26 @@ export interface UpdateProjectRepositoryRequest {
     display_name?: string;
 }
 
+export interface CreateWorkflowRequest {
+    project_id: string;
+    name: string;
+    definition: WorkflowDefinition;
+}
+
+export interface UpdateWorkflowRequest {
+    name?: string;
+    definition?: WorkflowDefinition;
+}
+
+export interface StartWorkflowRequest {
+    workflow_id: string;
+}
+
+export interface WorkflowDecisionRequest {
+    approved: boolean;
+    comments?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
@@ -235,7 +303,11 @@ export type WsEvent =
     | { type: "ProjectUpdated"; payload: Project }
     | { type: "ProjectDeleted"; payload: { project_id: string } }
     | { type: "ProjectRepositoryAdded"; payload: { project_id: string; repository: ProjectRepository } }
-    | { type: "ProjectRepositoryRemoved"; payload: { project_id: string; repository_id: string } };
+    | { type: "ProjectRepositoryRemoved"; payload: { project_id: string; repository_id: string } }
+    | { type: "WorkflowRunUpdated"; payload: WorkflowRun }
+    | { type: "WorkflowStepChanged"; payload: { workflow_run_id: string; step: WorkflowStepOutput } }
+    | { type: "WorkflowRunCompleted"; payload: { workflow_run_id: string; task_id: string } }
+    | { type: "WorkflowWaitingForHuman"; payload: { workflow_run_id: string; task_id: string; step_index: number } };
 
 export type WsCommand =
     | { type: "SubscribeSession"; payload: { session_id: string } }

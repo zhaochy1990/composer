@@ -6,6 +6,7 @@ use composer_db::Database;
 use composer_executors::process_manager::{AgentProcessManager, SpawnOptions};
 use crate::event_bus::EventBus;
 use crate::worktree_service::WorktreeService;
+use std::sync::OnceLock;
 
 /// Matches PR URLs from GitHub, Azure DevOps, GitLab, and self-hosted instances.
 static PR_URL_RE: Lazy<Regex> = Lazy::new(|| {
@@ -18,6 +19,7 @@ pub struct SessionService {
     event_bus: EventBus,
     process_manager: Arc<AgentProcessManager>,
     worktree_service: WorktreeService,
+    workflow_engine: Arc<OnceLock<crate::workflow_engine::WorkflowEngine>>,
 }
 
 impl SessionService {
@@ -29,6 +31,7 @@ impl SessionService {
             event_bus,
             process_manager,
             worktree_service,
+            workflow_engine: Arc::new(OnceLock::new()),
         };
 
         // Recover orphaned sessions/agents from previous unclean shutdown
@@ -62,6 +65,7 @@ impl SessionService {
     fn spawn_event_listener(&self) {
         let mut rx = self.event_bus.subscribe();
         let db = self.db.clone();
+        let workflow_engine = self.workflow_engine.clone();
 
         tokio::spawn(async move {
             loop {
@@ -109,8 +113,29 @@ impl SessionService {
                         if let Some(summary) = result_summary {
                             Self::extract_and_save_pr_urls(&db, &id_str, summary).await;
                         }
-                        // Reset agent to idle and cleanup worktree
-                        Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
+
+                        // Check if this session belongs to a workflow run
+                        let handled_by_workflow = if let Some(engine) = workflow_engine.get() {
+                            match engine.on_session_completed(&id_str, result_summary.as_deref()).await {
+                                Ok(true) => {
+                                    // Workflow handled it — only reset agent, don't cleanup worktree
+                                    Self::reset_agent_only(&db, &id_str).await;
+                                    true
+                                }
+                                Ok(false) => false,
+                                Err(e) => {
+                                    tracing::error!("Workflow engine error on session completed: {}", e);
+                                    false
+                                }
+                            }
+                        } else {
+                            false
+                        };
+
+                        if !handled_by_workflow {
+                            // Regular (non-workflow) session — reset agent and cleanup worktree
+                            Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
+                        }
                     }
                     WsEvent::SessionResumeIdCaptured { session_id, ref claude_session_id } => {
                         let id_str = session_id.to_string();
@@ -140,6 +165,14 @@ impl SessionService {
                         ).await {
                             tracing::error!("Failed to update session error result: {}", e);
                         }
+
+                        // Notify workflow engine if applicable
+                        if let Some(engine) = workflow_engine.get() {
+                            if let Err(e) = engine.on_session_failed(&id_str, error).await {
+                                tracing::error!("Workflow engine error on session failed: {}", e);
+                            }
+                        }
+
                         // Only reset agent to idle — preserve worktree so retry/resume is possible
                         Self::reset_agent_only(&db, &id_str).await;
                     }
@@ -235,6 +268,11 @@ impl SessionService {
             )
             .await;
         }
+    }
+
+    /// Set the workflow engine reference (called after construction to break circular dependency).
+    pub fn set_workflow_engine(&self, engine: crate::workflow_engine::WorkflowEngine) {
+        let _ = self.workflow_engine.set(engine);
     }
 
     pub async fn create_session(&self, req: CreateSessionRequest) -> anyhow::Result<Session> {
@@ -351,8 +389,10 @@ impl SessionService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
 
-        // Fix #25: don't allow resuming completed sessions
-        if !matches!(session.status, SessionStatus::Paused | SessionStatus::Failed) {
+        // Fix #25: only allow resuming sessions that are in a terminal or paused state.
+        // Completed sessions can be resumed for workflow multi-step execution (the same
+        // Claude Code session is reused across plan → implement → fix steps via --resume).
+        if !matches!(session.status, SessionStatus::Paused | SessionStatus::Failed | SessionStatus::Completed) {
             return Err(anyhow::anyhow!("Session cannot be resumed from status {:?}", session.status));
         }
 

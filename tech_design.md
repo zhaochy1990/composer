@@ -14,6 +14,7 @@ Excellent. Now I have a comprehensive understanding of both the product vision a
 6. [Frontend Architecture](#6-frontend-architecture)
 7. [Project Directory Structure](#7-project-directory-structure)
 8. [Build System](#8-build-system)
+9. [Workflow Engine](#9-workflow-engine)
 
 ---
 
@@ -1643,6 +1644,130 @@ cp crates/api-types/bindings/*.ts packages/web/src/types/generated.ts
 3. **Git worktrees on Windows** -- Long paths can be an issue. Keep worktree paths short (`.composer/worktrees/<short-name>`).
 4. **Process spawning** -- `tokio::process::Command` handles Windows process creation correctly. Claude Code spawned via npx inherits the console allocation.
 5. **SQLite file location** -- `composer.db` lives in the working directory. For production, use an explicit path like `%LOCALAPPDATA%\composer\composer.db`.
+
+---
+
+## 9. Workflow Engine
+
+### Overview
+
+The workflow engine (`crates/services/src/workflow_engine.rs`) orchestrates multi-step agent task execution with human gates, automated PR review, and crash recovery. It sits between `TaskService` and `SessionService`, driving session creation/resumption based on workflow step definitions.
+
+### Design Principles
+
+1. **Single-session by default** — Most steps reuse the same Claude Code session via `--resume`. This preserves full agent context (files read, decisions made) across the plan → implement → fix cycle.
+2. **Separate session for review only** — PR review spawns an independent session to avoid polluting the main session's context. Review findings are injected as a prompt when resuming the main session.
+3. **Worktree preserved throughout** — Unlike regular sessions that clean up worktrees on completion, workflow sessions preserve the worktree until the entire workflow finishes.
+4. **State machine, not a scheduler** — The engine reacts to session completion events rather than polling. Each `SessionCompleted` event triggers `advance()` which evaluates and executes the next step.
+
+### Schema
+
+```sql
+-- Workflow definitions (project-level templates)
+workflows: id, project_id, name, definition (JSON), timestamps
+
+-- Runtime instances (one per task execution)
+workflow_runs: id, workflow_id, task_id, status, current_step_index,
+               iteration_count, main_session_id, timestamps
+
+-- Per-step results with attempt tracking
+workflow_step_outputs: id, workflow_run_id, step_index, step_type,
+                       output, attempt, status, session_id, created_at
+
+-- Task linkage
+tasks.workflow_run_id → workflow_runs.id
+```
+
+### Step Types
+
+| Type | Session Behavior | On Completion |
+|------|-----------------|---------------|
+| `plan` | Creates new session with "plan only" prompt | Advances to next step |
+| `implement` | Resumes main session with implementation/fix prompt | Advances to next step |
+| `human_gate` | No session — pauses workflow, task → Waiting | Waits for `submit_decision()` |
+| `pr_review` | Creates **separate** session for review | Advances to next step |
+| `human_review` | No session — pauses workflow, task → Waiting | Waits for `submit_decision()` |
+
+### Built-in "Feat-Common" Workflow
+
+The default feature development workflow, automatically seeded per project:
+
+```
+Step 0: Plan                    (plan)
+Step 1: Review Plan             (human_gate)      ← reject loops to step 0
+Step 2: Implement & Create PR   (implement)
+Step 3: Automated PR Review     (pr_review)
+Step 4: Fix Review Findings     (implement)
+Step 5: Human PR Review         (human_review)    ← reject loops to step 4
+Step 6: Fix Human Comments      (implement)
+```
+
+### Control Flow
+
+```
+start(task_id, workflow_id)
+  → create workflow_run (status: running)
+  → execute_step(0)
+      → build_prompt() with context from prior steps
+      → session_service.create_session() or resume_session()
+      → step_output created (status: running)
+
+on_session_completed(session_id)
+  → find workflow_run by session
+  → update step_output (status: completed, output: result)
+  → advance()
+      → if next step is human_gate → pause workflow, task → waiting
+      → if next step is agent     → resume main session
+      → if all steps done         → complete workflow, cleanup worktree
+
+submit_decision(run_id, approved, comments)
+  → if approved → advance to next step
+  → if rejected → loop back to preceding agent step with feedback
+```
+
+### Crash Recovery
+
+On server startup, `WorkflowEngine::spawn_startup_recovery()`:
+1. Finds all `workflow_runs` with status `running` (orphaned)
+2. Marks current step output as `failed` ("Server restarted while step was running")
+3. Sets workflow run status to `paused`
+4. Sets task status to `waiting`
+
+The user sees the workflow paused in the UI with a "Resume Workflow" button. Resuming re-executes the current step — the agent session resumes via `--resume` with its full Claude Code context preserved.
+
+### Integration with SessionService
+
+The `SessionService` event listener checks workflow ownership on `SessionCompleted`/`SessionFailed`:
+- **Workflow session**: Notifies `WorkflowEngine`, only resets agent (worktree preserved)
+- **Regular session**: Resets agent AND cleans up worktree (existing behavior)
+
+Circular dependency between `SessionService` → `WorkflowEngine` is broken via `OnceLock`:
+```rust
+// SessionService holds an Arc<OnceLock<WorkflowEngine>>
+// WorkflowEngine is set after construction via set_workflow_engine()
+```
+
+### API Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/workflows` | List all workflows |
+| POST | `/workflows` | Create workflow |
+| GET | `/workflows/{id}` | Get workflow |
+| PUT | `/workflows/{id}` | Update workflow |
+| DELETE | `/workflows/{id}` | Delete workflow |
+| GET | `/workflows/by-project/{id}` | List workflows for project (seeds built-in) |
+| POST | `/tasks/{id}/start-workflow` | Start a workflow run for a task |
+| GET | `/workflow-runs/{id}` | Get workflow run status |
+| POST | `/workflow-runs/{id}/decision` | Submit human gate decision |
+| POST | `/workflow-runs/{id}/resume` | Resume after crash/failure |
+| GET | `/workflow-runs/{id}/steps` | List step outputs |
+
+### Frontend Components
+
+- **`WorkflowProgress`** — Step timeline showing current step, completed steps, and status badges. Includes human gate approve/reject UI with comment field, and crash recovery resume button.
+- **`TaskDetailPanel`** integration — Workflow picker dropdown when starting tasks, workflow progress display between PR links and session list.
+- **`use-workflows.ts`** — TanStack Query hooks for all workflow endpoints with automatic polling for active runs.
 
 ---
 

@@ -55,7 +55,7 @@ pnpm run generate-types     # Export Rust types → packages/web/src/types/gener
 2. **db** — SQLx + SQLite layer (WAL mode). Migrations in `crates/db/migrations/`
 3. **git** — Git worktree management for agent isolation (creates under `.composer/worktrees/`)
 4. **executors** — Spawns Claude Code CLI processes, parses stream-JSON protocol, emits events
-5. **services** — Business logic: TaskService, AgentService, SessionService, WorktreeService, EventBus
+5. **services** — Business logic: TaskService, AgentService, SessionService, WorktreeService, WorkflowEngine, EventBus
 6. **server** — Axum HTTP server (port 3000), WebSocket hub, route handlers, embedded SPA serving
 
 ### Frontend (`packages/web/`)
@@ -73,13 +73,50 @@ Frontend (React) → REST API (TanStack Query) → Axum routes → Services → 
 - **Agent isolation**: Each agent session gets its own git worktree under `.composer/worktrees/`
 - **Process management**: `AgentProcessManager` uses DashMap for lock-free tracking of spawned Claude Code processes
 - **Single binary**: Production build embeds the React SPA into the Rust binary via rust-embed
+- **Workflow engine**: Multi-step agent orchestration with human gates, automated PR review, and crash recovery
+
+### Workflow Engine (`crates/services/src/workflow_engine.rs`)
+
+The workflow engine orchestrates agent sessions through defined step sequences. Workflows are project-level templates; each task run creates a `workflow_run` instance.
+
+**Step types:**
+| Type | Behavior |
+|------|----------|
+| `plan` | Spawns a new agent session with a "plan only" prompt |
+| `human_gate` | Pauses workflow, sets task to Waiting. User approves or rejects with comments |
+| `implement` | Resumes the main agent session with implementation/fix prompt |
+| `pr_review` | Spawns a separate review session; findings fed back to main session |
+| `human_review` | Like human_gate but for PR review — rejection loops back to implement |
+
+**Built-in "Feat-Common" workflow** (7 steps):
+Plan → Review Plan → Implement & Create PR → Automated PR Review → Fix Review Findings → Human PR Review → Fix Human Comments
+
+Rejection at human gates loops back to the preceding agent step with feedback. Steps 3-4 and 5-6 form review/fix cycles.
+
+**Session model:** Most steps reuse a single Claude Code session via `--resume`. Only PR review creates a separate session. Worktrees are preserved throughout the workflow and cleaned up only on completion.
+
+**Crash recovery:** On startup, `WorkflowEngine` finds orphaned running workflow runs, marks their current step as failed, pauses the run, and sets the task to Waiting. Users can resume from the UI.
+
+**DB tables:**
+- `workflows` — Definition templates (project-scoped, JSON step definitions)
+- `workflow_runs` — Runtime instances (status, current_step_index, main_session_id)
+- `workflow_step_outputs` — Per-step results with attempt tracking
+- `tasks.workflow_run_id` — Links task to its active workflow run
+
+**Task status derivation from workflow:**
+- `backlog` → workflow not started
+- `in_progress` → agent step running
+- `waiting` → human gate or crash recovery
+- `done` → all steps completed
 
 ### API Routes
 All routes are under the Axum server at `:3000`:
 - `/health` — Health check
-- `/tasks` — CRUD + `/tasks/{id}/assign`, `/tasks/{id}/move`, `/tasks/{id}/sessions`
+- `/tasks` — CRUD + `/tasks/{id}/assign`, `/tasks/{id}/move`, `/tasks/{id}/sessions`, `/tasks/{id}/start-workflow`
 - `/agents` — CRUD + `/agents/{id}/health`, `/agents/discover`
 - `/sessions` — Create, get, resume, logs
+- `/workflows` — CRUD + `/workflows/by-project/{project_id}`
+- `/workflow-runs` — `/{id}`, `/{id}/decision`, `/{id}/resume`, `/{id}/steps`
 - `/worktrees` — List, delete
 - `/ws` — WebSocket (bidirectional: WsCommand/WsEvent)
 
