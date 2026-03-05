@@ -217,7 +217,6 @@ pub struct ProjectRepository {
 #[ts(export)]
 pub struct Workflow {
     pub id: Uuid,
-    pub project_id: Uuid,
     pub name: String,
     pub definition: WorkflowDefinition,
     pub created_at: DateTime<Utc>,
@@ -389,7 +388,6 @@ pub struct UpdateProjectRepositoryRequest {
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct CreateWorkflowRequest {
-    pub project_id: Uuid,
     pub name: String,
     pub definition: WorkflowDefinition,
 }

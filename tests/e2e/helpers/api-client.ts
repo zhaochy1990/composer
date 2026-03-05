@@ -14,7 +14,6 @@ interface Task {
 
 interface Workflow {
   id: string;
-  project_id: string;
   name: string;
   definition: WorkflowDefinition;
 }
@@ -227,11 +226,11 @@ export class ApiClient {
 
   // --- Workflows ---
 
-  async listWorkflowsByProject(projectId: string): Promise<Workflow[]> {
-    return this.fetch<Workflow[]>(`/workflows/by-project/${projectId}`);
+  async listWorkflows(): Promise<Workflow[]> {
+    return this.fetch<Workflow[]>('/workflows');
   }
 
-  async createWorkflow(data: { project_id: string; name: string; definition: WorkflowDefinition }): Promise<Workflow> {
+  async createWorkflow(data: { name: string; definition: WorkflowDefinition }): Promise<Workflow> {
     return this.fetch<Workflow>('/workflows', {
       method: 'POST',
       body: JSON.stringify(data),

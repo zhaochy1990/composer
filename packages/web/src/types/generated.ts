@@ -101,7 +101,6 @@ export interface ProjectRepository {
 
 export interface Workflow {
     id: string;
-    project_id: string;
     name: string;
     definition: WorkflowDefinition;
     created_at: string;
@@ -233,7 +232,6 @@ export interface UpdateProjectRepositoryRequest {
 }
 
 export interface CreateWorkflowRequest {
-    project_id: string;
     name: string;
     definition: WorkflowDefinition;
 }

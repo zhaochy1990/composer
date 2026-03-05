@@ -154,7 +154,7 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
         ],
     };
     let workflow = composer_db::models::workflow::create(
-        &h.db.pool, &project_id, "Test Plan", &def,
+        &h.db.pool, "Test Plan", &def,
     ).await.unwrap();
 
     // Create task
@@ -233,7 +233,7 @@ async fn scenario_plan_approve_implement() {
         ],
     };
     let workflow = composer_db::models::workflow::create(
-        &h.db.pool, &project_id, "Test Full Cycle", &def,
+        &h.db.pool, "Test Full Cycle", &def,
     ).await.unwrap();
 
     let task = composer_db::models::task::create(
@@ -303,7 +303,7 @@ async fn scenario_plan_rejection_loops_back() {
         ],
     };
     let workflow = composer_db::models::workflow::create(
-        &h.db.pool, &project_id, "Test Rejection", &def,
+        &h.db.pool, "Test Rejection", &def,
     ).await.unwrap();
 
     let task = composer_db::models::task::create(

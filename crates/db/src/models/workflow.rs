@@ -5,7 +5,6 @@ use uuid::Uuid;
 #[derive(sqlx::FromRow)]
 struct WorkflowRow {
     id: String,
-    project_id: String,
     name: String,
     definition: String,
     created_at: String,
@@ -18,7 +17,6 @@ impl TryFrom<WorkflowRow> for Workflow {
     fn try_from(row: WorkflowRow) -> Result<Self, Self::Error> {
         Ok(Workflow {
             id: row.id.parse()?,
-            project_id: row.project_id.parse()?,
             name: row.name,
             definition: serde_json::from_str(&row.definition)?,
             created_at: row.created_at.parse()?,
@@ -27,19 +25,19 @@ impl TryFrom<WorkflowRow> for Workflow {
     }
 }
 
+const COLUMNS: &str = "id, name, definition, created_at, updated_at";
+
 pub async fn create(
     pool: &SqlitePool,
-    project_id: &str,
     name: &str,
     definition: &WorkflowDefinition,
 ) -> anyhow::Result<Workflow> {
     let id = Uuid::new_v4().to_string();
     let def_json = serde_json::to_string(definition)?;
     sqlx::query(
-        "INSERT INTO workflows (id, project_id, name, definition) VALUES (?, ?, ?, ?)"
+        "INSERT INTO workflows (id, name, definition) VALUES (?, ?, ?)"
     )
     .bind(&id)
-    .bind(project_id)
     .bind(name)
     .bind(&def_json)
     .execute(pool)
@@ -49,7 +47,7 @@ pub async fn create(
 
 pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Workflow>> {
     let row = sqlx::query_as::<_, WorkflowRow>(
-        "SELECT id, project_id, name, definition, created_at, updated_at FROM workflows WHERE id = ?"
+        &format!("SELECT {COLUMNS} FROM workflows WHERE id = ?")
     )
     .bind(id)
     .fetch_optional(pool)
@@ -57,11 +55,20 @@ pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Wo
     row.map(Workflow::try_from).transpose()
 }
 
-pub async fn list_by_project(pool: &SqlitePool, project_id: &str) -> anyhow::Result<Vec<Workflow>> {
-    let rows = sqlx::query_as::<_, WorkflowRow>(
-        "SELECT id, project_id, name, definition, created_at, updated_at FROM workflows WHERE project_id = ? ORDER BY name"
+pub async fn find_by_name(pool: &SqlitePool, name: &str) -> anyhow::Result<Option<Workflow>> {
+    let row = sqlx::query_as::<_, WorkflowRow>(
+        &format!("SELECT {COLUMNS} FROM workflows WHERE name = ?")
     )
-    .bind(project_id)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+    row.map(Workflow::try_from).transpose()
+}
+
+pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Workflow>> {
+    let rows = sqlx::query_as::<_, WorkflowRow>(
+        &format!("SELECT {COLUMNS} FROM workflows ORDER BY name")
+    )
     .fetch_all(pool)
     .await?;
     rows.into_iter().map(Workflow::try_from).collect()

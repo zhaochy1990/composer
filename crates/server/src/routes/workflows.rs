@@ -12,7 +12,6 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/workflows", get(list_workflows).post(create_workflow))
         .route("/workflows/{id}", get(get_workflow).put(update_workflow).delete(delete_workflow))
-        .route("/workflows/by-project/{project_id}", get(list_by_project))
         .route("/tasks/{id}/start-workflow", post(start_workflow))
         .route("/workflow-runs/{id}", get(get_workflow_run))
         .route("/workflow-runs/{id}/decision", post(submit_decision))
@@ -26,7 +25,6 @@ async fn create_workflow(
 ) -> Result<Json<Workflow>, ServiceError> {
     let workflow = composer_db::models::workflow::create(
         &state.services.workflows.db().pool,
-        &req.project_id.to_string(),
         &req.name,
         &req.definition,
     ).await?;
@@ -36,29 +34,8 @@ async fn create_workflow(
 async fn list_workflows(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<Workflow>>, ServiceError> {
-    // List all workflows across all projects
-    let projects = state.services.projects.list_all().await?;
-    let mut all = Vec::new();
-    for p in projects {
-        let mut wfs = composer_db::models::workflow::list_by_project(
-            &state.services.workflows.db().pool,
-            &p.id.to_string(),
-        ).await?;
-        all.append(&mut wfs);
-    }
-    Ok(Json(all))
-}
-
-async fn list_by_project(
-    State(state): State<Arc<AppState>>,
-    Path(project_id): Path<String>,
-) -> Result<Json<Vec<Workflow>>, ServiceError> {
-    // Ensure the built-in "Feat-Common" workflow exists for this project
-    state.services.workflows.ensure_builtin_workflow(&project_id).await?;
-
-    let workflows = composer_db::models::workflow::list_by_project(
+    let workflows = composer_db::models::workflow::list_all(
         &state.services.workflows.db().pool,
-        &project_id,
     ).await?;
     Ok(Json(workflows))
 }

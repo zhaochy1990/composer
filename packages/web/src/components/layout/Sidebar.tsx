@@ -1,4 +1,4 @@
-import { LayoutDashboard, Bot, FolderGit2 } from 'lucide-react';
+import { LayoutDashboard, Bot, FolderGit2, Workflow } from 'lucide-react';
 import type { Page } from '@/app/App';
 
 interface SidebarProps {
@@ -10,6 +10,7 @@ const navItems: { page: Page; label: string; icon: typeof LayoutDashboard }[] = 
     { page: 'tasks', label: 'Task Board', icon: LayoutDashboard },
     { page: 'agents', label: 'Agents', icon: Bot },
     { page: 'projects', label: 'Projects', icon: FolderGit2 },
+    { page: 'workflows', label: 'Workflows', icon: Workflow },
 ];
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {

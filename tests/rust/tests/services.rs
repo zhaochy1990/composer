@@ -586,9 +586,9 @@ mod workflow_tests {
         p.id.to_string()
     }
 
-    async fn create_workflow_in_db(pool: &sqlx::SqlitePool, project_id: &str) -> String {
+    async fn create_workflow_in_db(pool: &sqlx::SqlitePool) -> String {
         let def = workflow_engine::feat_common_definition();
-        let wf = workflow::create(pool, project_id, FEAT_COMMON_NAME, &def).await.unwrap();
+        let wf = workflow::create(pool, FEAT_COMMON_NAME, &def).await.unwrap();
         wf.id.to_string()
     }
 
@@ -620,25 +620,27 @@ mod workflow_tests {
     #[tokio::test]
     async fn ensure_builtin_workflow_creates_once() {
         let (engine, db, _) = setup().await;
-        let project_id = create_project(&db.pool).await;
 
-        // First call creates
-        let wf1 = engine.ensure_builtin_workflow(&project_id).await.unwrap();
+        // Wait for startup seeding to complete
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        // Calling ensure_builtin_workflow should return the already-seeded one
+        let wf1 = engine.ensure_builtin_workflow().await.unwrap();
         assert_eq!(wf1.name, FEAT_COMMON_NAME);
 
         // Second call returns same
-        let wf2 = engine.ensure_builtin_workflow(&project_id).await.unwrap();
+        let wf2 = engine.ensure_builtin_workflow().await.unwrap();
         assert_eq!(wf1.id, wf2.id);
 
-        // Only one workflow exists
-        let all = workflow::list_by_project(&db.pool, &project_id).await.unwrap();
-        assert_eq!(all.len(), 1);
+        // Only one workflow with this name exists
+        let all = workflow::list_all(&db.pool).await.unwrap();
+        let feat_common_count = all.iter().filter(|w| w.name == FEAT_COMMON_NAME).count();
+        assert_eq!(feat_common_count, 1);
     }
 
     #[tokio::test]
     async fn workflow_crud() {
         let (_engine, db, _) = setup().await;
-        let project_id = create_project(&db.pool).await;
 
         let def = WorkflowDefinition { steps: vec![
             WorkflowStepDefinition {
@@ -649,7 +651,7 @@ mod workflow_tests {
             },
         ]};
 
-        let wf = workflow::create(&db.pool, &project_id, "Test WF", &def).await.unwrap();
+        let wf = workflow::create(&db.pool, "Test WF", &def).await.unwrap();
         assert_eq!(wf.name, "Test WF");
         assert_eq!(wf.definition.steps.len(), 1);
 
@@ -668,7 +670,7 @@ mod workflow_tests {
     async fn workflow_run_crud() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
 
         let task_obj = task::create(&db.pool, "Test Task", None, None, None, Some(&project_id), None).await.unwrap();
         let task_id = task_obj.id.to_string();
@@ -704,7 +706,7 @@ mod workflow_tests {
     async fn workflow_step_output_crud() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
@@ -754,7 +756,7 @@ mod workflow_tests {
     async fn workflow_run_find_by_session() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
@@ -772,7 +774,7 @@ mod workflow_tests {
     async fn workflow_run_find_by_step_session() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
@@ -797,7 +799,7 @@ mod workflow_tests {
         let event_bus = EventBus::new();
 
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
         let task_id = task_obj.id.to_string();
 
@@ -840,7 +842,7 @@ mod workflow_tests {
     async fn task_workflow_run_id_link() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
         let task_id = task_obj.id.to_string();
 
@@ -857,7 +859,7 @@ mod workflow_tests {
     async fn workflow_run_find_running() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
 
         let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None).await.unwrap();
         let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None).await.unwrap();
@@ -877,7 +879,7 @@ mod workflow_tests {
     async fn submit_decision_on_non_paused_workflow_fails() {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
 
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
@@ -892,7 +894,7 @@ mod workflow_tests {
     async fn start_workflow_on_non_backlog_task_fails() {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
 
         let task_obj = task::create(
             &db.pool, "Test", None, None, Some(&TaskStatus::InProgress), Some(&project_id), None,
@@ -907,7 +909,7 @@ mod workflow_tests {
     async fn start_workflow_without_agent_fails() {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool, &project_id).await;
+        let wf_id = create_workflow_in_db(&db.pool).await;
 
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
         // No agent assigned

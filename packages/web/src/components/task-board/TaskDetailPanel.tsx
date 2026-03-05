@@ -6,7 +6,7 @@ import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession, useSendSessionInput, useRetrySession } from '@/hooks/use-sessions';
 import { useAgents } from '@/hooks/use-agents';
 import { useProjects } from '@/hooks/use-projects';
-import { useWorkflowsByProject, useWorkflowRun, useWorkflow, useStartWorkflow } from '@/hooks/use-workflows';
+import { useWorkflows as useAllWorkflows, useWorkflowRun, useWorkflow, useStartWorkflow } from '@/hooks/use-workflows';
 import { SessionOutput } from '@/components/sessions/SessionOutput';
 import { StatusBadge } from '@/components/sessions/StatusBadge';
 import { WorkflowProgress } from '@/components/workflows/WorkflowProgress';
@@ -54,7 +54,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
     const [messageInput, setMessageInput] = useState('');
 
     // --- Workflows ---
-    const { data: projectWorkflows } = useWorkflowsByProject(task.project_id ?? undefined);
+    const { data: allWorkflows } = useAllWorkflows();
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('');
     const startWorkflow = useStartWorkflow();
     const { data: workflowRun } = useWorkflowRun(task.workflow_run_id ?? undefined);
@@ -352,7 +352,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                             const missingAgent = !task.assigned_agent_id;
                             const missingProject = !task.project_id;
                             const canStart = !missingAgent && !missingProject;
-                            const hasWorkflows = projectWorkflows && projectWorkflows.length > 0;
+                            const hasWorkflows = allWorkflows && allWorkflows.length > 0;
                             const tooltip = missingAgent && missingProject
                                 ? 'Assign an agent and project first'
                                 : missingAgent ? 'Assign an agent first'
@@ -368,7 +368,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                                 className="bg-gray-800 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-purple-500"
                                             >
                                                 <option value="">No workflow</option>
-                                                {projectWorkflows.map(wf => (
+                                                {allWorkflows.map(wf => (
                                                     <option key={wf.id} value={wf.id}>{wf.name}</option>
                                                 ))}
                                             </select>

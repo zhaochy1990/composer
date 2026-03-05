@@ -80,24 +80,19 @@ impl WorkflowEngine {
         &self.db
     }
 
-    /// Ensure the built-in "Feat-Common" workflow exists for a given project.
-    /// Called when a project is created or on first use. Returns the workflow id.
-    pub async fn ensure_builtin_workflow(&self, project_id: &str) -> anyhow::Result<Workflow> {
-        // Check if it already exists for this project
-        let existing = composer_db::models::workflow::list_by_project(&self.db.pool, project_id).await?;
-        if let Some(wf) = existing.into_iter().find(|w| w.name == FEAT_COMMON_NAME) {
+    /// Ensure the built-in "Feat-Common" workflow exists globally.
+    pub async fn ensure_builtin_workflow(&self) -> anyhow::Result<Workflow> {
+        if let Some(wf) = composer_db::models::workflow::find_by_name(&self.db.pool, FEAT_COMMON_NAME).await? {
             return Ok(wf);
         }
 
-        // Create it
         let definition = feat_common_definition();
         let wf = composer_db::models::workflow::create(
             &self.db.pool,
-            project_id,
             FEAT_COMMON_NAME,
             &definition,
         ).await?;
-        tracing::info!("Created built-in workflow '{}' for project {}", FEAT_COMMON_NAME, project_id);
+        tracing::info!("Created built-in workflow '{}'", FEAT_COMMON_NAME);
         Ok(wf)
     }
 
@@ -107,6 +102,10 @@ impl WorkflowEngine {
     fn spawn_startup_recovery(&self) {
         let engine = self.clone();
         tokio::spawn(async move {
+            // Seed built-in workflows
+            if let Err(e) = engine.ensure_builtin_workflow().await {
+                tracing::error!("Failed to seed built-in workflow: {}", e);
+            }
             if let Err(e) = engine.recover_running_workflows().await {
                 tracing::error!("Failed to recover workflow runs: {}", e);
             }
