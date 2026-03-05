@@ -12,21 +12,18 @@ const sections: { status: TaskStatus; title: string }[] = [
 interface TaskListViewProps {
     tasksByStatus: Record<TaskStatus, Task[]>;
     onEditTask: (task: Task) => void;
-    onCreateTask: (status: TaskStatus) => void;
 }
 
-export function TaskListView({ tasksByStatus, onEditTask, onCreateTask }: TaskListViewProps) {
+export function TaskListView({ tasksByStatus, onEditTask }: TaskListViewProps) {
     return (
         <div className="h-full overflow-y-auto p-6">
             <div className="max-w-4xl mx-auto border border-gray-800 rounded-lg overflow-hidden">
                 {sections.map((section) => (
                     <TaskListSection
                         key={section.status}
-                        status={section.status}
                         title={section.title}
                         tasks={tasksByStatus[section.status]}
                         onEditTask={onEditTask}
-                        onCreateTask={onCreateTask}
                         defaultCollapsed={section.status === 'done'}
                     />
                 ))}
