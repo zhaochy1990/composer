@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Plus } from 'lucide-react';
-import type { TaskStatus } from '@/types/generated';
+import type { TaskStatus, Workflow } from '@/types/generated';
 import { useCreateTask } from '@/hooks/use-tasks';
 import { useProjects } from '@/hooks/use-projects';
 import { useAgents } from '@/hooks/use-agents';
@@ -221,7 +221,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                     className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <option value="">No workflow</option>
-                                    {projectWorkflows.map(w => (
+                                    {projectWorkflows.map((w: Workflow) => (
                                         <option key={w.id} value={w.id}>{w.name}</option>
                                     ))}
                                 </select>
