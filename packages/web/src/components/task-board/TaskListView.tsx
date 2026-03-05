@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { Task, TaskStatus } from '@/types/generated';
 import { TaskListSection } from './TaskListSection';
 import { TaskDetailPanel } from './TaskDetailPanel';
@@ -30,6 +31,17 @@ export function TaskListView({
     agentNameMap,
     projectNameMap,
 }: TaskListViewProps) {
+    // Escape key deselects the current task
+    useEffect(() => {
+        function handleKeyDown(e: KeyboardEvent) {
+            if (e.key === 'Escape' && selectedTask) {
+                onCloseTask();
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [selectedTask, onCloseTask]);
+
     return (
         <div className="flex h-full">
             {/* Left panel — task list */}

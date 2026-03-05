@@ -1,13 +1,7 @@
 import { GripVertical, GitPullRequest } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { shortId } from '@/lib/utils';
-
-const priorityConfig: Record<number, { label: string; className: string }> = {
-    3: { label: 'High', className: 'bg-red-900/60 text-red-300 border-red-700' },
-    2: { label: 'Medium', className: 'bg-yellow-900/60 text-yellow-300 border-yellow-700' },
-    1: { label: 'Low', className: 'bg-blue-900/60 text-blue-300 border-blue-700' },
-    0: { label: 'None', className: 'bg-gray-800 text-gray-400 border-gray-600' },
-};
+import { priorityConfig } from './priority-config';
 
 interface TaskCardProps {
     task: Task;
@@ -57,7 +51,7 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCa
                                 {projectNameMap?.[task.project_id] ?? shortId(task.project_id)}
                             </span>
                         )}
-                        {task.pr_urls?.length > 0 && (
+                        {task.pr_urls.length > 0 && (
                             <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700">
                                 <GitPullRequest className="w-3 h-3" />
                                 {task.pr_urls.length === 1 ? 'PR' : `${task.pr_urls.length} PRs`}
