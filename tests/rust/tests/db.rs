@@ -541,13 +541,22 @@ mod session_tests {
     async fn create_session_defaults() {
         let pool = test_pool().await;
         let agent_id = setup_agent(&pool).await;
-        let s = session::create(&pool, &agent_id, None, None, "do stuff").await.unwrap();
+        let s = session::create(&pool, &agent_id, None, None, "do stuff", None).await.unwrap();
         assert!(matches!(s.status, SessionStatus::Created));
         assert_eq!(s.prompt.as_deref(), Some("do stuff"));
+        assert!(s.name.is_none());
         assert!(s.task_id.is_none());
         assert!(s.worktree_id.is_none());
         assert!(s.started_at.is_none());
         assert!(s.completed_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn create_session_with_name() {
+        let pool = test_pool().await;
+        let agent_id = setup_agent(&pool).await;
+        let s = session::create(&pool, &agent_id, None, None, "do stuff", Some("My Session")).await.unwrap();
+        assert_eq!(s.name.as_deref(), Some("My Session"));
     }
 
     #[tokio::test]
@@ -556,7 +565,7 @@ mod session_tests {
         let agent_id = setup_agent(&pool).await;
         let id = uuid::Uuid::new_v4().to_string();
         let s = session::create_with_status(
-            &pool, &id, &agent_id, None, None, "run it", &SessionStatus::Running,
+            &pool, &id, &agent_id, None, None, "run it", &SessionStatus::Running, None,
         )
         .await
         .unwrap();
@@ -570,7 +579,7 @@ mod session_tests {
         let agent_id = setup_agent(&pool).await;
         let id = uuid::Uuid::new_v4().to_string();
         let s = session::create_with_status(
-            &pool, &id, &agent_id, None, None, "pending", &SessionStatus::Created,
+            &pool, &id, &agent_id, None, None, "pending", &SessionStatus::Created, None,
         )
         .await
         .unwrap();
@@ -582,7 +591,7 @@ mod session_tests {
     async fn find_by_id_hit_and_miss() {
         let pool = test_pool().await;
         let agent_id = setup_agent(&pool).await;
-        let s = session::create(&pool, &agent_id, None, None, "prompt").await.unwrap();
+        let s = session::create(&pool, &agent_id, None, None, "prompt", None).await.unwrap();
         let found = session::find_by_id(&pool, &s.id.to_string()).await.unwrap();
         assert!(found.is_some());
         let miss = session::find_by_id(&pool, "00000000-0000-0000-0000-000000000000")
@@ -595,8 +604,8 @@ mod session_tests {
     async fn list_by_agent_filters() {
         let pool = test_pool().await;
         let agent_id = setup_agent(&pool).await;
-        session::create(&pool, &agent_id, None, None, "s1").await.unwrap();
-        session::create(&pool, &agent_id, None, None, "s2").await.unwrap();
+        session::create(&pool, &agent_id, None, None, "s1", None).await.unwrap();
+        session::create(&pool, &agent_id, None, None, "s2", None).await.unwrap();
         let sessions = session::list_by_agent(&pool, &agent_id).await.unwrap();
         assert_eq!(sessions.len(), 2);
     }
@@ -609,7 +618,7 @@ mod session_tests {
             .await
             .unwrap();
         let task_id = task.id.to_string();
-        session::create(&pool, &agent_id, Some(&task_id), None, "s1")
+        session::create(&pool, &agent_id, Some(&task_id), None, "s1", None)
             .await
             .unwrap();
         let sessions = session::list_by_task(&pool, &task_id).await.unwrap();
@@ -622,7 +631,7 @@ mod session_tests {
         let agent_id = setup_agent(&pool).await;
         let id = uuid::Uuid::new_v4().to_string();
         session::create_with_status(
-            &pool, &id, &agent_id, None, None, "run", &SessionStatus::Running,
+            &pool, &id, &agent_id, None, None, "run", &SessionStatus::Running, None,
         )
         .await
         .unwrap();
@@ -638,7 +647,7 @@ mod session_tests {
         let agent_id = setup_agent(&pool).await;
         let id = uuid::Uuid::new_v4().to_string();
         session::create_with_status(
-            &pool, &id, &agent_id, None, None, "run", &SessionStatus::Running,
+            &pool, &id, &agent_id, None, None, "run", &SessionStatus::Running, None,
         )
         .await
         .unwrap();
@@ -652,7 +661,7 @@ mod session_tests {
     async fn update_result_sets_summary() {
         let pool = test_pool().await;
         let agent_id = setup_agent(&pool).await;
-        let s = session::create(&pool, &agent_id, None, None, "prompt").await.unwrap();
+        let s = session::create(&pool, &agent_id, None, None, "prompt", None).await.unwrap();
         let id = s.id.to_string();
         session::update_result(&pool, &id, Some("All done"), Some("resume-123"))
             .await
@@ -678,7 +687,7 @@ mod session_log_tests {
         .await
         .unwrap();
         let s = session::create(
-            pool, &a.id.to_string(), None, None, "test",
+            pool, &a.id.to_string(), None, None, "test", None,
         )
         .await
         .unwrap();
@@ -772,7 +781,7 @@ mod worktree_tests {
     }
 
     async fn setup_session(pool: &sqlx::SqlitePool, agent_id: &str) -> String {
-        let s = session::create(pool, agent_id, None, None, "test")
+        let s = session::create(pool, agent_id, None, None, "test", None)
             .await
             .unwrap();
         s.id.to_string()

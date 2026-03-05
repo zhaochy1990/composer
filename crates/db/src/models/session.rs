@@ -5,6 +5,7 @@ use uuid::Uuid;
 #[derive(sqlx::FromRow)]
 struct SessionRow {
     id: String,
+    name: Option<String>,
     agent_id: String,
     task_id: Option<String>,
     worktree_id: Option<String>,
@@ -24,6 +25,7 @@ impl TryFrom<SessionRow> for Session {
     fn try_from(row: SessionRow) -> Result<Self, Self::Error> {
         Ok(Session {
             id: row.id.parse()?,
+            name: row.name,
             agent_id: row.agent_id.parse()?,
             task_id: row.task_id.map(|s| s.parse()).transpose()?,
             worktree_id: row.worktree_id.map(|s| s.parse()).transpose()?,
@@ -45,17 +47,19 @@ pub async fn create(
     task_id: Option<&str>,
     worktree_id: Option<&str>,
     prompt: &str,
+    name: Option<&str>,
 ) -> anyhow::Result<Session> {
     let id = Uuid::new_v4().to_string();
 
     sqlx::query(
-        "INSERT INTO sessions (id, agent_id, task_id, worktree_id, prompt) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO sessions (id, agent_id, task_id, worktree_id, prompt, name) VALUES (?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(agent_id)
     .bind(task_id)
     .bind(worktree_id)
     .bind(prompt)
+    .bind(name)
     .execute(pool)
     .await?;
 
@@ -70,6 +74,7 @@ pub async fn create_with_status(
     worktree_id: Option<&str>,
     prompt: &str,
     status: &SessionStatus,
+    name: Option<&str>,
 ) -> anyhow::Result<Session> {
     let status_str = match status {
         SessionStatus::Created => "created",
@@ -80,8 +85,8 @@ pub async fn create_with_status(
     };
 
     sqlx::query(
-        "INSERT INTO sessions (id, agent_id, task_id, worktree_id, prompt, status, \
-         started_at) VALUES (?, ?, ?, ?, ?, ?, \
+        "INSERT INTO sessions (id, agent_id, task_id, worktree_id, prompt, status, name, \
+         started_at) VALUES (?, ?, ?, ?, ?, ?, ?, \
          CASE WHEN ? = 'running' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END)"
     )
     .bind(id)
@@ -90,6 +95,7 @@ pub async fn create_with_status(
     .bind(worktree_id)
     .bind(prompt)
     .bind(status_str)
+    .bind(name)
     .bind(status_str)
     .execute(pool)
     .await?;

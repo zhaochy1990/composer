@@ -149,6 +149,7 @@ impl TaskService {
             task_id: task.id,
             prompt,
             repo_path,
+            name: None,
             auto_approve: Some(task.auto_approve),
             exit_on_result: false,
         }).await?;

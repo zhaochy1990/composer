@@ -161,6 +161,7 @@ pub struct Task {
 #[ts(export)]
 pub struct Session {
     pub id: Uuid,
+    pub name: Option<String>,
     pub agent_id: Uuid,
     pub task_id: Option<Uuid>,
     pub worktree_id: Option<Uuid>,
@@ -342,6 +343,7 @@ pub struct CreateSessionRequest {
     pub task_id: Uuid,
     pub prompt: String,
     pub repo_path: String,
+    pub name: Option<String>,
     pub auto_approve: Option<bool>,
     /// When true, close stdin after the agent produces a Result so the process
     /// exits after one turn. Used internally by the workflow engine.

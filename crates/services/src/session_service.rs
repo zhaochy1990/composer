@@ -276,6 +276,13 @@ impl SessionService {
     }
 
     pub async fn create_session(&self, req: CreateSessionRequest) -> anyhow::Result<Session> {
+        // Validate name length
+        if let Some(ref name) = req.name {
+            if name.len() > 255 {
+                return Err(anyhow::anyhow!("Session name must be 255 characters or fewer"));
+            }
+        }
+
         // Validate repo_path: must be absolute, must exist, must be a git repo
         let repo_path = std::path::Path::new(&req.repo_path);
         if !repo_path.is_absolute() {
@@ -324,6 +331,7 @@ impl SessionService {
                 Some(&worktree.id.to_string()),
                 &req.prompt,
                 &SessionStatus::Running,
+                req.name.as_deref(),
             )
             .await?;
 
@@ -534,6 +542,7 @@ impl SessionService {
             task_id,
             prompt,
             repo_path,
+            name: None,
             auto_approve: Some(true),
             exit_on_result: false,
         })

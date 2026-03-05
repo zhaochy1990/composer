@@ -53,6 +53,7 @@ export interface Task {
 
 export interface Session {
     id: string;
+    name?: string;
     agent_id: string;
     task_id?: string;
     worktree_id?: string;
@@ -202,6 +203,7 @@ export interface CreateSessionRequest {
     task_id: string;
     prompt: string;
     repo_path: string;
+    name?: string;
     auto_approve?: boolean;
     /** Internal: close stdin after Result so process exits after one turn. Used by workflow engine. */
     exit_on_result?: boolean;

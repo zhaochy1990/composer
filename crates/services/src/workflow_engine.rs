@@ -316,13 +316,16 @@ impl WorkflowEngine {
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
 
         let session = if is_new_session || run.main_session_id.is_none() {
-            // First step — create a new session
+            // First step — create a new session.
+            // Named "Plan & Implementation" because this session is reused (via --resume)
+            // for both the initial plan step and subsequent implement/fix steps.
             let repo_path = self.get_repo_path(task).await?;
             let session = self.session_service.create_session(CreateSessionRequest {
                 agent_id,
                 task_id: task.id,
                 prompt,
                 repo_path,
+                name: Some("Plan & Implementation".to_string()),
                 auto_approve: Some(task.auto_approve),
                 exit_on_result: true,
             }).await?;
@@ -443,6 +446,7 @@ impl WorkflowEngine {
             task_id: task.id,
             prompt,
             repo_path,
+            name: Some("PR Review".to_string()),
             auto_approve: Some(task.auto_approve),
             exit_on_result: true,
         }).await?;

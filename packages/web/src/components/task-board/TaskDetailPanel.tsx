@@ -436,7 +436,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                             : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
                                     }`}
                                 >
-                                    <span className="font-mono text-xs">{shortId(session.id)}</span>
+                                    <span className={`text-xs truncate max-w-[160px] ${session.name ? 'font-medium' : 'font-mono'}`}>{session.name ?? shortId(session.id)}</span>
                                     <StatusBadge status={session.status} />
                                     <span className="truncate">{agentNameMap[session.agent_id] ?? shortId(session.agent_id)}</span>
                                     <span className="ml-auto text-xs text-gray-500">

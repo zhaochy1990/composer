@@ -363,7 +363,7 @@ mod session_service_tests {
 
         let sess = session::create_with_status(
             &db.pool, &session_id, &agent_id, None, Some(&wt_id),
-            "do work", &SessionStatus::Running,
+            "do work", &SessionStatus::Running, None,
         )
         .await
         .unwrap();
@@ -412,7 +412,7 @@ mod session_service_tests {
 
         let sess = session::create_with_status(
             &db.pool, &session_id, &agent_id, None, Some(&wt_id),
-            "do work", &SessionStatus::Running,
+            "do work", &SessionStatus::Running, None,
         )
         .await
         .unwrap();
@@ -450,7 +450,7 @@ mod session_service_tests {
         let session_id = uuid::Uuid::new_v4().to_string();
         let sess = session::create_with_status(
             &db.pool, &session_id, &agent_id, None, None,
-            "do work", &SessionStatus::Running,
+            "do work", &SessionStatus::Running, None,
         )
         .await
         .unwrap();
@@ -488,7 +488,7 @@ mod worktree_service_tests {
     }
 
     async fn setup_session(pool: &sqlx::SqlitePool, agent_id: &str) -> String {
-        let s = session::create(pool, agent_id, None, None, "test")
+        let s = session::create(pool, agent_id, None, None, "test", None)
             .await
             .unwrap();
         s.id.to_string()
@@ -748,7 +748,7 @@ mod workflow_tests {
 
     async fn create_agent_and_session(pool: &sqlx::SqlitePool) -> String {
         let ag = agent::create(pool, "Test Agent", &AgentType::ClaudeCode, None).await.unwrap();
-        let sess = session::create(pool, &ag.id.to_string(), None, None, "test").await.unwrap();
+        let sess = session::create(pool, &ag.id.to_string(), None, None, "test", None).await.unwrap();
         sess.id.to_string()
     }
 

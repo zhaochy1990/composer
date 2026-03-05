@@ -589,6 +589,7 @@ async fn session_input_on_non_running_session_returns_error() {
         None,
         "test prompt",
         &composer_api_types::SessionStatus::Paused,
+        None,
     )
     .await
     .unwrap();
@@ -627,6 +628,7 @@ async fn session_input_on_completed_session_returns_error() {
         None,
         "test prompt",
         &composer_api_types::SessionStatus::Completed,
+        None,
     )
     .await
     .unwrap();
@@ -665,6 +667,7 @@ async fn session_input_on_running_session_without_process_returns_error() {
         None,
         "test prompt",
         &composer_api_types::SessionStatus::Running,
+        None,
     )
     .await
     .unwrap();
