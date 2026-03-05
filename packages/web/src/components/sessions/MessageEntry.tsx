@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronRight, ChevronDown, Terminal, FileText, Search, Globe } from 'lucide-react';
 import type { ParsedMessage } from '@/lib/parse-claude-message';
+import { MarkdownContent } from './MarkdownContent';
 
 const toolIcons: Record<string, typeof Terminal> = {
     Bash: Terminal,
@@ -22,8 +23,8 @@ export function MessageEntry({ message }: MessageEntryProps) {
     switch (message.kind) {
         case 'assistant_text':
             return (
-                <div className="py-1 text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
-                    {message.text}
+                <div className="py-1 text-gray-200 leading-relaxed">
+                    <MarkdownContent content={message.text} />
                 </div>
             );
 
