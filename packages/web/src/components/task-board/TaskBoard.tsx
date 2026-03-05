@@ -179,6 +179,10 @@ export function TaskBoard() {
                     <TaskListView
                         tasksByStatus={tasksByStatus}
                         onEditTask={handleEditTask}
+                        selectedTask={editingTask}
+                        onCloseTask={() => setEditingTask(null)}
+                        agentNameMap={agentNameMap}
+                        projectNameMap={projectNameMap}
                     />
                 )}
             </div>
@@ -190,7 +194,7 @@ export function TaskBoard() {
                 defaultStatus={'backlog'}
             />
 
-            {editingTask && (
+            {editingTask && viewMode === 'kanban' && (
                 <TaskDetailPanel
                     key={editingTask.id}
                     task={editingTask}
