@@ -5,6 +5,7 @@ import type { TaskStatus } from '@/types/generated';
 import { useCreateTask } from '@/hooks/use-tasks';
 import { useProjects } from '@/hooks/use-projects';
 import { useAgents } from '@/hooks/use-agents';
+import { useWorkflowsByProject, useStartWorkflow } from '@/hooks/use-workflows';
 
 interface TaskCreateDialogProps {
     isOpen: boolean;
@@ -18,10 +19,14 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
     const [priority, setPriority] = useState(2);
     const [projectId, setProjectId] = useState('');
     const [assignedAgentId, setAssignedAgentId] = useState('');
+    const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
+    const [workflowError, setWorkflowError] = useState('');
 
     const createTask = useCreateTask();
     const { data: projects } = useProjects();
     const { data: agents } = useAgents();
+    const { data: projectWorkflows } = useWorkflowsByProject(projectId || undefined);
+    const startWorkflow = useStartWorkflow();
 
     // Default to first available agent (Claude Code)
     useEffect(() => {
@@ -30,37 +35,81 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
         }
     }, [agents, assignedAgentId]);
 
+    // Reset workflow selection when project changes
+    useEffect(() => {
+        setSelectedWorkflowId('');
+        setWorkflowError('');
+    }, [projectId]);
+
+    // Clear workflow selection when agent is deselected
+    useEffect(() => {
+        if (!assignedAgentId) {
+            setSelectedWorkflowId('');
+        }
+    }, [assignedAgentId]);
+
+    function resetAndClose() {
+        setTitle('');
+        setDescription('');
+        setPriority(2);
+        setProjectId('');
+        setSelectedWorkflowId('');
+        setWorkflowError('');
+        setAssignedAgentId(agents?.[0]?.id ?? '');
+        onClose();
+    }
+
+    const isPending = createTask.isPending || startWorkflow.isPending;
+
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        if (!title.trim()) return;
+        if (!title.trim() || isPending) return;
+
+        setWorkflowError('');
+
+        // If workflow selected, force status to backlog (workflow will transition to in_progress)
+        const effectiveStatus = selectedWorkflowId ? 'backlog' as TaskStatus : defaultStatus;
 
         createTask.mutate(
             {
                 title: title.trim(),
                 description: description.trim() || undefined,
                 priority,
-                status: defaultStatus,
+                status: effectiveStatus,
                 project_id: projectId || undefined,
                 assigned_agent_id: assignedAgentId || undefined,
             },
             {
-                onSuccess: () => {
-                    setTitle('');
-                    setDescription('');
-                    setPriority(2);
-                    setProjectId('');
-                    setAssignedAgentId(agents?.[0]?.id ?? '');
-                    onClose();
+                onSuccess: (createdTask) => {
+                    if (selectedWorkflowId && assignedAgentId) {
+                        startWorkflow.mutate(
+                            { taskId: createdTask.id, workflowId: selectedWorkflowId },
+                            {
+                                onSuccess: () => resetAndClose(),
+                                onError: (err) => {
+                                    setWorkflowError(
+                                        `Task created but workflow failed to start: ${err.message}. You can start it from the task detail panel.`,
+                                    );
+                                },
+                            },
+                        );
+                    } else {
+                        resetAndClose();
+                    }
                 },
             },
         );
     }
 
+    let buttonText = 'Create Task';
+    if (startWorkflow.isPending) buttonText = 'Starting Workflow...';
+    else if (createTask.isPending) buttonText = 'Creating...';
+
     return (
-        <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) { setTitle(''); setDescription(''); setPriority(2); setProjectId(''); setAssignedAgentId(agents?.[0]?.id ?? ''); onClose(); } }}>
+        <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open && !isPending) resetAndClose(); }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6">
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6" onEscapeKeyDown={(e) => { if (isPending) e.preventDefault(); }} onPointerDownOutside={(e) => { if (isPending) e.preventDefault(); }}>
                     <div className="flex items-center justify-between mb-4">
                         <Dialog.Title className="text-lg font-semibold text-gray-100">
                             New Task
@@ -68,7 +117,8 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                         <Dialog.Close asChild>
                             <button
                                 type="button"
-                                className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800"
+                                disabled={isPending}
+                                className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -158,26 +208,61 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                             </select>
                         </div>
 
+                        {projectId && projectWorkflows && projectWorkflows.length > 0 && (
+                            <div>
+                                <label htmlFor="create-workflow" className="block text-sm font-medium text-gray-300 mb-1">
+                                    Workflow
+                                </label>
+                                <select
+                                    id="create-workflow"
+                                    value={selectedWorkflowId}
+                                    onChange={e => { setSelectedWorkflowId(e.target.value); setWorkflowError(''); }}
+                                    disabled={!assignedAgentId}
+                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <option value="">No workflow</option>
+                                    {projectWorkflows.map(w => (
+                                        <option key={w.id} value={w.id}>{w.name}</option>
+                                    ))}
+                                </select>
+                                {!assignedAgentId && (
+                                    <p className="text-xs text-yellow-500 mt-1">
+                                        An agent must be assigned to start a workflow
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {workflowError && (
+                            <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 rounded-md px-3 py-2">
+                                {workflowError}
+                            </p>
+                        )}
+
                         <p className="text-xs text-gray-500">
-                            Task will be created in <span className="font-medium text-gray-400">{formatStatus(defaultStatus)}</span>
+                            {selectedWorkflowId
+                                ? 'Task will be created and workflow will start automatically'
+                                : <>Task will be created in <span className="font-medium text-gray-400">{formatStatus(defaultStatus)}</span></>
+                            }
                         </p>
 
                         <div className="flex justify-end gap-2 pt-2">
                             <Dialog.Close asChild>
                                 <button
                                     type="button"
-                                    className="px-4 py-2 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors"
+                                    disabled={isPending}
+                                    className="px-4 py-2 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Cancel
                                 </button>
                             </Dialog.Close>
                             <button
                                 type="submit"
-                                disabled={!title.trim() || createTask.isPending}
+                                disabled={!title.trim() || isPending}
                                 className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Plus className="w-3.5 h-3.5" />
-                                {createTask.isPending ? 'Creating...' : 'Create Task'}
+                                {buttonText}
                             </button>
                         </div>
                     </form>
