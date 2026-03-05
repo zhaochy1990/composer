@@ -192,7 +192,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
             {/* Plan Review Panel — rendered inline when in inline mode */}
             {inline && planContent && (
                 <div className="px-6 py-3 border-b border-gray-800 shrink-0">
-                    <PlanReviewPanel content={planContent} />
+                    <PlanReviewPanel content={planContent} onClose={() => setPlanContent(null)} />
                 </div>
             )}
 
