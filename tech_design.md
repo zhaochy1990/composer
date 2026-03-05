@@ -1756,7 +1756,6 @@ Circular dependency between `SessionService` → `WorkflowEngine` is broken via 
 | GET | `/workflows/{id}` | Get workflow |
 | PUT | `/workflows/{id}` | Update workflow |
 | DELETE | `/workflows/{id}` | Delete workflow |
-| GET | `/workflows/by-project/{id}` | List workflows for project (seeds built-in) |
 | POST | `/tasks/{id}/start-workflow` | Start a workflow run for a task |
 | GET | `/workflow-runs/{id}` | Get workflow run status |
 | POST | `/workflow-runs/{id}/decision` | Submit human gate decision |

@@ -115,7 +115,7 @@ All routes are under the Axum server at `:3000`:
 - `/tasks` — CRUD + `/tasks/{id}/assign`, `/tasks/{id}/move`, `/tasks/{id}/sessions`, `/tasks/{id}/start-workflow`
 - `/agents` — CRUD + `/agents/{id}/health`, `/agents/discover`
 - `/sessions` — Create, get, resume, logs
-- `/workflows` — CRUD + `/workflows/by-project/{project_id}`
+- `/workflows` — CRUD
 - `/workflow-runs` — `/{id}`, `/{id}/decision`, `/{id}/resume`, `/{id}/steps`
 - `/worktrees` — List, delete
 - `/ws` — WebSocket (bidirectional: WsCommand/WsEvent)
