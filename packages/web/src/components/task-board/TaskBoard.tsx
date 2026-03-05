@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, LayoutList, Kanban } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
 import { useTasks } from '@/hooks/use-tasks';
 import { useAgents } from '@/hooks/use-agents';
 import { useProjects } from '@/hooks/use-projects';
 import { TaskColumn } from './TaskColumn';
+import { TaskListView } from './TaskListView';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskDetailPanel } from './TaskDetailPanel';
 
@@ -20,6 +21,10 @@ export function TaskBoard() {
     const { data: agents } = useAgents();
     const { data: projects } = useProjects();
 
+    const [viewMode, setViewMode] = useState<'list' | 'kanban'>(
+        () => (localStorage.getItem('taskBoardViewMode') as 'list' | 'kanban') || 'list'
+    );
+    useEffect(() => { localStorage.setItem('taskBoardViewMode', viewMode); }, [viewMode]);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>('backlog');
     const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -98,6 +103,26 @@ export function TaskBoard() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <div className="flex rounded-md border border-gray-700 overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('list')}
+                            aria-pressed={viewMode === 'list'}
+                            className={`flex items-center px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}
+                            title="List view"
+                        >
+                            <LayoutList className="w-4 h-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('kanban')}
+                            aria-pressed={viewMode === 'kanban'}
+                            className={`flex items-center px-2.5 py-1.5 transition-colors ${viewMode === 'kanban' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}
+                            title="Kanban view"
+                        >
+                            <Kanban className="w-4 h-4" />
+                        </button>
+                    </div>
                     <button
                         type="button"
                         onClick={() => refetch()}
@@ -141,7 +166,7 @@ export function TaskBoard() {
                     </div>
                 )}
 
-                {!isLoading && !isError && (
+                {!isLoading && !isError && viewMode === 'kanban' && (
                     <div className="flex gap-4 h-full p-6">
                         {columns.map(col => (
                             <TaskColumn
@@ -156,6 +181,14 @@ export function TaskBoard() {
                             />
                         ))}
                     </div>
+                )}
+
+                {!isLoading && !isError && viewMode === 'list' && (
+                    <TaskListView
+                        tasksByStatus={tasksByStatus}
+                        onEditTask={handleEditTask}
+                        onCreateTask={handleCreateTask}
+                    />
                 )}
             </div>
 
