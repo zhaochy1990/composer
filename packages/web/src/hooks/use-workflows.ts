@@ -23,14 +23,6 @@ export function useWorkflow(id: string | undefined) {
     });
 }
 
-export function useWorkflowsByProject(projectId: string | undefined) {
-    return useQuery({
-        queryKey: ['workflows', 'by-project', projectId],
-        queryFn: () => apiFetch<Workflow[]>(`/workflows/by-project/${projectId}`),
-        enabled: !!projectId,
-    });
-}
-
 export function useCreateWorkflow() {
     const queryClient = useQueryClient();
     return useMutation({

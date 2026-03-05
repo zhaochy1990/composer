@@ -15,7 +15,6 @@ const sections: { status: TaskStatus; title: string }[] = [
 interface TaskListViewProps {
     tasksByStatus: Record<TaskStatus, Task[]>;
     onEditTask: (task: Task) => void;
-    onCreateTask: (status: TaskStatus) => void;
     selectedTask: Task | null;
     onCloseTask: () => void;
     agentNameMap: Record<string, string>;
@@ -25,7 +24,6 @@ interface TaskListViewProps {
 export function TaskListView({
     tasksByStatus,
     onEditTask,
-    onCreateTask,
     selectedTask,
     onCloseTask,
     agentNameMap,
@@ -50,11 +48,9 @@ export function TaskListView({
                     {sections.map((section) => (
                         <TaskListSection
                             key={section.status}
-                            status={section.status}
                             title={section.title}
                             tasks={tasksByStatus[section.status]}
                             onEditTask={onEditTask}
-                            onCreateTask={onCreateTask}
                             defaultCollapsed={section.status === 'done'}
                             agentNameMap={agentNameMap}
                             projectNameMap={projectNameMap}

@@ -26,7 +26,6 @@ export function TaskBoard() {
     );
     useEffect(() => { localStorage.setItem('taskBoardViewMode', viewMode); }, [viewMode]);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>('backlog');
     const [editingTask, setEditingTask] = useState<Task | null>(null);
 
     // Keep editingTask in sync with latest query data
@@ -83,11 +82,6 @@ export function TaskBoard() {
         return grouped;
     }, [tasks]);
 
-    function handleCreateTask(status: TaskStatus) {
-        setCreateDefaultStatus(status);
-        setCreateDialogOpen(true);
-    }
-
     function handleEditTask(task: Task) {
         setEditingTask(task);
     }
@@ -133,7 +127,7 @@ export function TaskBoard() {
                     </button>
                     <button
                         type="button"
-                        onClick={() => handleCreateTask('backlog')}
+                        onClick={() => setCreateDialogOpen(true)}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-500 transition-colors"
                     >
                         <Plus className="w-4 h-4" />
@@ -171,10 +165,8 @@ export function TaskBoard() {
                         {columns.map(col => (
                             <TaskColumn
                                 key={col.status}
-                                status={col.status}
                                 title={col.title}
                                 tasks={tasksByStatus[col.status]}
-                                onCreateTask={handleCreateTask}
                                 onEditTask={handleEditTask}
                                 agentNameMap={agentNameMap}
                                 projectNameMap={projectNameMap}
@@ -187,7 +179,6 @@ export function TaskBoard() {
                     <TaskListView
                         tasksByStatus={tasksByStatus}
                         onEditTask={handleEditTask}
-                        onCreateTask={handleCreateTask}
                         selectedTask={editingTask}
                         onCloseTask={() => setEditingTask(null)}
                         agentNameMap={agentNameMap}
@@ -200,7 +191,7 @@ export function TaskBoard() {
             <TaskCreateDialog
                 isOpen={createDialogOpen}
                 onClose={() => setCreateDialogOpen(false)}
-                defaultStatus={createDefaultStatus}
+                defaultStatus={'backlog'}
             />
 
             {editingTask && viewMode === 'kanban' && (

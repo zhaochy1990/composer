@@ -1,15 +1,13 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronDown, Plus, GitPullRequest } from 'lucide-react';
-import type { Task, TaskStatus } from '@/types/generated';
+import { ChevronRight, ChevronDown, GitPullRequest } from 'lucide-react';
+import type { Task } from '@/types/generated';
 import { shortId } from '@/lib/utils';
 import { priorityConfig } from './priority-config';
 
 interface TaskListSectionProps {
     title: string;
-    status: TaskStatus;
     tasks: Task[];
     onEditTask: (task: Task) => void;
-    onCreateTask: (status: TaskStatus) => void;
     defaultCollapsed?: boolean;
     agentNameMap?: Record<string, string>;
     projectNameMap?: Record<string, string>;
@@ -18,10 +16,8 @@ interface TaskListSectionProps {
 
 export function TaskListSection({
     title,
-    status,
     tasks,
     onEditTask,
-    onCreateTask,
     defaultCollapsed = false,
     agentNameMap,
     projectNameMap,
@@ -57,17 +53,6 @@ export function TaskListSection({
                         {tasks.length}
                     </span>
                 </div>
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onCreateTask(status);
-                    }}
-                    className="text-gray-500 hover:text-gray-300 transition-colors"
-                    title={`Add task to ${title}`}
-                >
-                    <Plus className="w-4 h-4" />
-                </button>
             </div>
             {!collapsed && (
                 <div>

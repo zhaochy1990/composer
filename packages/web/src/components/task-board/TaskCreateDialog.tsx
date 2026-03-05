@@ -5,7 +5,7 @@ import type { TaskStatus, Workflow } from '@/types/generated';
 import { useCreateTask } from '@/hooks/use-tasks';
 import { useProjects } from '@/hooks/use-projects';
 import { useAgents } from '@/hooks/use-agents';
-import { useWorkflowsByProject, useStartWorkflow } from '@/hooks/use-workflows';
+import { useWorkflows, useStartWorkflow } from '@/hooks/use-workflows';
 
 interface TaskCreateDialogProps {
     isOpen: boolean;
@@ -25,7 +25,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
     const createTask = useCreateTask();
     const { data: projects } = useProjects();
     const { data: agents } = useAgents();
-    const { data: projectWorkflows } = useWorkflowsByProject(projectId || undefined);
+    const { data: workflows } = useWorkflows();
     const startWorkflow = useStartWorkflow();
 
     // Default to first available agent (Claude Code)
@@ -35,18 +35,12 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
         }
     }, [agents, assignedAgentId]);
 
-    // Reset workflow selection when project changes
+    // Clear workflow selection when agent or project is deselected
     useEffect(() => {
-        setSelectedWorkflowId('');
-        setWorkflowError('');
-    }, [projectId]);
-
-    // Clear workflow selection when agent is deselected
-    useEffect(() => {
-        if (!assignedAgentId) {
+        if (!assignedAgentId || !projectId) {
             setSelectedWorkflowId('');
         }
-    }, [assignedAgentId]);
+    }, [assignedAgentId, projectId]);
 
     function resetAndClose() {
         setTitle('');
@@ -208,7 +202,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                             </select>
                         </div>
 
-                        {projectId && projectWorkflows && projectWorkflows.length > 0 && (
+                        {workflows && workflows.length > 0 && (
                             <div>
                                 <label htmlFor="create-workflow" className="block text-sm font-medium text-gray-300 mb-1">
                                     Workflow
@@ -217,17 +211,21 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                     id="create-workflow"
                                     value={selectedWorkflowId}
                                     onChange={e => { setSelectedWorkflowId(e.target.value); setWorkflowError(''); }}
-                                    disabled={!assignedAgentId}
+                                    disabled={!assignedAgentId || !projectId}
                                     className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <option value="">No workflow</option>
-                                    {projectWorkflows.map((w: Workflow) => (
+                                    {workflows.map((w: Workflow) => (
                                         <option key={w.id} value={w.id}>{w.name}</option>
                                     ))}
                                 </select>
-                                {!assignedAgentId && (
+                                {(!assignedAgentId || !projectId) && (
                                     <p className="text-xs text-yellow-500 mt-1">
-                                        An agent must be assigned to start a workflow
+                                        {!assignedAgentId && !projectId
+                                            ? 'An agent and project must be assigned to start a workflow'
+                                            : !assignedAgentId
+                                                ? 'An agent must be assigned to start a workflow'
+                                                : 'A project must be assigned to start a workflow'}
                                     </p>
                                 )}
                             </div>
