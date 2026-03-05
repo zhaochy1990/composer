@@ -595,7 +595,7 @@ mod workflow_tests {
     #[test]
     fn feat_common_definition_has_expected_steps() {
         let def = workflow_engine::feat_common_definition();
-        assert_eq!(def.steps.len(), 7);
+        assert_eq!(def.steps.len(), 8);
         assert_eq!(def.steps[0].step_type, WorkflowStepType::Plan);
         assert_eq!(def.steps[1].step_type, WorkflowStepType::HumanGate);
         assert_eq!(def.steps[2].step_type, WorkflowStepType::Implement);
@@ -603,6 +603,7 @@ mod workflow_tests {
         assert_eq!(def.steps[4].step_type, WorkflowStepType::Implement);
         assert_eq!(def.steps[5].step_type, WorkflowStepType::HumanReview);
         assert_eq!(def.steps[6].step_type, WorkflowStepType::Implement);
+        assert_eq!(def.steps[7].step_type, WorkflowStepType::CompletePr);
     }
 
     #[test]
@@ -615,6 +616,7 @@ mod workflow_tests {
         assert_eq!(def.steps[4].name, "Fix Review Findings");
         assert_eq!(def.steps[5].name, "Human PR Review");
         assert_eq!(def.steps[6].name, "Fix Human Comments");
+        assert_eq!(def.steps[7].name, "Complete PR");
     }
 
     #[tokio::test]

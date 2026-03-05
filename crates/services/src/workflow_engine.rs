@@ -54,6 +54,12 @@ pub fn feat_common_definition() -> WorkflowDefinition {
                 prompt_template: None,
                 max_retries: None,
             },
+            WorkflowStepDefinition {
+                step_type: WorkflowStepType::CompletePr,
+                name: "Complete PR".to_string(),
+                prompt_template: None,
+                max_retries: None,
+            },
         ],
     }
 }
@@ -81,16 +87,33 @@ impl WorkflowEngine {
     }
 
     /// Ensure the built-in "Feat-Common" workflow exists globally.
+    /// Updates the definition if the built-in step count has changed.
     pub async fn ensure_builtin_workflow(&self) -> anyhow::Result<Workflow> {
+        let expected = feat_common_definition();
+
         if let Some(wf) = composer_db::models::workflow::find_by_name(&self.db.pool, FEAT_COMMON_NAME).await? {
+            if wf.definition.steps.len() != expected.steps.len() {
+                tracing::info!(
+                    "Updating built-in workflow '{}' ({} steps -> {} steps)",
+                    FEAT_COMMON_NAME,
+                    wf.definition.steps.len(),
+                    expected.steps.len()
+                );
+                let updated = composer_db::models::workflow::update(
+                    &self.db.pool,
+                    &wf.id.to_string(),
+                    None,
+                    Some(&expected),
+                ).await?;
+                return Ok(updated);
+            }
             return Ok(wf);
         }
 
-        let definition = feat_common_definition();
         let wf = composer_db::models::workflow::create(
             &self.db.pool,
             FEAT_COMMON_NAME,
-            &definition,
+            &expected,
         ).await?;
         tracing::info!("Created built-in workflow '{}'", FEAT_COMMON_NAME);
         Ok(wf)
@@ -283,6 +306,9 @@ impl WorkflowEngine {
             }
             WorkflowStepType::PrReview => {
                 self.execute_pr_review(run_id, task, agent_id, step_index, &step_def).await?;
+            }
+            WorkflowStepType::CompletePr => {
+                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false).await?;
             }
         }
 
@@ -866,6 +892,28 @@ impl WorkflowEngine {
                     "{} - Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers.",
                     pr_context
                 ))
+            }
+            WorkflowStepType::CompletePr => {
+                let pr_urls = &task.pr_urls;
+                if pr_urls.is_empty() {
+                    Ok(
+                        "The implementation is complete. Find the PR you created earlier and complete it: \
+                         1. Check the CI status using `gh pr checks`. Wait for all checks to pass (poll every 30 seconds, up to 10 minutes). \
+                         2. If there are merge conflicts, resolve them and push. \
+                         3. Once all checks pass, merge the PR using `gh pr merge --squash --delete-branch`. \
+                         4. Confirm the PR is merged successfully.".to_string()
+                    )
+                } else {
+                    let pr_url = pr_urls.last().unwrap();
+                    Ok(format!(
+                        "The implementation is complete and the PR has been approved. Complete the PR at {}: \
+                         1. Check the CI status using `gh pr checks {}`. Wait for all checks to pass (poll every 30 seconds, up to 10 minutes). \
+                         2. If there are merge conflicts, resolve them and push. \
+                         3. Once all checks pass, merge the PR using `gh pr merge {} --squash --delete-branch`. \
+                         4. Confirm the PR is merged successfully.",
+                        pr_url, pr_url, pr_url
+                    ))
+                }
             }
             WorkflowStepType::HumanGate | WorkflowStepType::HumanReview => {
                 // Human gates don't need prompts — they pause the workflow
