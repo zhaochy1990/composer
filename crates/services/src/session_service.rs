@@ -112,6 +112,16 @@ impl SessionService {
                         // Reset agent to idle and cleanup worktree
                         Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
                     }
+                    WsEvent::SessionResumeIdCaptured { session_id, ref claude_session_id } => {
+                        let id_str = session_id.to_string();
+                        if let Err(e) = composer_db::models::session::update_resume_session_id(
+                            &db.pool,
+                            &id_str,
+                            claude_session_id,
+                        ).await {
+                            tracing::warn!("Failed to eagerly persist resume_session_id: {}", e);
+                        }
+                    }
                     WsEvent::SessionFailed { session_id, ref error, ref claude_session_id } => {
                         let id_str = session_id.to_string();
                         if let Err(e) = composer_db::models::session::update_status(
@@ -435,8 +445,10 @@ impl SessionService {
         // Save prompt before potentially moving req
         let saved_prompt = req.prompt.clone();
 
-        if worktree_usable {
-            // Try to resume the failed session (reuses existing worktree + conversation context)
+        if worktree_usable && session.resume_session_id.is_some() {
+            // Only attempt resume if we have a Claude Code session ID (needed for --resume).
+            // If resume_session_id is NULL (e.g., server crashed before it was persisted),
+            // skip resume and create a fresh session instead.
             match self.resume_session(id, req).await {
                 Ok(session) => return Ok(session),
                 Err(e) => {
@@ -444,6 +456,11 @@ impl SessionService {
                     // Fall through to create a new session
                 }
             }
+        } else if worktree_usable {
+            tracing::info!(
+                "Session {} has usable worktree but no resume_session_id, creating fresh session",
+                id
+            );
         }
 
         // Fallback: clean up old worktree and create a brand new session

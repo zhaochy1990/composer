@@ -430,15 +430,20 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
                                 </button>
                             )}
                             {isFailed && (
-                                <button
-                                    type="button"
-                                    onClick={() => retryMutation.mutate({ id: selectedSession.id })}
-                                    disabled={retryMutation.isPending}
-                                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-orange-900/40 text-orange-300 border border-orange-700 hover:bg-orange-900/60 transition-colors disabled:opacity-50"
-                                >
-                                    <RotateCcw className="w-3 h-3" />
-                                    {retryMutation.isPending ? 'Retrying...' : 'Retry'}
-                                </button>
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => retryMutation.mutate({ id: selectedSession.id })}
+                                        disabled={retryMutation.isPending}
+                                        className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-orange-900/40 text-orange-300 border border-orange-700 hover:bg-orange-900/60 transition-colors disabled:opacity-50"
+                                    >
+                                        <RotateCcw className="w-3 h-3" />
+                                        {retryMutation.isPending ? 'Retrying...' : 'Retry'}
+                                    </button>
+                                    {retryMutation.isError && (
+                                        <span className="text-xs text-red-400">{(retryMutation.error as Error).message}</span>
+                                    )}
+                                </>
                             )}
                             {selectedSession.prompt && (
                                 <span className="text-xs text-gray-500 truncate max-w-md" title={selectedSession.prompt}>

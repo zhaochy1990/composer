@@ -29,7 +29,8 @@ fn extract_session_id(event: &WsEvent) -> Option<Uuid> {
         | WsEvent::SessionCompleted { session_id, .. }
         | WsEvent::SessionFailed { session_id, .. }
         | WsEvent::SessionPaused { session_id }
-        | WsEvent::SessionOutput { session_id, .. } => Some(*session_id),
+        | WsEvent::SessionOutput { session_id, .. }
+        | WsEvent::SessionResumeIdCaptured { session_id, .. } => Some(*session_id),
         _ => None,
     }
 }
@@ -53,6 +54,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             };
+
+            // Skip internal-only events that clients don't need
+            if matches!(event, WsEvent::SessionResumeIdCaptured { .. }) {
+                continue;
+            }
 
             // Filter session events by subscription set
             let subs = sub_clone.lock().await;

@@ -228,6 +228,7 @@ export type WsEvent =
     | { type: "SessionFailed"; payload: { session_id: string; error: string; claude_session_id?: string } }
     | { type: "SessionPaused"; payload: { session_id: string } }
     | { type: "SessionOutput"; payload: { session_id: string; log_type: LogType; content: string } }
+    | { type: "SessionResumeIdCaptured"; payload: { session_id: string; claude_session_id: string } }
     | { type: "WorktreeCreated"; payload: Worktree }
     | { type: "WorktreeDeleted"; payload: { worktree_id: string } }
     | { type: "ProjectCreated"; payload: Project }

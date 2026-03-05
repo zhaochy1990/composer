@@ -174,6 +174,19 @@ pub async fn fail_orphaned_running(pool: &SqlitePool) -> anyhow::Result<u64> {
     Ok(result.rows_affected())
 }
 
+/// Persist the Claude Code session ID for --resume support.
+/// Called eagerly when the ID is first captured from stdout, so it survives server crashes.
+pub async fn update_resume_session_id(pool: &SqlitePool, id: &str, resume_session_id: &str) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE sessions SET resume_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND resume_session_id IS NULL"
+    )
+    .bind(resume_session_id)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn update_result(pool: &SqlitePool, id: &str, result_summary: Option<&str>, resume_session_id: Option<&str>) -> anyhow::Result<()> {
     sqlx::query(
         "UPDATE sessions SET result_summary = ?, resume_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"

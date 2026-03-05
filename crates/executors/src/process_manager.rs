@@ -181,7 +181,12 @@ impl AgentProcessManager {
                     if let Some(sid) = maybe_sid {
                         let mut guard = session_id_capture.lock().unwrap();
                         if guard.is_none() {
-                            *guard = Some(sid);
+                            *guard = Some(sid.clone());
+                            // Eagerly persist the Claude Code session ID so it survives server crashes
+                            let _ = event_tx.send(WsEvent::SessionResumeIdCaptured {
+                                session_id,
+                                claude_session_id: sid,
+                            });
                         }
                     }
 

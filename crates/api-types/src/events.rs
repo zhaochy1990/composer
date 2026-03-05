@@ -21,6 +21,7 @@ pub enum WsEvent {
     SessionFailed { session_id: Uuid, error: String, claude_session_id: Option<String> },
     SessionPaused { session_id: Uuid },
     SessionOutput { session_id: Uuid, log_type: LogType, content: String },
+    SessionResumeIdCaptured { session_id: Uuid, claude_session_id: String },
     WorktreeCreated(Worktree),
     WorktreeDeleted { worktree_id: Uuid },
     ProjectCreated(Project),
