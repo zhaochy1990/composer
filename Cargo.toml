@@ -58,6 +58,9 @@ tempfile = "3"
 regex = "1"
 once_cell = "1"
 
+[profile.dev]
+incremental = false
+
 [profile.release]
 strip = "symbols"
 lto = "thin"
