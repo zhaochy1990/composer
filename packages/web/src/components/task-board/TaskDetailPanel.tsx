@@ -150,7 +150,7 @@ export function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps) {
 
             {/* Plan Review Panel — left of task detail panel */}
             {planContent && (
-                <PlanReviewPanel content={planContent} />
+                <PlanReviewPanel content={planContent} onClose={() => setPlanContent(null)} />
             )}
 
             {/* Panel */}
