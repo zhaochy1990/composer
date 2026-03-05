@@ -351,6 +351,7 @@ impl SessionService {
                     auto_approve: req.auto_approve.unwrap_or(false),
                     resume_session_id: None,
                     resume_at_message_id: None,
+                    exit_on_result: req.exit_on_result,
                 })
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to spawn agent: {}", e))?;
@@ -438,6 +439,7 @@ impl SessionService {
                 auto_approve: true,
                 resume_session_id: Some(resume_id),
                 resume_at_message_id: None,
+                exit_on_result: req.exit_on_result,
             })
             .await
         {
@@ -533,6 +535,7 @@ impl SessionService {
             prompt,
             repo_path,
             auto_approve: Some(true),
+            exit_on_result: false,
         })
         .await
     }

@@ -332,12 +332,20 @@ pub struct CreateSessionRequest {
     pub prompt: String,
     pub repo_path: String,
     pub auto_approve: Option<bool>,
+    /// When true, close stdin after the agent produces a Result so the process
+    /// exits after one turn. Used internally by the workflow engine.
+    #[serde(default)]
+    pub exit_on_result: bool,
 }
 
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct ResumeSessionRequest {
     pub prompt: Option<String>,
+    /// When true, close stdin after the agent produces a Result so the process
+    /// exits after one turn. Used internally by the workflow engine.
+    #[serde(default)]
+    pub exit_on_result: bool,
 }
 
 #[derive(Debug, Deserialize, TS)]

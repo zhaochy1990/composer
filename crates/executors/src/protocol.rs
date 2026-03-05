@@ -6,19 +6,20 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 
 pub struct ProtocolPeer {
-    pub stdin: Arc<Mutex<ChildStdin>>,
+    pub stdin: Arc<Mutex<Option<ChildStdin>>>,
 }
 
 impl ProtocolPeer {
     pub fn new(stdin: ChildStdin) -> Self {
         Self {
-            stdin: Arc::new(Mutex::new(stdin)),
+            stdin: Arc::new(Mutex::new(Some(stdin))),
         }
     }
 
     pub async fn send_message<T: serde::Serialize>(&self, msg: &T) -> Result<(), ExecutorError> {
         let json = serde_json::to_string(msg)?;
-        let mut stdin = self.stdin.lock().await;
+        let mut guard = self.stdin.lock().await;
+        let stdin = guard.as_mut().ok_or_else(|| ExecutorError::Io(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "stdin closed")))?;
         stdin.write_all(json.as_bytes()).await.map_err(ExecutorError::Io)?;
         stdin.write_all(b"\n").await.map_err(ExecutorError::Io)?;
         stdin.flush().await.map_err(ExecutorError::Io)?;
@@ -29,6 +30,12 @@ impl ProtocolPeer {
     /// and produce a final Result message before exiting.
     pub async fn interrupt(&self) -> Result<(), ExecutorError> {
         self.send_message(&SDKControlRequest::new(SDKControlRequestType::Interrupt {})).await
+    }
+
+    /// Drop stdin, causing Claude Code to see EOF and exit.
+    pub async fn close_stdin(&self) {
+        let mut guard = self.stdin.lock().await;
+        let _ = guard.take(); // Drop the ChildStdin, closing the pipe
     }
 }
 

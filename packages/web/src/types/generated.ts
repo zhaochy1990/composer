@@ -194,10 +194,14 @@ export interface CreateSessionRequest {
     prompt: string;
     repo_path: string;
     auto_approve?: boolean;
+    /** Internal: close stdin after Result so process exits after one turn. Used by workflow engine. */
+    exit_on_result?: boolean;
 }
 
 export interface ResumeSessionRequest {
     prompt?: string;
+    /** Internal: close stdin after Result so process exits after one turn. Used by workflow engine. */
+    exit_on_result?: boolean;
 }
 
 export interface SendSessionInputRequest {

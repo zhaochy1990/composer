@@ -327,6 +327,7 @@ async fn e2e_spawn_send_message_and_receive_output() {
         auto_approve: true,
         resume_session_id: None,
         resume_at_message_id: None,
+        exit_on_result: false,
     })
     .await
     .expect("Failed to spawn Claude Code");
@@ -390,6 +391,7 @@ async fn e2e_multi_turn_send_follow_up_message() {
         auto_approve: true,
         resume_session_id: None,
         resume_at_message_id: None,
+        exit_on_result: false,
     })
     .await
     .expect("Failed to spawn");

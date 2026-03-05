@@ -325,6 +325,7 @@ impl WorkflowEngine {
                 prompt,
                 repo_path,
                 auto_approve: Some(task.auto_approve),
+                exit_on_result: true,
             }).await?;
             composer_db::models::workflow_run::update_main_session(
                 &self.db.pool,
@@ -337,6 +338,7 @@ impl WorkflowEngine {
             let main_session_id = run.main_session_id.unwrap().to_string();
             self.session_service.resume_session(&main_session_id, ResumeSessionRequest {
                 prompt: Some(prompt),
+                exit_on_result: true,
             }).await?
         };
 
@@ -443,6 +445,7 @@ impl WorkflowEngine {
             prompt,
             repo_path,
             auto_approve: Some(task.auto_approve),
+            exit_on_result: true,
         }).await?;
 
         let step_output = composer_db::models::workflow_step_output::create(

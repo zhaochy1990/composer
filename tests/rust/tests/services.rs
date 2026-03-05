@@ -457,7 +457,7 @@ mod session_service_tests {
 
         // Try to retry a running session — should fail
         let result = _svc
-            .retry_session(&sess.id.to_string(), ResumeSessionRequest { prompt: None })
+            .retry_session(&sess.id.to_string(), ResumeSessionRequest { prompt: None, exit_on_result: false })
             .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Only failed sessions can be retried"));

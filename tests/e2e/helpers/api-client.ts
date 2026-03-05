@@ -9,6 +9,46 @@ interface Task {
   assigned_agent_id: string | null;
   project_id: string | null;
   auto_approve: boolean;
+  workflow_run_id: string | null;
+}
+
+interface Workflow {
+  id: string;
+  project_id: string;
+  name: string;
+  definition: WorkflowDefinition;
+}
+
+interface WorkflowDefinition {
+  steps: WorkflowStepDefinition[];
+}
+
+interface WorkflowStepDefinition {
+  step_type: string;
+  name: string;
+  prompt_template?: string;
+  max_retries?: number;
+}
+
+interface WorkflowRun {
+  id: string;
+  workflow_id: string;
+  task_id: string;
+  status: string;
+  current_step_index: number;
+  iteration_count: number;
+  main_session_id: string | null;
+}
+
+interface WorkflowStepOutput {
+  id: string;
+  workflow_run_id: string;
+  step_index: number;
+  step_type: string;
+  output: string | null;
+  attempt: number;
+  status: string;
+  session_id: string | null;
 }
 
 interface Agent {
@@ -183,6 +223,55 @@ export class ApiClient {
 
   async listProjectTasks(projectId: string): Promise<Task[]> {
     return this.fetch<Task[]>(`/projects/${projectId}/tasks`);
+  }
+
+  // --- Workflows ---
+
+  async listWorkflowsByProject(projectId: string): Promise<Workflow[]> {
+    return this.fetch<Workflow[]>(`/workflows/by-project/${projectId}`);
+  }
+
+  async createWorkflow(data: { project_id: string; name: string; definition: WorkflowDefinition }): Promise<Workflow> {
+    return this.fetch<Workflow>('/workflows', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getWorkflow(id: string): Promise<Workflow> {
+    return this.fetch<Workflow>(`/workflows/${id}`);
+  }
+
+  async deleteWorkflow(id: string): Promise<void> {
+    return this.fetch<void>(`/workflows/${id}`, { method: 'DELETE' });
+  }
+
+  async startWorkflow(taskId: string, workflowId: string): Promise<WorkflowRun> {
+    return this.fetch<WorkflowRun>(`/tasks/${taskId}/start-workflow`, {
+      method: 'POST',
+      body: JSON.stringify({ workflow_id: workflowId }),
+    });
+  }
+
+  async getWorkflowRun(id: string): Promise<WorkflowRun> {
+    return this.fetch<WorkflowRun>(`/workflow-runs/${id}`);
+  }
+
+  async getWorkflowStepOutputs(runId: string): Promise<WorkflowStepOutput[]> {
+    return this.fetch<WorkflowStepOutput[]>(`/workflow-runs/${runId}/steps`);
+  }
+
+  async submitWorkflowDecision(runId: string, approved: boolean, comments?: string): Promise<WorkflowRun> {
+    return this.fetch<WorkflowRun>(`/workflow-runs/${runId}/decision`, {
+      method: 'POST',
+      body: JSON.stringify({ approved, comments }),
+    });
+  }
+
+  async resumeWorkflowRun(runId: string): Promise<WorkflowRun> {
+    return this.fetch<WorkflowRun>(`/workflow-runs/${runId}/resume`, {
+      method: 'POST',
+    });
   }
 
   // --- Cleanup ---

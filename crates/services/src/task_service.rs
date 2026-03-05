@@ -140,6 +140,7 @@ impl TaskService {
             prompt,
             repo_path,
             auto_approve: Some(task.auto_approve),
+            exit_on_result: false,
         }).await?;
 
         // Re-fetch task after session creation (status changed to in_progress)

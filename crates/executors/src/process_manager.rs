@@ -25,6 +25,9 @@ pub struct SpawnOptions {
     pub resume_session_id: Option<String>,
     /// Message UUID to resume from (for mid-session resume / rollback).
     pub resume_at_message_id: Option<String>,
+    /// When true, close stdin after receiving a Result message so the process
+    /// exits after one turn. Used by workflow engine steps.
+    pub exit_on_result: bool,
 }
 
 pub struct AgentProcess {
@@ -139,6 +142,9 @@ impl AgentProcessManager {
         let session_id_capture = claude_session_id.clone();
         let last_result_capture = last_result.clone();
         let last_msg_id_capture = last_message_id.clone();
+        let exit_on_result = opts.exit_on_result;
+        let result_received = Arc::new(tokio::sync::Notify::new());
+        let result_received_signal = result_received.clone();
         let stdout_handle = tokio::spawn(async move {
             // Track pending assistant UUID — only committed on Result
             let pending_assistant_uuid: std::sync::Mutex<Option<String>> =
@@ -216,6 +222,11 @@ impl AgentProcessManager {
                     if let CliMessage::Result(result) = msg {
                         let is_error = result.is_error.unwrap_or(false);
                         *last_result_capture.lock().unwrap() = Some((result.result, is_error));
+
+                        // For workflow steps: signal that we got the Result.
+                        if exit_on_result {
+                            result_received_signal.notify_one();
+                        }
                     }
                 },
                 |raw_line| {
@@ -257,11 +268,32 @@ impl AgentProcessManager {
             }
         });
 
-        // Monitor: wait for completion or cancellation
+        // Monitor: wait for completion, cancellation, or exit_on_result signal
         let interrupt_peer = peer.clone();
         let event_tx5 = self.event_tx.clone();
         let last_result_monitor = last_result.clone();
         let claude_sid_monitor = claude_session_id.clone();
+
+        // If exit_on_result is set, spawn a task that waits for the Result signal
+        // and then drops stdin to make the process exit. Uses the cancel token
+        // so the task is cleaned up if the process exits without a Result.
+        if exit_on_result {
+            let exit_peer = peer.clone();
+            let result_received = result_received.clone();
+            let exit_cancel = cancel_token.clone();
+            tokio::spawn(async move {
+                tokio::select! {
+                    _ = result_received.notified() => {
+                        tracing::info!("exit_on_result: closing stdin after Result received");
+                        exit_peer.close_stdin().await;
+                    }
+                    _ = exit_cancel.cancelled() => {
+                        // Process was cancelled/interrupted — no need to close stdin
+                    }
+                }
+            });
+        }
+
         let monitor_handle = tokio::spawn(async move {
             let was_cancelled = tokio::select! {
                 _ = cancel_clone.cancelled() => {
@@ -325,6 +357,8 @@ impl AgentProcessManager {
                 }
             }
 
+            // Cancel the token to clean up any detached tasks (e.g., exit_on_result waiter)
+            cancel_clone.cancel();
             processes.remove(&session_id);
         });
 
