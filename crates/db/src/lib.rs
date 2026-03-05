@@ -28,8 +28,22 @@ impl Database {
     }
 
     pub async fn run_migrations(&self) -> anyhow::Result<()> {
+        // Acquire a single connection and disable FK checks on it so that
+        // migrations can drop/recreate tables without FK constraint errors.
+        // PRAGMA foreign_keys is per-connection and is a no-op inside
+        // transactions, so we must set it on the connection before sqlx
+        // wraps each migration in a transaction.
+        let mut conn = self.pool.acquire().await?;
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *conn)
+            .await?;
+
         sqlx::migrate!("./migrations")
-            .run(&self.pool)
+            .run(&mut *conn)
+            .await?;
+
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *conn)
             .await?;
         Ok(())
     }
