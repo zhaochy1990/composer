@@ -1,6 +1,14 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronDown, Plus } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, GitPullRequest } from 'lucide-react';
 import type { Task, TaskStatus } from '@/types/generated';
+import { shortId } from '@/lib/utils';
+
+const priorityConfig: Record<number, { label: string; className: string }> = {
+    3: { label: 'High', className: 'bg-red-900/60 text-red-300 border-red-700' },
+    2: { label: 'Medium', className: 'bg-yellow-900/60 text-yellow-300 border-yellow-700' },
+    1: { label: 'Low', className: 'bg-blue-900/60 text-blue-300 border-blue-700' },
+    0: { label: 'None', className: 'bg-gray-800 text-gray-400 border-gray-600' },
+};
 
 interface TaskListSectionProps {
     title: string;
@@ -9,6 +17,9 @@ interface TaskListSectionProps {
     onEditTask: (task: Task) => void;
     onCreateTask: (status: TaskStatus) => void;
     defaultCollapsed?: boolean;
+    agentNameMap?: Record<string, string>;
+    projectNameMap?: Record<string, string>;
+    selectedTaskId?: string;
 }
 
 export function TaskListSection({
@@ -18,6 +29,9 @@ export function TaskListSection({
     onEditTask,
     onCreateTask,
     defaultCollapsed = false,
+    agentNameMap,
+    projectNameMap,
+    selectedTaskId,
 }: TaskListSectionProps) {
     const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -68,28 +82,61 @@ export function TaskListSection({
                             No tasks
                         </div>
                     ) : (
-                        tasks.map((task) => (
-                            <div
-                                key={task.id}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => onEditTask(task)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        onEditTask(task);
-                                    }
-                                }}
-                                className="px-4 py-2 hover:bg-gray-800 cursor-pointer border-b border-gray-800/50 transition-colors"
-                            >
-                                {task.simple_id && (
-                                    <span className="font-mono text-xs text-gray-500 mr-2">
-                                        {task.simple_id}
-                                    </span>
-                                )}
-                                <span className="text-sm text-gray-100">{task.title}</span>
-                            </div>
-                        ))
+                        tasks.map((task) => {
+                            const isSelected = task.id === selectedTaskId;
+                            const priority = priorityConfig[task.priority] ?? priorityConfig[0];
+                            return (
+                                <div
+                                    key={task.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => onEditTask(task)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            onEditTask(task);
+                                        }
+                                    }}
+                                    className={`px-4 py-2.5 cursor-pointer border-b border-gray-800/50 transition-colors ${
+                                        isSelected
+                                            ? 'bg-gray-800 border-l-2 border-l-blue-500'
+                                            : 'hover:bg-gray-800/60 border-l-2 border-l-transparent'
+                                    }`}
+                                >
+                                    <div className="flex items-start gap-1">
+                                        {task.simple_id && (
+                                            <span className="font-mono text-xs text-gray-500 mt-0.5 shrink-0">
+                                                {task.simple_id}
+                                            </span>
+                                        )}
+                                        <span className="text-sm text-gray-100 line-clamp-1">{task.title}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                        <span
+                                            className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border ${priority.className}`}
+                                        >
+                                            {priority.label}
+                                        </span>
+                                        {task.assigned_agent_id && (
+                                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-300 border border-purple-700">
+                                                {agentNameMap?.[task.assigned_agent_id] ?? shortId(task.assigned_agent_id)}
+                                            </span>
+                                        )}
+                                        {task.project_id && (
+                                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-teal-900/50 text-teal-300 border border-teal-700">
+                                                {projectNameMap?.[task.project_id] ?? shortId(task.project_id)}
+                                            </span>
+                                        )}
+                                        {task.pr_urls?.length > 0 && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700">
+                                                <GitPullRequest className="w-2.5 h-2.5" />
+                                                {task.pr_urls.length === 1 ? 'PR' : `${task.pr_urls.length} PRs`}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             )}

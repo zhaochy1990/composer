@@ -188,6 +188,10 @@ export function TaskBoard() {
                         tasksByStatus={tasksByStatus}
                         onEditTask={handleEditTask}
                         onCreateTask={handleCreateTask}
+                        selectedTask={editingTask}
+                        onCloseTask={() => setEditingTask(null)}
+                        agentNameMap={agentNameMap}
+                        projectNameMap={projectNameMap}
                     />
                 )}
             </div>
@@ -199,7 +203,7 @@ export function TaskBoard() {
                 defaultStatus={createDefaultStatus}
             />
 
-            {editingTask && (
+            {editingTask && viewMode === 'kanban' && (
                 <TaskDetailPanel
                     key={editingTask.id}
                     task={editingTask}
