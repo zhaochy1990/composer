@@ -320,6 +320,11 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                     <span className="text-xs text-gray-500">
                                         Created {new Date(task.created_at).toLocaleString()}
                                     </span>
+                                    {task.completed_at && (
+                                        <span className="text-xs text-gray-500">
+                                            Completed {new Date(task.completed_at).toLocaleString()}
+                                        </span>
+                                    )}
                                 </div>
 
                                 <div className="flex gap-2">

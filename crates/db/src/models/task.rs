@@ -18,6 +18,7 @@ struct TaskRow {
     pr_urls: String,
     workflow_run_id: Option<String>,
     workflow_id: Option<String>,
+    completed_at: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -42,6 +43,7 @@ impl TryFrom<TaskRow> for Task {
             pr_urls,
             workflow_run_id: row.workflow_run_id.map(|s| s.parse()).transpose()?,
             workflow_id: row.workflow_id.map(|s| s.parse()).transpose()?,
+            completed_at: row.completed_at.map(|s| s.parse()).transpose()?,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
         })
@@ -119,7 +121,7 @@ pub async fn create(
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
 }
 
-const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, task_number, simple_id, pr_urls, workflow_run_id, workflow_id, created_at, updated_at";
+const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, task_number, simple_id, pr_urls, workflow_run_id, workflow_id, completed_at, created_at, updated_at";
 
 pub async fn update_workflow_run_id(pool: &SqlitePool, id: &str, workflow_run_id: &str) -> anyhow::Result<()> {
     sqlx::query("UPDATE tasks SET workflow_run_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
@@ -182,6 +184,7 @@ pub async fn update(
          project_id = COALESCE(?, project_id), \
          assigned_agent_id = COALESCE(?, assigned_agent_id), \
          workflow_id = COALESCE(?, workflow_id), \
+         completed_at = CASE WHEN COALESCE(?, status) = 'done' THEN COALESCE(completed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) WHEN ? IS NOT NULL THEN NULL ELSE completed_at END, \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE id = ?"
     )
@@ -193,6 +196,8 @@ pub async fn update(
     .bind(project_id)
     .bind(assigned_agent_id)
     .bind(workflow_id)
+    .bind(status_str.as_deref())
+    .bind(status_str.as_deref())
     .bind(id)
     .execute(pool)
     .await?;
@@ -203,8 +208,12 @@ pub async fn update(
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &TaskStatus) -> anyhow::Result<()> {
     let status_str = serde_json::to_value(status)?
         .as_str().unwrap_or("backlog").to_string();
-    sqlx::query("UPDATE tasks SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-        .bind(&status_str).bind(id).execute(pool).await?;
+    sqlx::query(
+        "UPDATE tasks SET status = ?, \
+         completed_at = CASE WHEN ? = 'done' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END, \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+    )
+    .bind(&status_str).bind(&status_str).bind(id).execute(pool).await?;
     Ok(())
 }
 

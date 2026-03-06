@@ -292,6 +292,11 @@ impl WorkflowEngine {
             .clone()
     }
 
+    /// Remove the per-run lock when a workflow run reaches a terminal state.
+    fn cleanup_run_lock(&self, run_id: &str) {
+        self.run_locks.remove(run_id);
+    }
+
     /// Ensure the built-in "Feat-Common" workflow exists as a template.
     pub async fn ensure_builtin_workflow(&self) -> anyhow::Result<Workflow> {
         let canonical = feat_common_definition();
@@ -720,6 +725,12 @@ impl WorkflowEngine {
                 // Check if this step has a loop_back_to and should loop
                 let step_def = workflow.definition.steps.iter()
                     .find(|s| s.id == step_output.step_id);
+                if step_def.is_none() {
+                    tracing::warn!(
+                        "Step definition '{}' not found in workflow for run {}",
+                        step_output.step_id, run_id
+                    );
+                }
                 if let Some(def) = step_def {
                     if let Some(ref loop_target) = def.loop_back_to {
                         if self.should_loop(&run_id, &workflow, def, loop_target).await? {
@@ -845,8 +856,7 @@ impl WorkflowEngine {
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
         self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
 
-        // Clean up per-run lock to avoid unbounded memory growth
-        self.run_locks.remove(&run_id);
+        self.cleanup_run_lock(&run_id);
 
         Ok(true)
     }
@@ -908,14 +918,11 @@ impl WorkflowEngine {
         for step in &workflow.definition.steps {
             let step_id = step.id.as_str();
 
-            // Skip if already has a running/completed/waiting/skipped output
+            // Skip if already has a non-pending output (only Pending steps are re-executable)
             if let Some(status) = latest_status.get(step_id) {
                 match status {
-                    WorkflowStepStatus::Running
-                    | WorkflowStepStatus::Completed
-                    | WorkflowStepStatus::WaitingForHuman
-                    | WorkflowStepStatus::Skipped => continue,
-                    _ => {}
+                    WorkflowStepStatus::Pending => {} // fall through — ready for execution
+                    _ => continue, // Running, Completed, WaitingForHuman, Skipped, Failed, Rejected
                 }
             }
 
@@ -1116,8 +1123,7 @@ impl WorkflowEngine {
             to_status: TaskStatus::Done,
         });
 
-        // Clean up per-run lock to avoid unbounded memory growth
-        self.run_locks.remove(run_id);
+        self.cleanup_run_lock(run_id);
 
         Ok(())
     }

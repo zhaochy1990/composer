@@ -50,6 +50,7 @@ export interface Task {
     pr_urls: string[];
     workflow_run_id?: string;
     workflow_id?: string;
+    completed_at?: string;
     created_at: string;
     updated_at: string;
 }
