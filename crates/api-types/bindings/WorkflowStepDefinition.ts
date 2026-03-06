@@ -2,13 +2,4 @@
 import type { SessionMode } from "./SessionMode";
 import type { WorkflowStepType } from "./WorkflowStepType";
 
-export type WorkflowStepDefinition = { step_type: WorkflowStepType, name: string, prompt_template: string | null, max_retries: number | null, 
-/**
- * Step index to loop back to after this step completes.
- * Used for review-fix cycles (e.g., fix step loops back to review step).
- */
-loop_back_to: number | null, 
-/**
- * Session mode for Agentic steps. Defaults to Resume if not specified.
- */
-session_mode: SessionMode | null, };
+export type WorkflowStepDefinition = { id: string, step_type: WorkflowStepType, name: string, prompt_template: string | null, depends_on: Array<string>, on_approve: string | null, on_reject: string | null, max_retries: number | null, loop_back_to: string | null, session_mode: SessionMode | null, };

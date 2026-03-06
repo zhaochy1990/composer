@@ -2,4 +2,4 @@
 import type { WorkflowStepStatus } from "./WorkflowStepStatus";
 import type { WorkflowStepType } from "./WorkflowStepType";
 
-export type WorkflowStepOutput = { id: string, workflow_run_id: string, step_index: number, step_type: WorkflowStepType, output: string | null, attempt: number, status: WorkflowStepStatus, session_id: string | null, created_at: string, };
+export type WorkflowStepOutput = { id: string, workflow_run_id: string, step_id: string, step_type: WorkflowStepType, output: string | null, attempt: number, status: WorkflowStepStatus, session_id: string | null, created_at: string, };

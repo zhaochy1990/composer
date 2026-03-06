@@ -328,6 +328,7 @@ dependencies = [
  "composer-db",
  "composer-executors",
  "composer-git",
+ "dashmap",
  "once_cell",
  "regex",
  "serde",

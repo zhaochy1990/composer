@@ -348,17 +348,25 @@ fn workflow_definition_roundtrip() {
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
+                id: "plan".to_string(),
                 step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("Do {{task}}".to_string()),
+                depends_on: vec![],
+                on_approve: None,
+                on_reject: None,
                 max_retries: Some(3),
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
+                id: "review".to_string(),
                 step_type: WorkflowStepType::HumanGate,
                 name: "Review".to_string(),
                 prompt_template: None,
+                depends_on: vec!["plan".to_string()],
+                on_approve: Some("plan".to_string()),
+                on_reject: None,
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
@@ -369,11 +377,13 @@ fn workflow_definition_roundtrip() {
     let parsed: WorkflowDefinition = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.steps.len(), 2);
     assert_eq!(parsed.steps[0].step_type, WorkflowStepType::Agentic);
+    assert_eq!(parsed.steps[0].id, "plan");
     assert_eq!(
         parsed.steps[0].prompt_template.as_deref(),
         Some("Do {{task}}")
     );
     assert_eq!(parsed.steps[1].step_type, WorkflowStepType::HumanGate);
+    assert_eq!(parsed.steps[1].depends_on, vec!["plan"]);
 }
 
 #[test]
@@ -383,17 +393,16 @@ fn workflow_run_event_shape() {
         workflow_id: uuid::Uuid::nil(),
         task_id: uuid::Uuid::nil(),
         status: WorkflowRunStatus::Running,
-        current_step_index: 2,
         iteration_count: 1,
-        main_session_id: None,
+        activated_steps: vec!["implement".to_string()],
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
     let event = WsEvent::WorkflowRunUpdated(run);
     let json: serde_json::Value = serde_json::to_value(&event).unwrap();
     assert_eq!(json["type"], "WorkflowRunUpdated");
-    assert_eq!(json["payload"]["current_step_index"], 2);
     assert_eq!(json["payload"]["status"], "running");
+    assert_eq!(json["payload"]["activated_steps"][0], "implement");
 }
 
 #[test]
@@ -401,17 +410,18 @@ fn workflow_waiting_event_shape() {
     let event = WsEvent::WorkflowWaitingForHuman {
         workflow_run_id: uuid::Uuid::nil(),
         task_id: uuid::Uuid::nil(),
-        step_index: 1,
+        step_id: "review_plan".to_string(),
     };
     let json: serde_json::Value = serde_json::to_value(&event).unwrap();
     assert_eq!(json["type"], "WorkflowWaitingForHuman");
-    assert_eq!(json["payload"]["step_index"], 1);
+    assert_eq!(json["payload"]["step_id"], "review_plan");
 }
 
 #[test]
 fn workflow_decision_request_deserialization() {
-    let json = r#"{"approved": false, "comments": "Please add error handling"}"#;
+    let json = r#"{"step_id": "review_plan", "approved": false, "comments": "Please add error handling"}"#;
     let req: WorkflowDecisionRequest = serde_json::from_str(json).unwrap();
+    assert_eq!(req.step_id, "review_plan");
     assert!(!req.approved);
     assert_eq!(req.comments.as_deref(), Some("Please add error handling"));
 }

@@ -128,6 +128,14 @@ pub enum WorkflowStepStatus {
     Completed,
     Rejected,
     Failed,
+    Skipped,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowResumeAction {
+    ContinueLoop,
+    SkipToNext,
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +251,7 @@ pub struct ProjectInstruction {
 pub struct Workflow {
     pub id: Uuid,
     pub name: String,
+    pub is_template: bool,
     pub definition: WorkflowDefinition,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -257,15 +266,17 @@ pub struct WorkflowDefinition {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct WorkflowStepDefinition {
+    pub id: String,
     pub step_type: WorkflowStepType,
     pub name: String,
     pub prompt_template: Option<String>,
-    pub max_retries: Option<i32>,
-    /// Step index to loop back to after this step completes.
-    /// Used for review-fix cycles (e.g., fix step loops back to review step).
     #[serde(default)]
-    pub loop_back_to: Option<i32>,
-    /// Session mode for Agentic steps. Defaults to Resume if not specified.
+    pub depends_on: Vec<String>,
+    pub on_approve: Option<String>,
+    pub on_reject: Option<String>,
+    pub max_retries: Option<i32>,
+    #[serde(default)]
+    pub loop_back_to: Option<String>,
     #[serde(default)]
     pub session_mode: Option<SessionMode>,
 }
@@ -277,9 +288,8 @@ pub struct WorkflowRun {
     pub workflow_id: Uuid,
     pub task_id: Uuid,
     pub status: WorkflowRunStatus,
-    pub current_step_index: i32,
     pub iteration_count: i32,
-    pub main_session_id: Option<Uuid>,
+    pub activated_steps: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -289,7 +299,7 @@ pub struct WorkflowRun {
 pub struct WorkflowStepOutput {
     pub id: Uuid,
     pub workflow_run_id: Uuid,
-    pub step_index: i32,
+    pub step_id: String,
     pub step_type: WorkflowStepType,
     pub output: Option<String>,
     pub attempt: i32,
@@ -366,8 +376,6 @@ pub struct CreateSessionRequest {
     pub repo_path: String,
     pub name: Option<String>,
     pub auto_approve: Option<bool>,
-    /// When true, close stdin after the agent produces a Result so the process
-    /// exits after one turn. Used internally by the workflow engine.
     #[serde(default)]
     pub exit_on_result: bool,
 }
@@ -376,8 +384,6 @@ pub struct CreateSessionRequest {
 #[ts(export)]
 pub struct ResumeSessionRequest {
     pub prompt: Option<String>,
-    /// When true, close stdin after the agent produces a Result so the process
-    /// exits after one turn. Used internally by the workflow engine.
     #[serde(default)]
     pub exit_on_result: bool,
     /// When true, resume the session for interactive multi-turn conversation
@@ -463,8 +469,16 @@ pub struct StartWorkflowRequest {
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct WorkflowDecisionRequest {
+    pub step_id: String,
     pub approved: bool,
     pub comments: Option<String>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct WorkflowResumeRequest {
+    pub step_id: Option<String>,
+    pub action: Option<WorkflowResumeAction>,
 }
 
 // ---------------------------------------------------------------------------
@@ -501,4 +515,11 @@ pub struct BrowseResponse {
     pub current_path: String,
     pub parent: Option<String>,
     pub entries: Vec<DirEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ValidationResult {
+    pub valid: bool,
+    pub errors: Vec<String>,
 }

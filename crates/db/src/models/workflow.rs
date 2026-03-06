@@ -6,6 +6,7 @@ use uuid::Uuid;
 struct WorkflowRow {
     id: String,
     name: String,
+    is_template: bool,
     definition: String,
     created_at: String,
     updated_at: String,
@@ -18,6 +19,7 @@ impl TryFrom<WorkflowRow> for Workflow {
         Ok(Workflow {
             id: row.id.parse()?,
             name: row.name,
+            is_template: row.is_template,
             definition: serde_json::from_str(&row.definition)?,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
@@ -25,20 +27,30 @@ impl TryFrom<WorkflowRow> for Workflow {
     }
 }
 
-const COLUMNS: &str = "id, name, definition, created_at, updated_at";
+const COLUMNS: &str = "id, name, is_template, definition, created_at, updated_at";
 
 pub async fn create(
     pool: &SqlitePool,
     name: &str,
     definition: &WorkflowDefinition,
 ) -> anyhow::Result<Workflow> {
+    create_with_template(pool, name, definition, false).await
+}
+
+pub async fn create_with_template(
+    pool: &SqlitePool,
+    name: &str,
+    definition: &WorkflowDefinition,
+    is_template: bool,
+) -> anyhow::Result<Workflow> {
     let id = Uuid::new_v4().to_string();
     let def_json = serde_json::to_string(definition)?;
     sqlx::query(
-        "INSERT INTO workflows (id, name, definition) VALUES (?, ?, ?)"
+        "INSERT INTO workflows (id, name, is_template, definition) VALUES (?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(name)
+    .bind(is_template)
     .bind(&def_json)
     .execute(pool)
     .await?;
@@ -102,42 +114,9 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// List all workflow definitions as raw (id, definition_json) pairs.
-/// Used for migrations that operate on raw JSON before deserialization.
-pub async fn list_all_raw_definitions(pool: &SqlitePool) -> anyhow::Result<Vec<(String, String)>> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, definition FROM workflows"
-    ).fetch_all(pool).await?;
-    Ok(rows)
-}
-
-/// Update a workflow's raw definition JSON string.
-/// Used for migrations that operate on raw JSON before deserialization.
-pub async fn update_raw_definition(pool: &SqlitePool, id: &str, definition_json: &str) -> anyhow::Result<()> {
-    sqlx::query(
-        "UPDATE workflows SET definition = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
-    )
-    .bind(definition_json)
-    .bind(id)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-/// Check if any workflow definitions contain old step types that need migration.
-pub async fn has_legacy_step_types(pool: &SqlitePool) -> anyhow::Result<bool> {
-    let count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM workflows WHERE \
-         definition LIKE '%\"step_type\":\"plan\"%' \
-         OR definition LIKE '%\"step_type\": \"plan\"%' \
-         OR definition LIKE '%\"step_type\":\"implement\"%' \
-         OR definition LIKE '%\"step_type\": \"implement\"%' \
-         OR definition LIKE '%\"step_type\":\"pr_review\"%' \
-         OR definition LIKE '%\"step_type\": \"pr_review\"%' \
-         OR definition LIKE '%\"step_type\":\"human_review\"%' \
-         OR definition LIKE '%\"step_type\": \"human_review\"%' \
-         OR definition LIKE '%\"step_type\":\"complete_pr\"%' \
-         OR definition LIKE '%\"step_type\": \"complete_pr\"%'"
-    ).fetch_one(pool).await?;
-    Ok(count.0 > 0)
+/// Clone a workflow (typically a template) into a new editable workflow.
+pub async fn clone_workflow(pool: &SqlitePool, id: &str, new_name: &str) -> anyhow::Result<Workflow> {
+    let source = find_by_id(pool, id).await?
+        .ok_or_else(|| anyhow::anyhow!("Workflow not found"))?;
+    create_with_template(pool, new_name, &source.definition, false).await
 }

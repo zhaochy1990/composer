@@ -6,6 +6,9 @@ import type {
     WorkflowStepOutput,
     CreateWorkflowRequest,
     UpdateWorkflowRequest,
+    WorkflowResumeRequest,
+    WorkflowDefinition,
+    ValidationResult,
 } from '@/types/generated';
 
 export function useWorkflows() {
@@ -47,6 +50,25 @@ export function useDeleteWorkflow() {
         mutationFn: (id: string) =>
             apiFetch<void>(`/workflows/${id}`, { method: 'DELETE' }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+    });
+}
+
+export function useCloneWorkflow() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) =>
+            apiFetch<Workflow>(`/workflows/${id}/clone`, { method: 'POST' }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+    });
+}
+
+export function useValidateWorkflow() {
+    return useMutation({
+        mutationFn: (definition: WorkflowDefinition) =>
+            apiFetch<ValidationResult>(`/workflows/validate`, {
+                method: 'POST',
+                body: JSON.stringify(definition),
+            }),
     });
 }
 
@@ -93,8 +115,11 @@ export function useWorkflowStepOutputs(runId: string | undefined) {
 export function useResumeWorkflowRun() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (runId: string) =>
-            apiFetch<WorkflowRun>(`/workflow-runs/${runId}/resume`, { method: 'POST' }),
+        mutationFn: ({ runId, ...req }: { runId: string } & WorkflowResumeRequest) =>
+            apiFetch<WorkflowRun>(`/workflow-runs/${runId}/resume`, {
+                method: 'POST',
+                body: JSON.stringify(req),
+            }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -106,10 +131,15 @@ export function useResumeWorkflowRun() {
 export function useSubmitWorkflowDecision() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ runId, approved, comments }: { runId: string; approved: boolean; comments?: string }) =>
+        mutationFn: ({ runId, stepId, approved, comments }: {
+            runId: string;
+            stepId: string;
+            approved: boolean;
+            comments?: string;
+        }) =>
             apiFetch<WorkflowRun>(`/workflow-runs/${runId}/decision`, {
                 method: 'POST',
-                body: JSON.stringify({ approved, comments }),
+                body: JSON.stringify({ step_id: stepId, approved, comments }),
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });

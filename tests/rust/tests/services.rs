@@ -635,34 +635,36 @@ mod workflow_tests {
         wf.id.to_string()
     }
 
+    fn find_step<'a>(def: &'a WorkflowDefinition, id: &str) -> &'a WorkflowStepDefinition {
+        def.steps.iter().find(|s| s.id == id).unwrap()
+    }
+
     #[test]
     fn feat_common_definition_has_expected_steps() {
         let def = workflow_engine::feat_common_definition();
-        assert_eq!(def.steps.len(), 8);
-        assert_eq!(def.steps[0].step_type, WorkflowStepType::Agentic);
-        assert_eq!(def.steps[0].session_mode, Some(SessionMode::New));
-        assert_eq!(def.steps[1].step_type, WorkflowStepType::HumanGate);
-        assert_eq!(def.steps[2].step_type, WorkflowStepType::Agentic);
-        assert_eq!(def.steps[2].session_mode, Some(SessionMode::Resume));
-        assert_eq!(def.steps[3].step_type, WorkflowStepType::Agentic);
-        assert_eq!(def.steps[3].session_mode, Some(SessionMode::Separate));
-        assert_eq!(def.steps[4].step_type, WorkflowStepType::Agentic);
-        assert_eq!(def.steps[5].step_type, WorkflowStepType::HumanGate);
-        assert_eq!(def.steps[6].step_type, WorkflowStepType::Agentic);
-        assert_eq!(def.steps[7].step_type, WorkflowStepType::Agentic);
+        assert_eq!(def.steps.len(), 7);
+        assert_eq!(find_step(&def, "plan").step_type, WorkflowStepType::Agentic);
+        assert_eq!(find_step(&def, "plan").session_mode, Some(SessionMode::New));
+        assert_eq!(find_step(&def, "review_plan").step_type, WorkflowStepType::HumanGate);
+        assert_eq!(find_step(&def, "implement").step_type, WorkflowStepType::Agentic);
+        assert_eq!(find_step(&def, "implement").session_mode, Some(SessionMode::Resume));
+        assert_eq!(find_step(&def, "auto_review").step_type, WorkflowStepType::Agentic);
+        assert_eq!(find_step(&def, "auto_review").session_mode, Some(SessionMode::Separate));
+        assert_eq!(find_step(&def, "fix_review").step_type, WorkflowStepType::Agentic);
+        assert_eq!(find_step(&def, "human_review").step_type, WorkflowStepType::HumanGate);
+        assert_eq!(find_step(&def, "complete_pr").step_type, WorkflowStepType::Agentic);
     }
 
     #[test]
     fn feat_common_step_names() {
         let def = workflow_engine::feat_common_definition();
-        assert_eq!(def.steps[0].name, "Plan");
-        assert_eq!(def.steps[1].name, "Review Plan");
-        assert_eq!(def.steps[2].name, "Implement & Create PR");
-        assert_eq!(def.steps[3].name, "Automated PR Review");
-        assert_eq!(def.steps[4].name, "Fix Review Findings");
-        assert_eq!(def.steps[5].name, "Human PR Review");
-        assert_eq!(def.steps[6].name, "Fix Human Comments");
-        assert_eq!(def.steps[7].name, "Complete PR");
+        assert_eq!(find_step(&def, "plan").name, "Plan");
+        assert_eq!(find_step(&def, "review_plan").name, "Review Plan");
+        assert_eq!(find_step(&def, "implement").name, "Implement & Create PR");
+        assert_eq!(find_step(&def, "auto_review").name, "Automated PR Review");
+        assert_eq!(find_step(&def, "fix_review").name, "Fix Review Findings");
+        assert_eq!(find_step(&def, "human_review").name, "Human PR Review");
+        assert_eq!(find_step(&def, "complete_pr").name, "Complete PR");
     }
 
     #[tokio::test]
@@ -672,15 +674,13 @@ mod workflow_tests {
         // Wait for startup seeding to complete
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-        // Calling ensure_builtin_workflow should return the already-seeded one
         let wf1 = engine.ensure_builtin_workflow().await.unwrap();
         assert_eq!(wf1.name, FEAT_COMMON_NAME);
+        assert!(wf1.is_template);
 
-        // Second call returns same
         let wf2 = engine.ensure_builtin_workflow().await.unwrap();
         assert_eq!(wf1.id, wf2.id);
 
-        // Only one workflow with this name exists
         let all = workflow::list_all(&db.pool).await.unwrap();
         let feat_common_count = all.iter().filter(|w| w.name == FEAT_COMMON_NAME).count();
         assert_eq!(feat_common_count, 1);
@@ -692,9 +692,13 @@ mod workflow_tests {
 
         let def = WorkflowDefinition {
             steps: vec![WorkflowStepDefinition {
+                id: "plan".to_string(),
                 step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
+                depends_on: vec![],
+                on_approve: None,
+                on_reject: None,
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
@@ -703,6 +707,7 @@ mod workflow_tests {
 
         let wf = workflow::create(&db.pool, "Test WF", &def).await.unwrap();
         assert_eq!(wf.name, "Test WF");
+        assert!(!wf.is_template);
         assert_eq!(wf.definition.steps.len(), 1);
 
         let found = workflow::find_by_id(&db.pool, &wf.id.to_string())
@@ -725,67 +730,57 @@ mod workflow_tests {
     }
 
     #[tokio::test]
+    async fn workflow_clone() {
+        let (_engine, db, _) = setup().await;
+
+        let def = workflow_engine::feat_common_definition();
+        let template = workflow::create_with_template(&db.pool, "Template", &def, true).await.unwrap();
+        assert!(template.is_template);
+
+        let cloned = workflow::clone_workflow(&db.pool, &template.id.to_string(), "My Copy").await.unwrap();
+        assert!(!cloned.is_template);
+        assert_eq!(cloned.name, "My Copy");
+        assert_eq!(cloned.definition, template.definition);
+        assert_ne!(cloned.id, template.id);
+    }
+
+    #[tokio::test]
     async fn workflow_run_crud() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let task_obj = task::create(
-            &db.pool,
-            "Test Task",
-            None,
-            None,
-            None,
-            Some(&project_id),
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let task_obj = task::create(&db.pool, "Test Task", None, None, None, Some(&project_id), None, None)
+            .await
+            .unwrap();
         let task_id = task_obj.id.to_string();
 
         let run = workflow_run::create(&db.pool, &wf_id, &task_id)
             .await
             .unwrap();
         assert_eq!(run.status, WorkflowRunStatus::Running);
-        assert_eq!(run.current_step_index, 0);
         assert_eq!(run.iteration_count, 0);
-        assert!(run.main_session_id.is_none());
+        assert!(run.activated_steps.is_empty());
 
-        // Update step index
-        workflow_run::update_step_index(&db.pool, &run.id.to_string(), 3)
-            .await
-            .unwrap();
-        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string())
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(updated.current_step_index, 3);
+        // Add activated step
+        workflow_run::add_activated_step(&db.pool, &run.id.to_string(), "implement").await.unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
+        assert_eq!(updated.activated_steps, vec!["implement".to_string()]);
 
         // Update status
         workflow_run::update_status(&db.pool, &run.id.to_string(), &WorkflowRunStatus::Paused)
             .await
             .unwrap();
-        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string())
-            .await
-            .unwrap()
-            .unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
         assert_eq!(updated.status, WorkflowRunStatus::Paused);
 
         // Increment iteration
-        workflow_run::increment_iteration(&db.pool, &run.id.to_string())
-            .await
-            .unwrap();
-        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string())
-            .await
-            .unwrap()
-            .unwrap();
+        workflow_run::increment_iteration(&db.pool, &run.id.to_string()).await.unwrap();
+        let updated = workflow_run::find_by_id(&db.pool, &run.id.to_string()).await.unwrap().unwrap();
         assert_eq!(updated.iteration_count, 1);
 
         // Find by task
-        let by_task = workflow_run::find_by_task(&db.pool, &task_id)
-            .await
-            .unwrap();
+        let by_task = workflow_run::find_by_task(&db.pool, &task_id).await.unwrap();
         assert!(by_task.is_some());
         assert_eq!(by_task.unwrap().id, run.id);
     }
@@ -801,60 +796,41 @@ mod workflow_tests {
 
         // Create step output
         let step = workflow_step_output::create(
-            &db.pool,
-            &run_id,
-            0,
-            &WorkflowStepType::Agentic,
-            &WorkflowStepStatus::Running,
-            None,
-        )
-        .await
-        .unwrap();
-        assert_eq!(step.step_index, 0);
+            &db.pool, &run_id, "plan", &WorkflowStepType::Agentic,
+            &WorkflowStepStatus::Running, None,
+        ).await.unwrap();
+        assert_eq!(step.step_id, "plan");
         assert_eq!(step.attempt, 1);
         assert_eq!(step.status, WorkflowStepStatus::Running);
 
         // Update status and output
         workflow_step_output::update_status_and_output(
-            &db.pool,
-            &step.id.to_string(),
-            &WorkflowStepStatus::Completed,
-            Some("Plan text here"),
-        )
-        .await
-        .unwrap();
-        let updated = workflow_step_output::find_by_id(&db.pool, &step.id.to_string())
-            .await
-            .unwrap()
-            .unwrap();
+            &db.pool, &step.id.to_string(),
+            &WorkflowStepStatus::Completed, Some("Plan text here"),
+        ).await.unwrap();
+        let updated = workflow_step_output::find_by_id(&db.pool, &step.id.to_string()).await.unwrap().unwrap();
         assert_eq!(updated.status, WorkflowStepStatus::Completed);
         assert_eq!(updated.output.as_deref(), Some("Plan text here"));
 
         // Create another attempt for same step
         let step2 = workflow_step_output::create(
-            &db.pool,
-            &run_id,
-            0,
-            &WorkflowStepType::Agentic,
-            &WorkflowStepStatus::Running,
-            None,
-        )
-        .await
-        .unwrap();
+            &db.pool, &run_id, "plan", &WorkflowStepType::Agentic,
+            &WorkflowStepStatus::Running, None,
+        ).await.unwrap();
         assert_eq!(step2.attempt, 2);
 
         // latest_for_step returns the highest attempt
-        let latest = workflow_step_output::latest_for_step(&db.pool, &run_id, 0)
-            .await
-            .unwrap()
-            .unwrap();
+        let latest = workflow_step_output::latest_for_step(&db.pool, &run_id, "plan").await.unwrap().unwrap();
         assert_eq!(latest.attempt, 2);
 
         // List all for the run
-        let all = workflow_step_output::list_by_run(&db.pool, &run_id)
-            .await
-            .unwrap();
+        let all = workflow_step_output::list_by_run(&db.pool, &run_id).await.unwrap();
         assert_eq!(all.len(), 2);
+
+        // Find completed step IDs
+        workflow_step_output::update_status(&db.pool, &step.id.to_string(), &WorkflowStepStatus::Completed).await.unwrap();
+        let completed = workflow_step_output::find_completed_step_ids(&db.pool, &run_id).await.unwrap();
+        assert!(completed.contains(&"plan".to_string()));
     }
 
     use composer_db::models::{agent, session};
@@ -866,28 +842,6 @@ mod workflow_tests {
     }
 
     #[tokio::test]
-    async fn workflow_run_find_by_session() {
-        let (_engine, db, _) = setup().await;
-        let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
-        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
-        let run_id = run.id.to_string();
-
-        // Create a real session for the FK
-        let session_id = create_agent_and_session(&db.pool).await;
-        workflow_run::update_main_session(&db.pool, &run_id, &session_id)
-            .await
-            .unwrap();
-
-        let found = workflow_run::find_by_session(&db.pool, &session_id)
-            .await
-            .unwrap();
-        assert!(found.is_some());
-        assert_eq!(found.unwrap().id, run.id);
-    }
-
-    #[tokio::test]
     async fn workflow_run_find_by_step_session() {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
@@ -896,22 +850,13 @@ mod workflow_tests {
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
 
-        // Create a real session for the FK, then reference it in a step output
         let review_session_id = create_agent_and_session(&db.pool).await;
         workflow_step_output::create(
-            &db.pool,
-            &run_id,
-            3,
-            &WorkflowStepType::Agentic,
-            &WorkflowStepStatus::Running,
-            Some(&review_session_id),
-        )
-        .await
-        .unwrap();
+            &db.pool, &run_id, "auto_review", &WorkflowStepType::Agentic,
+            &WorkflowStepStatus::Running, Some(&review_session_id),
+        ).await.unwrap();
 
-        let found = workflow_run::find_by_step_session(&db.pool, &review_session_id)
-            .await
-            .unwrap();
+        let found = workflow_run::find_by_step_session(&db.pool, &review_session_id).await.unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, run.id);
     }
@@ -928,56 +873,31 @@ mod workflow_tests {
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
         let task_id = task_obj.id.to_string();
 
-        // Simulate a running workflow run that was interrupted by server crash
-        let run = workflow_run::create(&db.pool, &wf_id, &task_id)
-            .await
-            .unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
         let run_id = run.id.to_string();
-        workflow_run::update_step_index(&db.pool, &run_id, 2)
-            .await
-            .unwrap();
 
         // Create a running step output
         workflow_step_output::create(
-            &db.pool,
-            &run_id,
-            2,
-            &WorkflowStepType::Agentic,
-            &WorkflowStepStatus::Running,
-            None,
-        )
-        .await
-        .unwrap();
+            &db.pool, &run_id, "implement", &WorkflowStepType::Agentic,
+            &WorkflowStepStatus::Running, None,
+        ).await.unwrap();
 
-        // Set task to in_progress
-        task::update_status(&db.pool, &task_id, &TaskStatus::InProgress)
-            .await
-            .unwrap();
+        task::update_status(&db.pool, &task_id, &TaskStatus::InProgress).await.unwrap();
 
-        // Now create the WorkflowEngine — triggers startup recovery
+        // Create the WorkflowEngine — triggers startup recovery
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
         let session_service = SessionService::new(db.clone(), event_bus.clone(), pm);
         let _engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service);
 
-        // Give recovery time to run
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-        // Workflow run should be paused
-        let recovered = workflow_run::find_by_id(&db.pool, &run_id)
-            .await
-            .unwrap()
-            .unwrap();
+        let recovered = workflow_run::find_by_id(&db.pool, &run_id).await.unwrap().unwrap();
         assert_eq!(recovered.status, WorkflowRunStatus::Paused);
 
-        // Task should be in waiting
         let task_after = task::find_by_id(&db.pool, &task_id).await.unwrap().unwrap();
         assert_eq!(task_after.status, TaskStatus::Waiting);
 
-        // Step should be failed
-        let step = workflow_step_output::latest_for_step(&db.pool, &run_id, 2)
-            .await
-            .unwrap()
-            .unwrap();
+        let step = workflow_step_output::latest_for_step(&db.pool, &run_id, "implement").await.unwrap().unwrap();
         assert_eq!(step.status, WorkflowStepStatus::Failed);
     }
 
@@ -991,12 +911,8 @@ mod workflow_tests {
 
         assert!(task_obj.workflow_run_id.is_none());
 
-        let run = workflow_run::create(&db.pool, &wf_id, &task_id)
-            .await
-            .unwrap();
-        task::update_workflow_run_id(&db.pool, &task_id, &run.id.to_string())
-            .await
-            .unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_id).await.unwrap();
+        task::update_workflow_run_id(&db.pool, &task_id, &run.id.to_string()).await.unwrap();
 
         let updated_task = task::find_by_id(&db.pool, &task_id).await.unwrap().unwrap();
         assert_eq!(updated_task.workflow_run_id, Some(run.id));
@@ -1008,24 +924,13 @@ mod workflow_tests {
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None, None)
-            .await
-            .unwrap();
-        let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None, None)
-            .await
-            .unwrap();
+        let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None, None).await.unwrap();
+        let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None, None).await.unwrap();
 
-        let run1 = workflow_run::create(&db.pool, &wf_id, &t1.id.to_string())
-            .await
-            .unwrap();
-        let run2 = workflow_run::create(&db.pool, &wf_id, &t2.id.to_string())
-            .await
-            .unwrap();
+        let run1 = workflow_run::create(&db.pool, &wf_id, &t1.id.to_string()).await.unwrap();
+        let run2 = workflow_run::create(&db.pool, &wf_id, &t2.id.to_string()).await.unwrap();
 
-        // run1 stays running, run2 is paused
-        workflow_run::update_status(&db.pool, &run2.id.to_string(), &WorkflowRunStatus::Paused)
-            .await
-            .unwrap();
+        workflow_run::update_status(&db.pool, &run2.id.to_string(), &WorkflowRunStatus::Paused).await.unwrap();
 
         let running = workflow_run::find_running(&db.pool).await.unwrap();
         assert_eq!(running.len(), 1);
@@ -1039,13 +944,10 @@ mod workflow_tests {
         let wf_id = create_workflow_in_db(&db.pool).await;
         let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
 
-        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
-            .await
-            .unwrap();
-        // Run is in "running" status, not "paused"
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
 
         let result = engine
-            .submit_decision(&run.id.to_string(), true, None)
+            .submit_decision(&run.id.to_string(), "review_plan", true, None)
             .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not paused"));
@@ -1058,17 +960,9 @@ mod workflow_tests {
         let wf_id = create_workflow_in_db(&db.pool).await;
 
         let task_obj = task::create(
-            &db.pool,
-            "Test",
-            None,
-            None,
-            Some(&TaskStatus::InProgress),
-            Some(&project_id),
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+            &db.pool, "Test", None, None, Some(&TaskStatus::InProgress),
+            Some(&project_id), None, None,
+        ).await.unwrap();
 
         let result = engine.start(&task_obj.id.to_string(), &wf_id).await;
         assert!(result.is_err());
@@ -1081,108 +975,179 @@ mod workflow_tests {
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
-            .await
-            .unwrap();
-        // No agent assigned
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
 
         let result = engine.start(&task_obj.id.to_string(), &wf_id).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("no assigned agent"));
+        assert!(result.unwrap_err().to_string().contains("no assigned agent"));
     }
 
     #[test]
-    fn feat_common_loop_back_to_fields() {
+    fn feat_common_dag_structure() {
         let def = workflow_engine::feat_common_definition();
-        // Steps 0-3 have no loop
-        assert_eq!(def.steps[0].loop_back_to, None);
-        assert_eq!(def.steps[1].loop_back_to, None);
-        assert_eq!(def.steps[2].loop_back_to, None);
-        assert_eq!(def.steps[3].loop_back_to, None);
-        // Step 4 (Fix Review Findings) loops back to step 3 (Automated PR Review)
-        assert_eq!(def.steps[4].loop_back_to, Some(3));
-        assert_eq!(def.steps[4].max_retries, Some(3));
-        // Step 5 has no loop
-        assert_eq!(def.steps[5].loop_back_to, None);
-        // Step 6 (Fix Human Comments) loops back to step 5 (Human PR Review)
-        assert_eq!(def.steps[6].loop_back_to, Some(5));
-        assert_eq!(def.steps[6].max_retries, None);
-        // Step 7 (Complete PR) has no loop
-        assert_eq!(def.steps[7].loop_back_to, None);
+
+        // plan has no dependencies (entry step)
+        let plan = find_step(&def, "plan");
+        assert!(plan.depends_on.is_empty());
+        assert_eq!(plan.loop_back_to, None);
+
+        // review_plan depends on plan, branches
+        let review = find_step(&def, "review_plan");
+        assert_eq!(review.depends_on, vec!["plan"]);
+        assert_eq!(review.on_approve, Some("implement".to_string()));
+        assert_eq!(review.on_reject, Some("plan".to_string()));
+
+        // implement depends on review_plan
+        let implement = find_step(&def, "implement");
+        assert_eq!(implement.depends_on, vec!["review_plan"]);
+
+        // fix_review loops back to auto_review with max 3 retries
+        let fix = find_step(&def, "fix_review");
+        assert_eq!(fix.loop_back_to, Some("auto_review".to_string()));
+        assert_eq!(fix.max_retries, Some(3));
+
+        // human_review branches to complete_pr or implement
+        let hr = find_step(&def, "human_review");
+        assert_eq!(hr.on_approve, Some("complete_pr".to_string()));
+        assert_eq!(hr.on_reject, Some("implement".to_string()));
+
+        // complete_pr depends on human_review
+        let cpr = find_step(&def, "complete_pr");
+        assert_eq!(cpr.depends_on, vec!["human_review"]);
     }
 
     #[test]
-    fn validate_workflow_definition_accepts_valid() {
+    fn validate_dag_accepts_valid() {
         let def = workflow_engine::feat_common_definition();
-        assert!(workflow_engine::validate_workflow_definition(&def).is_ok());
+        assert!(workflow_engine::validate_dag(&def).is_ok());
     }
 
     #[test]
-    fn validate_workflow_definition_rejects_negative_loop_back_to() {
+    fn validate_dag_rejects_missing_reference() {
         let def = WorkflowDefinition {
             steps: vec![
                 WorkflowStepDefinition {
+                    id: "plan".to_string(),
                     step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
-                    prompt_template: Some("{{task}}".to_string()),
+                    prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
+                    depends_on: vec!["nonexistent".to_string()],
+                    on_approve: None,
+                    on_reject: None,
                     max_retries: None,
-                    loop_back_to: Some(-1),
+                    loop_back_to: None,
                     session_mode: Some(SessionMode::New),
                 },
             ],
         };
-        let result = workflow_engine::validate_workflow_definition(&def);
+        let result = workflow_engine::validate_dag(&def);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("negative"));
+        assert!(result.unwrap_err().iter().any(|e| e.contains("non-existent")));
     }
 
     #[test]
-    fn validate_workflow_definition_rejects_non_preceding_loop_back_to() {
+    fn validate_dag_rejects_duplicate_ids() {
         let def = WorkflowDefinition {
             steps: vec![
                 WorkflowStepDefinition {
+                    id: "plan".to_string(),
                     step_type: WorkflowStepType::Agentic,
-                    name: "Plan".to_string(),
+                    name: "Plan 1".to_string(),
                     prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec![],
+                    on_approve: None,
+                    on_reject: None,
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
                 },
                 WorkflowStepDefinition {
+                    id: "plan".to_string(),
                     step_type: WorkflowStepType::Agentic,
-                    name: "Implement".to_string(),
+                    name: "Plan 2".to_string(),
                     prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec![],
+                    on_approve: None,
+                    on_reject: None,
                     max_retries: None,
-                    loop_back_to: Some(1), // Points to self, not preceding
+                    loop_back_to: None,
                     session_mode: Some(SessionMode::Resume),
                 },
             ],
         };
-        let result = workflow_engine::validate_workflow_definition(&def);
+        let result = workflow_engine::validate_dag(&def);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not a preceding step"));
+        assert!(result.unwrap_err().iter().any(|e| e.contains("Duplicate")));
     }
 
     #[test]
-    fn validate_workflow_definition_rejects_agentic_without_prompt() {
+    fn validate_dag_rejects_cycle() {
         let def = WorkflowDefinition {
             steps: vec![
                 WorkflowStepDefinition {
+                    id: "a".to_string(),
                     step_type: WorkflowStepType::Agentic,
-                    name: "Plan".to_string(),
-                    prompt_template: None,
+                    name: "A".to_string(),
+                    prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec!["b".to_string()],
+                    on_approve: None,
+                    on_reject: None,
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
                 },
+                WorkflowStepDefinition {
+                    id: "b".to_string(),
+                    step_type: WorkflowStepType::Agentic,
+                    name: "B".to_string(),
+                    prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec!["a".to_string()],
+                    on_approve: None,
+                    on_reject: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                    session_mode: Some(SessionMode::Resume),
+                },
             ],
         };
-        let result = workflow_engine::validate_workflow_definition(&def);
+        let result = workflow_engine::validate_dag(&def);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no prompt_template"));
+        assert!(result.unwrap_err().iter().any(|e| e.contains("cycle")));
+    }
+
+    #[test]
+    fn validate_dag_rejects_missing_human_gate_on_approve() {
+        let def = WorkflowDefinition {
+            steps: vec![
+                WorkflowStepDefinition {
+                    id: "plan".to_string(),
+                    step_type: WorkflowStepType::Agentic,
+                    name: "Plan".to_string(),
+                    prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec![],
+                    on_approve: None,
+                    on_reject: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                    session_mode: Some(SessionMode::New),
+                },
+                WorkflowStepDefinition {
+                    id: "review".to_string(),
+                    step_type: WorkflowStepType::HumanGate,
+                    name: "Review".to_string(),
+                    prompt_template: None,
+                    depends_on: vec!["plan".to_string()],
+                    on_approve: None, // Missing!
+                    on_reject: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                    session_mode: None,
+                },
+            ],
+        };
+        let result = workflow_engine::validate_dag(&def);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().iter().any(|e| e.contains("on_approve")));
     }
 
     #[tokio::test]
@@ -1190,142 +1155,68 @@ mod workflow_tests {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
-            .await
-            .unwrap();
-        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
-            .await
-            .unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
+        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
 
         let wf = workflow::find_by_id(&db.pool, &wf_id).await.unwrap().unwrap();
 
-        // Step 4 (Fix Review Findings) has loop_back_to=3, max_retries=3
-        let step_def = &wf.definition.steps[4];
-        assert_eq!(step_def.loop_back_to, Some(3));
+        let step_def = find_step(&wf.definition, "fix_review");
+        assert_eq!(step_def.loop_back_to, Some("auto_review".to_string()));
         assert_eq!(step_def.max_retries, Some(3));
 
-        // No completions of target step 3 yet → should loop
-        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
+        // No completions of target step yet → should loop
+        let result = engine.should_loop(&run_id, &wf, step_def, "auto_review").await.unwrap();
         assert!(result, "should loop when target has no completions");
 
-        // Simulate 1 completion of step 3 (first execution, not a retry) → should loop
-        workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
-            &WorkflowStepStatus::Completed, None,
-        ).await.unwrap();
-        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
-        assert!(result, "should loop after 1 completion (0 retries done)");
-
-        // Simulate 2nd and 3rd completions (retries 1 and 2)
-        workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
-            &WorkflowStepStatus::Completed, None,
-        ).await.unwrap();
-        workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
-            &WorkflowStepStatus::Completed, None,
-        ).await.unwrap();
-        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
+        // Simulate completions
+        for _ in 0..3 {
+            workflow_step_output::create(
+                &db.pool, &run_id, "auto_review", &WorkflowStepType::Agentic,
+                &WorkflowStepStatus::Completed, None,
+            ).await.unwrap();
+        }
+        let result = engine.should_loop(&run_id, &wf, step_def, "auto_review").await.unwrap();
         assert!(result, "should loop after 3 completions (2 retries done, max is 3)");
 
-        // 4th completion (retry 3 = max_retries) → should NOT loop
+        // 4th completion → should NOT loop
         workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
+            &db.pool, &run_id, "auto_review", &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Completed, None,
         ).await.unwrap();
-        let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
+        let result = engine.should_loop(&run_id, &wf, step_def, "auto_review").await.unwrap();
         assert!(!result, "should stop looping after 4 completions (3 retries = max)");
     }
 
     #[tokio::test]
-    async fn should_loop_stops_when_human_approved() {
-        let (engine, db, _) = setup().await;
-        let project_id = create_project(&db.pool).await;
-        let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
-            .await
-            .unwrap();
-        let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
-            .await
-            .unwrap();
-        let run_id = run.id.to_string();
-
-        let wf = workflow::find_by_id(&db.pool, &wf_id).await.unwrap().unwrap();
-
-        // Step 6 (Fix Human Comments) has loop_back_to=5, no max_retries
-        let step_def = &wf.definition.steps[6];
-        assert_eq!(step_def.loop_back_to, Some(5));
-        assert_eq!(step_def.max_retries, None);
-
-        // Step 5 (Human PR Review) is a HumanReview step
-        assert_eq!(wf.definition.steps[5].step_type, WorkflowStepType::HumanGate);
-
-        // Simulate human rejection at step 5 → should loop
-        let step5_output = workflow_step_output::create(
-            &db.pool, &run_id, 5, &WorkflowStepType::HumanGate,
-            &WorkflowStepStatus::WaitingForHuman, None,
-        ).await.unwrap();
-        workflow_step_output::update_status_and_output(
-            &db.pool, &step5_output.id.to_string(),
-            &WorkflowStepStatus::Rejected, Some("needs fixes"),
-        ).await.unwrap();
-        let result = engine.should_loop(&run_id, &wf, step_def, 5).await.unwrap();
-        assert!(result, "should loop when human rejected");
-
-        // Simulate human approval at step 5 (new attempt) → should NOT loop
-        let step5_output2 = workflow_step_output::create(
-            &db.pool, &run_id, 5, &WorkflowStepType::HumanGate,
-            &WorkflowStepStatus::WaitingForHuman, None,
-        ).await.unwrap();
-        workflow_step_output::update_status_and_output(
-            &db.pool, &step5_output2.id.to_string(),
-            &WorkflowStepStatus::Completed, Some("looks good"),
-        ).await.unwrap();
-        let result = engine.should_loop(&run_id, &wf, step_def, 5).await.unwrap();
-        assert!(!result, "should stop looping when human approved");
-    }
-
-    #[tokio::test]
-    async fn start_workflow_rejects_invalid_loop_back_to() {
+    async fn start_workflow_rejects_invalid_dag() {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
 
-        // Create workflow with invalid loop_back_to (pointing to self)
         let bad_def = WorkflowDefinition {
             steps: vec![
                 WorkflowStepDefinition {
+                    id: "plan".to_string(),
                     step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
                     prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec!["nonexistent".to_string()],
+                    on_approve: None,
+                    on_reject: None,
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
-                },
-                WorkflowStepDefinition {
-                    step_type: WorkflowStepType::Agentic,
-                    name: "Implement".to_string(),
-                    prompt_template: Some("{{task}}".to_string()),
-                    max_retries: None,
-                    loop_back_to: Some(1), // self-loop is invalid
-                    session_mode: Some(SessionMode::Resume),
                 },
             ],
         };
         let wf = workflow::create(&db.pool, "Bad WF", &bad_def).await.unwrap();
 
-        let agent = composer_db::models::agent::create(
-            &db.pool, "Agent", &AgentType::ClaudeCode, None,
-        ).await.unwrap();
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
-            .await
-            .unwrap();
-        task::update_assigned_agent(
-            &db.pool, &task_obj.id.to_string(), Some(&agent.id.to_string()),
-        ).await.unwrap();
+        let ag = agent::create(&db.pool, "Agent", &AgentType::ClaudeCode, None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
+        task::update_assigned_agent(&db.pool, &task_obj.id.to_string(), Some(&ag.id.to_string())).await.unwrap();
 
         let result = engine.start(&task_obj.id.to_string(), &wf.id.to_string()).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not a preceding step"));
+        assert!(result.unwrap_err().to_string().contains("non-existent"));
     }
 }

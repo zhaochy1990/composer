@@ -16,7 +16,8 @@ export type LogType = "stdout" | "stderr" | "control" | "status" | "user_input";
 export type WorkflowRunStatus = "running" | "paused" | "completed" | "failed";
 export type WorkflowStepType = "agentic" | "human_gate";
 export type SessionMode = "new" | "resume" | "separate";
-export type WorkflowStepStatus = "pending" | "running" | "waiting_for_human" | "completed" | "rejected" | "failed";
+export type WorkflowStepStatus = "pending" | "running" | "waiting_for_human" | "completed" | "rejected" | "failed" | "skipped";
+export type WorkflowResumeAction = "continue_loop" | "skip_to_next";
 
 // ---------------------------------------------------------------------------
 // Model structs
@@ -115,6 +116,7 @@ export interface ProjectInstruction {
 export interface Workflow {
     id: string;
     name: string;
+    is_template: boolean;
     definition: WorkflowDefinition;
     created_at: string;
     updated_at: string;
@@ -125,11 +127,15 @@ export interface WorkflowDefinition {
 }
 
 export interface WorkflowStepDefinition {
+    id: string;
     step_type: WorkflowStepType;
     name: string;
     prompt_template?: string;
+    depends_on: string[];
+    on_approve?: string;
+    on_reject?: string;
     max_retries?: number;
-    loop_back_to?: number;
+    loop_back_to?: string;
     session_mode?: SessionMode;
 }
 
@@ -138,9 +144,8 @@ export interface WorkflowRun {
     workflow_id: string;
     task_id: string;
     status: WorkflowRunStatus;
-    current_step_index: number;
     iteration_count: number;
-    main_session_id?: string;
+    activated_steps: string[];
     created_at: string;
     updated_at: string;
 }
@@ -148,7 +153,7 @@ export interface WorkflowRun {
 export interface WorkflowStepOutput {
     id: string;
     workflow_run_id: string;
-    step_index: number;
+    step_id: string;
     step_type: WorkflowStepType;
     output?: string;
     attempt: number;
@@ -278,8 +283,19 @@ export interface StartWorkflowRequest {
 }
 
 export interface WorkflowDecisionRequest {
+    step_id: string;
     approved: boolean;
     comments?: string;
+}
+
+export interface WorkflowResumeRequest {
+    step_id?: string;
+    action?: WorkflowResumeAction;
+}
+
+export interface ValidationResult {
+    valid: boolean;
+    errors: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +360,7 @@ export type WsEvent =
     | { type: "WorkflowRunUpdated"; payload: WorkflowRun }
     | { type: "WorkflowStepChanged"; payload: { workflow_run_id: string; step: WorkflowStepOutput } }
     | { type: "WorkflowRunCompleted"; payload: { workflow_run_id: string; task_id: string } }
-    | { type: "WorkflowWaitingForHuman"; payload: { workflow_run_id: string; task_id: string; step_index: number } };
+    | { type: "WorkflowWaitingForHuman"; payload: { workflow_run_id: string; task_id: string; step_id: string } };
 
 export type WsCommand =
     | { type: "SubscribeSession"; payload: { session_id: string } }

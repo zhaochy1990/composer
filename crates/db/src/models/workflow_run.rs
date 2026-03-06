@@ -8,9 +8,8 @@ struct WorkflowRunRow {
     workflow_id: String,
     task_id: String,
     status: String,
-    current_step_index: i32,
     iteration_count: i32,
-    main_session_id: Option<String>,
+    activated_steps: String,
     created_at: String,
     updated_at: String,
 }
@@ -24,16 +23,15 @@ impl TryFrom<WorkflowRunRow> for WorkflowRun {
             workflow_id: row.workflow_id.parse()?,
             task_id: row.task_id.parse()?,
             status: serde_json::from_value(serde_json::Value::String(row.status))?,
-            current_step_index: row.current_step_index,
             iteration_count: row.iteration_count,
-            main_session_id: row.main_session_id.map(|s| s.parse()).transpose()?,
+            activated_steps: serde_json::from_str(&row.activated_steps)?,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
         })
     }
 }
 
-const RUN_COLUMNS: &str = "id, workflow_id, task_id, status, current_step_index, iteration_count, main_session_id, created_at, updated_at";
+const RUN_COLUMNS: &str = "id, workflow_id, task_id, status, iteration_count, activated_steps, created_at, updated_at";
 
 pub async fn create(
     pool: &SqlitePool,
@@ -72,19 +70,8 @@ pub async fn find_by_task(pool: &SqlitePool, task_id: &str) -> anyhow::Result<Op
     row.map(WorkflowRun::try_from).transpose()
 }
 
-pub async fn find_by_session(pool: &SqlitePool, session_id: &str) -> anyhow::Result<Option<WorkflowRun>> {
-    let row = sqlx::query_as::<_, WorkflowRunRow>(
-        &format!("SELECT {RUN_COLUMNS} FROM workflow_runs WHERE main_session_id = ?")
-    )
-    .bind(session_id)
-    .fetch_optional(pool)
-    .await?;
-    row.map(WorkflowRun::try_from).transpose()
-}
-
-/// Find a workflow run where a given session_id is referenced in step outputs (e.g., review sessions).
+/// Find a workflow run where a given session_id is referenced in step outputs.
 pub async fn find_by_step_session(pool: &SqlitePool, session_id: &str) -> anyhow::Result<Option<WorkflowRun>> {
-    // First find the workflow_run_id from the step output
     let run_id: Option<(String,)> = sqlx::query_as(
         "SELECT workflow_run_id FROM workflow_step_outputs WHERE session_id = ? LIMIT 1"
     )
@@ -111,22 +98,18 @@ pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorkflowRunStat
     Ok(())
 }
 
-pub async fn update_step_index(pool: &SqlitePool, id: &str, step_index: i32) -> anyhow::Result<()> {
+pub async fn add_activated_step(pool: &SqlitePool, id: &str, step_id: &str) -> anyhow::Result<()> {
+    let run = find_by_id(pool, id).await?
+        .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
+    let mut steps = run.activated_steps;
+    if !steps.contains(&step_id.to_string()) {
+        steps.push(step_id.to_string());
+    }
+    let steps_json = serde_json::to_string(&steps)?;
     sqlx::query(
-        "UPDATE workflow_runs SET current_step_index = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+        "UPDATE workflow_runs SET activated_steps = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
     )
-    .bind(step_index)
-    .bind(id)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-pub async fn update_main_session(pool: &SqlitePool, id: &str, session_id: &str) -> anyhow::Result<()> {
-    sqlx::query(
-        "UPDATE workflow_runs SET main_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
-    )
-    .bind(session_id)
+    .bind(&steps_json)
     .bind(id)
     .execute(pool)
     .await?;

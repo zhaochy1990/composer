@@ -5,20 +5,28 @@ import { useCreateWorkflow } from '@/hooks/use-workflows';
 
 const DEFAULT_STEPS: WorkflowStepDefinition[] = [
     {
+        id: 'plan',
         step_type: 'agentic',
         name: 'Plan',
+        depends_on: [],
         session_mode: 'new',
         prompt_template: '{{task}}\n\nInvestigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.{{rejection}}',
     },
     {
+        id: 'review_plan',
         step_type: 'human_gate',
         name: 'Review Plan',
+        depends_on: ['plan'],
+        on_approve: 'implement',
+        on_reject: 'plan',
     },
     {
+        id: 'implement',
         step_type: 'agentic',
         name: 'Implement',
+        depends_on: ['review_plan'],
         session_mode: 'resume',
-        prompt_template: '{{task}}\n\nThe plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step_0}}',
+        prompt_template: '{{task}}\n\nThe plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step:plan}}',
     },
 ];
 

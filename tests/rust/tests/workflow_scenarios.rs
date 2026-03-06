@@ -24,8 +24,10 @@ const STEP_TIMEOUT: Duration = Duration::from_secs(300); // 5 min per step
 
 struct TestHarness {
     db: Arc<Database>,
+    #[allow(dead_code)]
     event_bus: EventBus,
     engine: WorkflowEngine,
+    #[allow(dead_code)]
     session_service: SessionService,
     rx: broadcast::Receiver<WsEvent>,
 }
@@ -149,15 +151,15 @@ fn event_summary(e: &WsEvent) -> String {
             )
         }
         WsEvent::WorkflowRunUpdated(run) => format!(
-            "WorkflowRunUpdated(status={:?}, step={})",
-            run.status, run.current_step_index
+            "WorkflowRunUpdated(status={:?})",
+            run.status
         ),
         WsEvent::WorkflowStepChanged { step, .. } => format!(
             "WorkflowStepChanged(step={}, status={:?})",
-            step.step_index, step.status
+            step.step_id, step.status
         ),
-        WsEvent::WorkflowWaitingForHuman { step_index, .. } => {
-            format!("WorkflowWaitingForHuman(step={})", step_index)
+        WsEvent::WorkflowWaitingForHuman { step_id, .. } => {
+            format!("WorkflowWaitingForHuman(step={})", step_id)
         }
         WsEvent::WorkflowRunCompleted { .. } => "WorkflowRunCompleted".to_string(),
         WsEvent::TaskMoved {
@@ -184,17 +186,25 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
+                id: "plan".to_string(),
                 step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("List the files in the root directory of this project. Keep your response under 5 lines. Do NOT implement anything.".to_string()),
+                depends_on: vec![],
+                on_approve: None,
+                on_reject: None,
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
+                id: "review".to_string(),
                 step_type: WorkflowStepType::HumanGate,
                 name: "Review Plan".to_string(),
                 prompt_template: None,
+                depends_on: vec!["plan".to_string()],
+                on_approve: Some("plan".to_string()), // loops back for simplicity
+                on_reject: None,
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
@@ -205,7 +215,6 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
         &h.db.pool, "Test Plan", &def,
     ).await.unwrap();
 
-    // Create task
     let task = composer_db::models::task::create(
         &h.db.pool,
         "Scenario: plan then gate",
@@ -234,49 +243,30 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
 
     // Wait for the workflow to pause at the human gate
     wait_for_event(&mut h.rx, STEP_TIMEOUT, |e| {
-        matches!(e, WsEvent::WorkflowWaitingForHuman { step_index: 1, .. })
+        matches!(e, WsEvent::WorkflowWaitingForHuman { step_id, .. } if step_id == "review")
     })
     .await;
 
-    eprintln!("Workflow paused at human gate (step 1) — verifying state...");
+    eprintln!("Workflow paused at human gate (review) — verifying state...");
 
-    // Verify workflow run state
     let run = composer_db::models::workflow_run::find_by_id(&h.db.pool, &run_id)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        run.status,
-        WorkflowRunStatus::Paused,
-        "Workflow should be paused"
-    );
-    assert_eq!(
-        run.current_step_index, 1,
-        "Should be at step 1 (human gate)"
-    );
+    assert_eq!(run.status, WorkflowRunStatus::Paused);
 
-    // Verify task is in Waiting
     let task = composer_db::models::task::find_by_id(&h.db.pool, &task_id)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        task.status,
-        TaskStatus::Waiting,
-        "Task should be in Waiting"
-    );
+    assert_eq!(task.status, TaskStatus::Waiting);
 
-    // Verify Plan step output was recorded
     let steps = composer_db::models::workflow_step_output::list_by_run(&h.db.pool, &run_id)
         .await
         .unwrap();
-    let plan_step = steps.iter().find(|s| s.step_index == 0).unwrap();
+    let plan_step = steps.iter().find(|s| s.step_id == "plan").unwrap();
     assert_eq!(plan_step.status, WorkflowStepStatus::Completed);
-    assert!(plan_step.output.is_some(), "Plan step should have output");
-    eprintln!(
-        "Plan output: {:?}",
-        plan_step.output.as_deref().map(|s| &s[..s.len().min(200)])
-    );
+    assert!(plan_step.output.is_some());
 
     eprintln!("PASSED: Plan step completed and workflow paused at human gate");
 }
@@ -292,29 +282,40 @@ async fn scenario_plan_approve_implement() {
     let project_id = create_project_with_repo(&h.db).await;
     let agent_id = create_agent(&h.db).await;
 
-    // Workflow: Plan → Human Gate → Implement
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
+                id: "plan".to_string(),
                 step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("Describe how you would add a comment '// scenario test' to the top of CLAUDE.md. Keep it under 3 lines. Do NOT implement.".to_string()),
+                depends_on: vec![],
+                on_approve: None,
+                on_reject: None,
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
+                id: "review".to_string(),
                 step_type: WorkflowStepType::HumanGate,
                 name: "Review".to_string(),
                 prompt_template: None,
+                depends_on: vec!["plan".to_string()],
+                on_approve: Some("implement".to_string()),
+                on_reject: Some("plan".to_string()),
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
             },
             WorkflowStepDefinition {
+                id: "implement".to_string(),
                 step_type: WorkflowStepType::Agentic,
                 name: "Implement".to_string(),
                 prompt_template: Some("The plan is approved. Just reply with 'Implementation complete.' and do NOT modify any files.".to_string()),
+                depends_on: vec!["review".to_string()],
+                on_approve: None,
+                on_reject: None,
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::Resume),
@@ -347,25 +348,21 @@ async fn scenario_plan_approve_implement() {
         .unwrap();
     let run_id = run.id.to_string();
 
-    // Wait for human gate
     wait_for_event(&mut h.rx, STEP_TIMEOUT, |e| {
-        matches!(e, WsEvent::WorkflowWaitingForHuman { step_index: 1, .. })
+        matches!(e, WsEvent::WorkflowWaitingForHuman { step_id, .. } if step_id == "review")
     })
     .await;
     eprintln!("Step 1 complete — Plan done, paused at human gate");
 
-    // Approve the plan
     eprintln!("Step 2: Approving plan...");
-    h.engine.submit_decision(&run_id, true, None).await.unwrap();
+    h.engine.submit_decision(&run_id, "review", true, None).await.unwrap();
 
-    // Wait for workflow to complete (implement step finishes, no more steps)
     wait_for_event(&mut h.rx, STEP_TIMEOUT, |e| {
         matches!(e, WsEvent::WorkflowRunCompleted { .. })
     })
     .await;
     eprintln!("Step 3 complete — Implement done, workflow completed");
 
-    // Verify final state
     let run = composer_db::models::workflow_run::find_by_id(&h.db.pool, &run_id)
         .await
         .unwrap()
@@ -392,21 +389,28 @@ async fn scenario_plan_rejection_loops_back() {
     let project_id = create_project_with_repo(&h.db).await;
     let agent_id = create_agent(&h.db).await;
 
-    // Workflow: Plan → Human Gate (will reject, then approve)
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
+                id: "plan".to_string(),
                 step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("Reply with exactly: 'Plan v1'. Nothing else.".to_string()),
+                depends_on: vec![],
+                on_approve: None,
+                on_reject: None,
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
+                id: "review".to_string(),
                 step_type: WorkflowStepType::HumanGate,
                 name: "Review".to_string(),
                 prompt_template: None,
+                depends_on: vec!["plan".to_string()],
+                on_approve: Some("plan".to_string()),
+                on_reject: Some("plan".to_string()),
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
@@ -441,39 +445,36 @@ async fn scenario_plan_rejection_loops_back() {
 
     // Wait for first human gate
     wait_for_event(&mut h.rx, STEP_TIMEOUT, |e| {
-        matches!(e, WsEvent::WorkflowWaitingForHuman { step_index: 1, .. })
+        matches!(e, WsEvent::WorkflowWaitingForHuman { step_id, .. } if step_id == "review")
     })
     .await;
     eprintln!("First plan done, rejecting...");
 
     // Reject with feedback
     h.engine
-        .submit_decision(&run_id, false, Some("Please add more detail"))
+        .submit_decision(&run_id, "review", false, Some("Please add more detail"))
         .await
         .unwrap();
 
-    // Should loop back to plan (step 0) and then pause at human gate again
+    // Should loop back to plan and then pause at human gate again
     wait_for_event(&mut h.rx, STEP_TIMEOUT, |e| {
-        matches!(e, WsEvent::WorkflowWaitingForHuman { step_index: 1, .. })
+        matches!(e, WsEvent::WorkflowWaitingForHuman { step_id, .. } if step_id == "review")
     })
     .await;
     eprintln!("Second plan done after rejection feedback");
 
-    // Verify iteration count increased
     let run = composer_db::models::workflow_run::find_by_id(&h.db.pool, &run_id)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(run.iteration_count, 1, "Should have iterated once");
+    assert_eq!(run.iteration_count, 1);
 
-    // Verify plan step has 2 attempts
     let steps = composer_db::models::workflow_step_output::list_by_run(&h.db.pool, &run_id)
         .await
         .unwrap();
-    let plan_attempts: Vec<_> = steps.iter().filter(|s| s.step_index == 0).collect();
-    assert_eq!(plan_attempts.len(), 2, "Plan should have 2 attempts");
+    let plan_attempts: Vec<_> = steps.iter().filter(|s| s.step_id == "plan").collect();
+    assert_eq!(plan_attempts.len(), 2);
 
-    // Task should be back in Waiting
     let task = composer_db::models::task::find_by_id(&h.db.pool, &task_id)
         .await
         .unwrap()
@@ -512,8 +513,6 @@ async fn scenario_exit_on_result_completes_session() {
     .await
     .expect("Failed to spawn");
 
-    // With exit_on_result=true, the session should complete automatically
-    // (stdin closed after Result → process exits → SessionCompleted emitted)
     let events = wait_for_event(&mut rx, Duration::from_secs(120), |e| {
         matches!(e, WsEvent::SessionCompleted { .. })
     })
@@ -522,12 +521,12 @@ async fn scenario_exit_on_result_completes_session() {
     let completed = events
         .iter()
         .find(|e| matches!(e, WsEvent::SessionCompleted { .. }));
-    assert!(completed.is_some(), "Session should have completed");
+    assert!(completed.is_some());
 
     if let Some(WsEvent::SessionCompleted { result_summary, .. }) = completed {
         eprintln!("Session completed with summary: {:?}", result_summary);
     }
 
-    assert!(!pm.is_running(&session_id), "Process should have exited");
+    assert!(!pm.is_running(&session_id));
     eprintln!("PASSED: exit_on_result correctly closed stdin and completed session");
 }

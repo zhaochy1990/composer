@@ -1,5 +1,6 @@
-import { Workflow as WorkflowIcon } from 'lucide-react';
+import { Workflow as WorkflowIcon, Copy, Lock } from 'lucide-react';
 import type { Workflow, WorkflowStepDefinition } from '@/types/generated';
+import { useCloneWorkflow } from '@/hooks/use-workflows';
 
 const STEP_TYPE_LABELS: Record<string, string> = {
     agentic: 'Agent',
@@ -11,7 +12,6 @@ const STEP_TYPE_COLORS: Record<string, string> = {
     human_gate: 'bg-yellow-900/40 text-yellow-300 border-yellow-800',
 };
 
-// Differentiate agentic steps by session_mode for better visual variety
 const SESSION_MODE_COLORS: Record<string, string> = {
     new: 'bg-purple-900/40 text-purple-300 border-purple-800',
     resume: 'bg-blue-900/40 text-blue-300 border-blue-800',
@@ -33,6 +33,13 @@ interface WorkflowCardProps {
 }
 
 export function WorkflowCard({ workflow, onClick, compact, isSelected }: WorkflowCardProps) {
+    const cloneWorkflow = useCloneWorkflow();
+
+    function handleClone(e: React.MouseEvent) {
+        e.stopPropagation();
+        cloneWorkflow.mutate(workflow.id);
+    }
+
     if (compact) {
         return (
             <button
@@ -45,6 +52,9 @@ export function WorkflowCard({ workflow, onClick, compact, isSelected }: Workflo
                 <div className="flex items-center gap-2">
                     <WorkflowIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <span className="text-sm font-medium text-gray-200 truncate">{workflow.name}</span>
+                    {workflow.is_template && (
+                        <Lock className="w-3 h-3 text-purple-400 shrink-0" />
+                    )}
                     <span className="text-xs text-gray-500 ml-auto shrink-0">
                         {workflow.definition.steps.length}
                     </span>
@@ -62,20 +72,39 @@ export function WorkflowCard({ workflow, onClick, compact, isSelected }: Workflo
             <div className="flex items-center gap-2 mb-3">
                 <WorkflowIcon className="w-4 h-4 text-purple-400" />
                 <h3 className="text-sm font-semibold text-gray-100">{workflow.name}</h3>
+                {workflow.is_template && (
+                    <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-800">
+                        <Lock className="w-3 h-3" />
+                        Template
+                    </span>
+                )}
                 <span className="text-xs text-gray-500 ml-auto">
                     {workflow.definition.steps.length} steps
                 </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-                {workflow.definition.steps.map((step, i) => (
+                {workflow.definition.steps.map((step) => (
                     <span
-                        key={i}
+                        key={step.id}
                         className={`text-xs px-1.5 py-0.5 rounded border ${getStepColor(step)}`}
                     >
-                        {step.name || STEP_TYPE_LABELS[step.step_type] || step.step_type}
+                        {step.name || STEP_TYPE_LABELS[step.step_type] || step.id}
                     </span>
                 ))}
             </div>
+            {workflow.is_template && (
+                <div className="mt-3 flex">
+                    <button
+                        type="button"
+                        onClick={handleClone}
+                        disabled={cloneWorkflow.isPending}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-800 text-gray-300 rounded hover:bg-gray-700 border border-gray-700 transition-colors disabled:opacity-50"
+                    >
+                        <Copy className="w-3 h-3" />
+                        {cloneWorkflow.isPending ? 'Cloning...' : 'Clone to edit'}
+                    </button>
+                </div>
+            )}
         </button>
     );
 }

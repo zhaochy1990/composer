@@ -6,7 +6,7 @@ use uuid::Uuid;
 struct StepOutputRow {
     id: String,
     workflow_run_id: String,
-    step_index: i32,
+    step_id: String,
     step_type: String,
     output: Option<String>,
     attempt: i32,
@@ -22,7 +22,7 @@ impl TryFrom<StepOutputRow> for WorkflowStepOutput {
         Ok(WorkflowStepOutput {
             id: row.id.parse()?,
             workflow_run_id: row.workflow_run_id.parse()?,
-            step_index: row.step_index,
+            step_id: row.step_id,
             step_type: serde_json::from_value(serde_json::Value::String(row.step_type))?,
             output: row.output,
             attempt: row.attempt,
@@ -33,28 +33,28 @@ impl TryFrom<StepOutputRow> for WorkflowStepOutput {
     }
 }
 
-const STEP_COLUMNS: &str = "id, workflow_run_id, step_index, step_type, output, attempt, status, session_id, created_at";
+const STEP_COLUMNS: &str = "id, workflow_run_id, step_id, step_type, output, attempt, status, session_id, created_at";
 
 pub async fn create(
     pool: &SqlitePool,
     workflow_run_id: &str,
-    step_index: i32,
+    step_id: &str,
     step_type: &WorkflowStepType,
     status: &WorkflowStepStatus,
     session_id: Option<&str>,
 ) -> anyhow::Result<WorkflowStepOutput> {
     let id = Uuid::new_v4().to_string();
     let type_str = serde_json::to_value(step_type)?
-        .as_str().unwrap_or("plan").to_string();
+        .as_str().unwrap_or("agentic").to_string();
     let status_str = serde_json::to_value(status)?
         .as_str().unwrap_or("pending").to_string();
 
     // Get current max attempt for this step
     let max_attempt: Option<(i32,)> = sqlx::query_as(
-        "SELECT COALESCE(MAX(attempt), 0) FROM workflow_step_outputs WHERE workflow_run_id = ? AND step_index = ?"
+        "SELECT COALESCE(MAX(attempt), 0) FROM workflow_step_outputs WHERE workflow_run_id = ? AND step_id = ?"
     )
     .bind(workflow_run_id)
-    .bind(step_index)
+    .bind(step_id)
     .fetch_optional(pool)
     .await?;
     let attempt = max_attempt.map(|r| r.0).unwrap_or(0) + 1;
@@ -64,7 +64,7 @@ pub async fn create(
     )
     .bind(&id)
     .bind(workflow_run_id)
-    .bind(step_index)
+    .bind(step_id)
     .bind(&type_str)
     .bind(attempt)
     .bind(&status_str)
@@ -86,7 +86,7 @@ pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Wo
 
 pub async fn list_by_run(pool: &SqlitePool, workflow_run_id: &str) -> anyhow::Result<Vec<WorkflowStepOutput>> {
     let rows = sqlx::query_as::<_, StepOutputRow>(
-        &format!("SELECT {STEP_COLUMNS} FROM workflow_step_outputs WHERE workflow_run_id = ? ORDER BY step_index, attempt")
+        &format!("SELECT {STEP_COLUMNS} FROM workflow_step_outputs WHERE workflow_run_id = ? ORDER BY step_id, attempt")
     )
     .bind(workflow_run_id)
     .fetch_all(pool)
@@ -94,20 +94,42 @@ pub async fn list_by_run(pool: &SqlitePool, workflow_run_id: &str) -> anyhow::Re
     rows.into_iter().map(WorkflowStepOutput::try_from).collect()
 }
 
-/// Get the latest step output for a given step index in a run.
+/// Get the latest step output for a given step_id in a run.
 pub async fn latest_for_step(
     pool: &SqlitePool,
     workflow_run_id: &str,
-    step_index: i32,
+    step_id: &str,
 ) -> anyhow::Result<Option<WorkflowStepOutput>> {
     let row = sqlx::query_as::<_, StepOutputRow>(
-        &format!("SELECT {STEP_COLUMNS} FROM workflow_step_outputs WHERE workflow_run_id = ? AND step_index = ? ORDER BY attempt DESC LIMIT 1")
+        &format!("SELECT {STEP_COLUMNS} FROM workflow_step_outputs WHERE workflow_run_id = ? AND step_id = ? ORDER BY attempt DESC LIMIT 1")
     )
     .bind(workflow_run_id)
-    .bind(step_index)
+    .bind(step_id)
     .fetch_optional(pool)
     .await?;
     row.map(WorkflowStepOutput::try_from).transpose()
+}
+
+/// Find all step outputs with status 'running' for a given run.
+pub async fn find_running_steps(pool: &SqlitePool, workflow_run_id: &str) -> anyhow::Result<Vec<WorkflowStepOutput>> {
+    let rows = sqlx::query_as::<_, StepOutputRow>(
+        &format!("SELECT {STEP_COLUMNS} FROM workflow_step_outputs WHERE workflow_run_id = ? AND status = 'running'")
+    )
+    .bind(workflow_run_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(WorkflowStepOutput::try_from).collect()
+}
+
+/// Find all step IDs that have a completed output (latest attempt).
+pub async fn find_completed_step_ids(pool: &SqlitePool, workflow_run_id: &str) -> anyhow::Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT step_id FROM workflow_step_outputs WHERE workflow_run_id = ? AND status = 'completed'"
+    )
+    .bind(workflow_run_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorkflowStepStatus) -> anyhow::Result<()> {

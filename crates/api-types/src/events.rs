@@ -36,7 +36,7 @@ pub enum WsEvent {
     WorkflowRunUpdated(WorkflowRun),
     WorkflowStepChanged { workflow_run_id: Uuid, step: WorkflowStepOutput },
     WorkflowRunCompleted { workflow_run_id: Uuid, task_id: Uuid },
-    WorkflowWaitingForHuman { workflow_run_id: Uuid, task_id: Uuid, step_index: i32 },
+    WorkflowWaitingForHuman { workflow_run_id: Uuid, task_id: Uuid, step_id: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -12,6 +12,8 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/workflows", get(list_workflows).post(create_workflow))
         .route("/workflows/{id}", get(get_workflow).put(update_workflow).delete(delete_workflow))
+        .route("/workflows/{id}/clone", post(clone_workflow))
+        .route("/workflows/{id}/validate", post(validate_workflow))
         .route("/tasks/{id}/start-workflow", post(start_workflow))
         .route("/workflow-runs/{id}", get(get_workflow_run))
         .route("/workflow-runs/{id}/decision", post(submit_decision))
@@ -23,8 +25,8 @@ async fn create_workflow(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateWorkflowRequest>,
 ) -> Result<Json<Workflow>, ServiceError> {
-    composer_services::workflow_engine::validate_workflow_definition(&req.definition)
-        .map_err(|e| ServiceError::BadRequest(e.to_string()))?;
+    composer_services::workflow_engine::validate_dag(&req.definition)
+        .map_err(|errs| ServiceError::BadRequest(errs.join(", ")))?;
     let workflow = composer_db::models::workflow::create(
         &state.services.workflows.db().pool,
         &req.name,
@@ -59,9 +61,14 @@ async fn update_workflow(
     Path(id): Path<String>,
     Json(req): Json<UpdateWorkflowRequest>,
 ) -> Result<Json<Workflow>, ServiceError> {
-    if let Some(ref def) = req.definition {
-        composer_services::workflow_engine::validate_workflow_definition(def)
-            .map_err(|e| ServiceError::BadRequest(e.to_string()))?;
+    // Don't allow editing templates
+    let existing = composer_db::models::workflow::find_by_id(
+        &state.services.workflows.db().pool,
+        &id,
+    ).await?
+    .ok_or_else(|| ServiceError::NotFound(format!("Workflow {} not found", id)))?;
+    if existing.is_template {
+        return Err(ServiceError::BadRequest("Cannot edit a template workflow. Clone it first.".into()));
     }
     let workflow = composer_db::models::workflow::update(
         &state.services.workflows.db().pool,
@@ -76,11 +83,47 @@ async fn delete_workflow(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<(), ServiceError> {
+    let existing = composer_db::models::workflow::find_by_id(
+        &state.services.workflows.db().pool,
+        &id,
+    ).await?
+    .ok_or_else(|| ServiceError::NotFound(format!("Workflow {} not found", id)))?;
+    if existing.is_template {
+        return Err(ServiceError::BadRequest("Cannot delete a template workflow".into()));
+    }
     composer_db::models::workflow::delete(
         &state.services.workflows.db().pool,
         &id,
     ).await?;
     Ok(())
+}
+
+async fn clone_workflow(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<Workflow>, ServiceError> {
+    let source = composer_db::models::workflow::find_by_id(
+        &state.services.workflows.db().pool,
+        &id,
+    ).await?
+    .ok_or_else(|| ServiceError::NotFound(format!("Workflow {} not found", id)))?;
+    let new_name = format!("{} (copy)", source.name);
+    let cloned = composer_db::models::workflow::clone_workflow(
+        &state.services.workflows.db().pool,
+        &id,
+        &new_name,
+    ).await?;
+    Ok(Json(cloned))
+}
+
+async fn validate_workflow(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<WorkflowDefinition>,
+) -> Result<Json<ValidationResult>, ServiceError> {
+    match composer_services::workflow_engine::validate_dag(&req) {
+        Ok(()) => Ok(Json(ValidationResult { valid: true, errors: vec![] })),
+        Err(errors) => Ok(Json(ValidationResult { valid: false, errors })),
+    }
 }
 
 async fn start_workflow(
@@ -119,6 +162,7 @@ async fn submit_decision(
 ) -> Result<Json<WorkflowRun>, ServiceError> {
     let run = state.services.workflows.submit_decision(
         &id,
+        &req.step_id,
         req.approved,
         req.comments.as_deref(),
     ).await?;
@@ -128,8 +172,9 @@ async fn submit_decision(
 async fn resume_workflow_run(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Json(req): Json<WorkflowResumeRequest>,
 ) -> Result<Json<WorkflowRun>, ServiceError> {
-    let run = state.services.workflows.resume_run(&id).await?;
+    let run = state.services.workflows.resume_run(&id, &req).await?;
     Ok(Json(run))
 }
 
