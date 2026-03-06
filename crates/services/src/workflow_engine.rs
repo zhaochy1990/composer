@@ -844,8 +844,22 @@ impl WorkflowEngine {
                 }
             }
 
-            // Check reachability: if it's a branch target, it must be activated
-            if branch_targets.contains(step_id) && !activated_steps.contains(&step.id) {
+            // Check reachability: if it's a branch target, it must be activated.
+            // Exception: entry steps (no dependencies) are always reachable on first run.
+            if branch_targets.contains(step_id)
+                && !activated_steps.contains(&step.id)
+                && !step.depends_on.is_empty()
+            {
+                continue;
+            }
+
+            // For entry steps that are also branch targets, only block them if they
+            // already ran once (have any output) and haven't been re-activated.
+            if branch_targets.contains(step_id)
+                && !activated_steps.contains(&step.id)
+                && step.depends_on.is_empty()
+                && latest_status.contains_key(step_id)
+            {
                 continue;
             }
 
@@ -949,8 +963,12 @@ impl WorkflowEngine {
         for step in &workflow.definition.steps {
             let step_id = step.id.as_str();
 
-            // Non-activated branch targets are considered unreachable (will be skipped)
-            if branch_targets.contains(step_id) && !activated_steps.contains(&step.id) {
+            // Non-activated branch targets are considered unreachable (will be skipped),
+            // unless they are entry steps (no dependencies) which are always reachable.
+            if branch_targets.contains(step_id)
+                && !activated_steps.contains(&step.id)
+                && !step.depends_on.is_empty()
+            {
                 continue;
             }
 
@@ -992,6 +1010,7 @@ impl WorkflowEngine {
         for step in &workflow.definition.steps {
             if branch_targets.contains(step.id.as_str())
                 && !run.activated_steps.contains(&step.id)
+                && !step.depends_on.is_empty()
             {
                 // Auto-mark as skipped if no output exists
                 let has_output = step_outputs.iter().any(|o| o.step_id == step.id);
