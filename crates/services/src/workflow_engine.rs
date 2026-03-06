@@ -7,66 +7,61 @@ use std::sync::Arc;
 /// The built-in "Feat-Common" workflow definition with review-fix loops:
 /// 1. Plan → 2. Human review plan → 3. Implement + build/test + PR →
 /// 4. PR review (separate session) → 5. Fix review findings → loop back to 4 (max 3 retries) →
-/// 6. Human review PR → 7. Fix human comments → loop back to 6 → Done
+/// 6. Human review PR → 7. Fix human comments → loop back to 6 → 8. Complete PR → Done
+/// Helper to create an agentic step definition with sensible defaults.
+fn agentic_step(name: &str, mode: SessionMode, prompt: &str) -> WorkflowStepDefinition {
+    WorkflowStepDefinition {
+        step_type: WorkflowStepType::Agentic,
+        name: name.to_string(),
+        prompt_template: Some(prompt.to_string()),
+        max_retries: None,
+        loop_back_to: None,
+        session_mode: Some(mode),
+    }
+}
+
+/// Helper to create a human gate step definition.
+fn human_gate_step(name: &str) -> WorkflowStepDefinition {
+    WorkflowStepDefinition {
+        step_type: WorkflowStepType::HumanGate,
+        name: name.to_string(),
+        prompt_template: None,
+        max_retries: None,
+        loop_back_to: None,
+        session_mode: None,
+    }
+}
+
 pub fn feat_common_definition() -> WorkflowDefinition {
+    // NOTE: Prompt templates use {{step_N}} with hardcoded indices.
+    // If steps are reordered, these references must be updated:
+    //   - Step 4 ("Fix Review Findings") references {{step_3}} (Automated PR Review output)
+    //   - Step 6 ("Fix Human Comments") references {{rejection}} (Human PR Review comments)
     WorkflowDefinition {
         steps: vec![
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::Plan,
-                name: "Plan".to_string(),
-                prompt_template: None,
-                max_retries: None,
-                loop_back_to: None,
+            agentic_step("Plan", SessionMode::New,
+                "{{task}}\n\nInvestigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.{{rejection}}"),
+            human_gate_step("Review Plan"),
+            agentic_step("Implement & Create PR", SessionMode::Resume,
+                "{{task}}\n\nThe plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step_0}}"),
+            agentic_step("Automated PR Review", SessionMode::Separate,
+                "Review the changes in the current branch. Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers."),
+            {
+                let mut s = agentic_step("Fix Review Findings", SessionMode::Resume,
+                    "The PR has been reviewed. Fix these findings:\n{{step_3}}\n\nThen push the changes.");
+                s.max_retries = Some(3);
+                s.loop_back_to = Some(3); // Loop back to "Automated PR Review" (index 3)
+                s
             },
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::HumanGate,
-                name: "Review Plan".to_string(),
-                prompt_template: None,
-                max_retries: None,
-                loop_back_to: None,
+            human_gate_step("Human PR Review"),
+            {
+                let mut s = agentic_step("Fix Human Comments", SessionMode::Resume,
+                    "The reviewer left these comments on the PR:\n{{rejection}}\n\nFix them and push the changes.");
+                s.loop_back_to = Some(5); // Loop back to "Human PR Review" (index 5)
+                s
             },
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::Implement,
-                name: "Implement & Create PR".to_string(),
-                prompt_template: None,
-                max_retries: None,
-                loop_back_to: None,
-            },
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::PrReview,
-                name: "Automated PR Review".to_string(),
-                prompt_template: None,
-                max_retries: None,
-                loop_back_to: None,
-            },
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::Implement,
-                name: "Fix Review Findings".to_string(),
-                prompt_template: None,
-                max_retries: Some(3),
-                loop_back_to: Some(3), // Loop back to Automated PR Review
-            },
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::HumanReview,
-                name: "Human PR Review".to_string(),
-                prompt_template: None,
-                max_retries: None,
-                loop_back_to: None,
-            },
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::Implement,
-                name: "Fix Human Comments".to_string(),
-                prompt_template: None,
-                max_retries: None,
-                loop_back_to: Some(5), // Loop back to Human PR Review
-            },
-            WorkflowStepDefinition {
-                step_type: WorkflowStepType::CompletePr,
-                name: "Complete PR".to_string(),
-                prompt_template: None,
-                max_retries: None,
-                loop_back_to: None,
-            },
+            agentic_step("Complete PR", SessionMode::Resume,
+                "The implementation is complete. Find the PR you created earlier and complete it:\n1. Check the CI status using `gh pr checks`. Wait for all checks to pass (poll every 30 seconds, up to 10 minutes).\n2. If there are merge conflicts, resolve them and push.\n3. Once all checks pass, merge the PR using `gh pr merge --squash --delete-branch`.\n4. Confirm the PR is merged successfully."),
         ],
     }
 }
@@ -77,6 +72,18 @@ pub const FEAT_COMMON_NAME: &str = "Feat-Common";
 /// (non-negative and pointing to a preceding step).
 pub fn validate_workflow_definition(def: &WorkflowDefinition) -> anyhow::Result<()> {
     for (i, step) in def.steps.iter().enumerate() {
+        // Agentic steps require a prompt_template
+        if step.step_type == WorkflowStepType::Agentic {
+            let has_prompt = step.prompt_template.as_ref().map_or(false, |t| !t.trim().is_empty());
+            if !has_prompt {
+                return Err(anyhow::anyhow!(
+                    "Step {} '{}' is an agentic step but has no prompt_template",
+                    i,
+                    step.name,
+                ));
+            }
+        }
+
         if let Some(target) = step.loop_back_to {
             if target < 0 {
                 return Err(anyhow::anyhow!(
@@ -174,6 +181,13 @@ impl WorkflowEngine {
     fn spawn_startup_recovery(&self) {
         let engine = self.clone();
         tokio::spawn(async move {
+            // Migrate existing workflow definitions from old step types.
+            // This MUST succeed — if it fails, workflow definitions may contain
+            // old step types that can't be deserialized, breaking all workflow operations.
+            if let Err(e) = engine.migrate_workflow_definitions().await {
+                tracing::error!("FATAL: Failed to migrate workflow definitions: {}. Workflow operations may fail.", e);
+                return;
+            }
             // Seed built-in workflows
             if let Err(e) = engine.ensure_builtin_workflow().await {
                 tracing::error!("Failed to seed built-in workflow: {}", e);
@@ -182,6 +196,95 @@ impl WorkflowEngine {
                 tracing::error!("Failed to recover workflow runs: {}", e);
             }
         });
+    }
+
+    /// Migrate existing workflow definitions from old step types to new consolidated types.
+    /// Skips entirely if no workflows contain legacy step types (cheap SQL check).
+    async fn migrate_workflow_definitions(&self) -> anyhow::Result<()> {
+        // Quick check: skip if no legacy step types exist (avoids full scan on every startup)
+        if !composer_db::models::workflow::has_legacy_step_types(&self.db.pool).await? {
+            return Ok(());
+        }
+
+        let rows = composer_db::models::workflow::list_all_raw_definitions(&self.db.pool).await?;
+
+        for (id, def_json) in rows {
+            let mut value = match serde_json::from_str::<serde_json::Value>(&def_json) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!("Skipping workflow {} with malformed JSON definition: {}", id, e);
+                    continue;
+                }
+            };
+
+            let mut changed = false;
+            if let Some(steps) = value.get_mut("steps").and_then(|s| s.as_array_mut()) {
+                for step in steps {
+                    if let Some(st) = step.get("step_type").and_then(|v| v.as_str()).map(String::from) {
+                        let step_name = step.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        match st.as_str() {
+                            "plan" => {
+                                step["step_type"] = serde_json::json!("agentic");
+                                step["session_mode"] = serde_json::json!("new");
+                                if step.get("prompt_template").and_then(|v| v.as_str()).is_none() {
+                                    step["prompt_template"] = serde_json::json!(
+                                        "{{task}}\n\nInvestigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.{{rejection}}"
+                                    );
+                                    tracing::info!("Added default plan prompt_template to step '{}' in workflow {}", step_name, id);
+                                }
+                                changed = true;
+                            }
+                            "implement" => {
+                                step["step_type"] = serde_json::json!("agentic");
+                                step["session_mode"] = serde_json::json!("resume");
+                                if step.get("prompt_template").and_then(|v| v.as_str()).is_none() {
+                                    step["prompt_template"] = serde_json::json!(
+                                        "{{task}}\n\nImplement the changes now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step_0}}"
+                                    );
+                                    tracing::info!("Added default implement prompt_template to step '{}' in workflow {}", step_name, id);
+                                }
+                                changed = true;
+                            }
+                            "complete_pr" => {
+                                step["step_type"] = serde_json::json!("agentic");
+                                step["session_mode"] = serde_json::json!("resume");
+                                if step.get("prompt_template").and_then(|v| v.as_str()).is_none() {
+                                    step["prompt_template"] = serde_json::json!(
+                                        "The implementation is complete. Find the PR you created earlier and complete it:\n1. Check the CI status using `gh pr checks`. Wait for all checks to pass (poll every 30 seconds, up to 10 minutes).\n2. If there are merge conflicts, resolve them and push.\n3. Once all checks pass, merge the PR using `gh pr merge --squash --delete-branch`.\n4. Confirm the PR is merged successfully."
+                                    );
+                                    tracing::info!("Added default complete_pr prompt_template to step '{}' in workflow {}", step_name, id);
+                                }
+                                changed = true;
+                            }
+                            "pr_review" => {
+                                step["step_type"] = serde_json::json!("agentic");
+                                step["session_mode"] = serde_json::json!("separate");
+                                if step.get("prompt_template").and_then(|v| v.as_str()).is_none() {
+                                    step["prompt_template"] = serde_json::json!(
+                                        "Review the changes in the current branch. Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers."
+                                    );
+                                    tracing::info!("Added default pr_review prompt_template to step '{}' in workflow {}", step_name, id);
+                                }
+                                changed = true;
+                            }
+                            "human_review" => {
+                                step["step_type"] = serde_json::json!("human_gate");
+                                changed = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            if changed {
+                let updated = serde_json::to_string(&value)?;
+                composer_db::models::workflow::update_raw_definition(&self.db.pool, &id, &updated).await?;
+                tracing::info!("Migrated workflow {} definition to new step types", id);
+            }
+        }
+
+        Ok(())
     }
 
     async fn recover_running_workflows(&self) -> anyhow::Result<()> {
@@ -368,31 +471,33 @@ impl WorkflowEngine {
             .await?;
 
         match step_def.step_type {
-            WorkflowStepType::Plan => {
-                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, true)
-                    .await?;
+            WorkflowStepType::Agentic => {
+                let mode = step_def.session_mode.clone().unwrap_or(SessionMode::Resume);
+                match mode {
+                    SessionMode::New => {
+                        self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, true)
+                            .await?;
+                    }
+                    SessionMode::Resume => {
+                        self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false)
+                            .await?;
+                    }
+                    SessionMode::Separate => {
+                        self.execute_pr_review(run_id, task, agent_id, step_index, &step_def)
+                            .await?;
+                    }
+                }
             }
-            WorkflowStepType::Implement => {
-                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false)
-                    .await?;
-            }
-            WorkflowStepType::HumanGate | WorkflowStepType::HumanReview => {
+            WorkflowStepType::HumanGate => {
                 self.execute_human_gate(run_id, task, step_index, &step_def)
                     .await?;
-            }
-            WorkflowStepType::PrReview => {
-                self.execute_pr_review(run_id, task, agent_id, step_index, &step_def)
-                    .await?;
-            }
-            WorkflowStepType::CompletePr => {
-                self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false).await?;
             }
         }
 
         Ok(())
     }
 
-    /// Execute an agent task step (plan or implement). Uses the main session.
+    /// Execute an agentic step. Uses the main session for New/Resume modes, or a separate session for Separate mode.
     async fn execute_agent_step(
         &self,
         run_id: &str,
@@ -966,202 +1071,89 @@ impl WorkflowEngine {
     }
 
     /// Build the prompt for a step, injecting context from previous steps.
+    /// Uses the step's `prompt_template` with variable substitution:
+    /// - `{{task}}` — task title + description + project instructions
+    /// - `{{step_N}}` — latest output from step N
+    /// - `{{rejection}}` — latest rejected HumanGate output's comments
     async fn build_prompt(
         &self,
         run_id: &str,
         task: &Task,
         step_def: &WorkflowStepDefinition,
     ) -> anyhow::Result<String> {
+        // Human gates don't need prompts
+        if step_def.step_type == WorkflowStepType::HumanGate {
+            return Ok(String::new());
+        }
+
+        let template = step_def.prompt_template.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Agentic step '{}' requires a prompt_template", step_def.name))?;
+
         let step_outputs =
             composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
 
+        // Build {{task}} context
         let base_task_context = if let Some(ref desc) = task.description {
             format!("Task: {} - {}", task.title, desc)
         } else {
             format!("Task: {}", task.title)
         };
 
-        // Prepend project instructions if any exist
         let task_context = if let Some(ref pid) = task.project_id {
             let instructions = composer_db::models::project_instruction::list_by_project(
                 &self.db.pool,
                 &pid.to_string(),
             ).await?;
             match composer_db::models::project_instruction::format_instructions_block(&instructions) {
-                Some(block) => format!("{} - {}", block, base_task_context),
+                Some(block) => format!("{}\n\n{}", block, base_task_context),
                 None => base_task_context,
             }
         } else {
             base_task_context
         };
 
-        // Use custom template if provided, otherwise use defaults
-        if let Some(ref template) = step_def.prompt_template {
-            let mut prompt = template.clone();
-            prompt = prompt.replace("{{task}}", &task_context);
+        let mut prompt = template.clone();
+        prompt = prompt.replace("{{task}}", &task_context);
 
-            // Inject outputs from prior steps
-            for output in &step_outputs {
-                if let Some(ref text) = output.output {
-                    let key = format!("{{{{step_{}}}}}", output.step_index);
-                    prompt = prompt.replace(&key, text);
+        // Inject {{step_N}} — resolves to latest output for step N
+        if let Some(max_step) = step_outputs.iter().map(|o| o.step_index).max() {
+            for step_index in 0..=max_step {
+                let key = format!("{{{{step_{}}}}}", step_index);
+                if prompt.contains(&key) {
+                    let latest_output = step_outputs.iter()
+                        .filter(|o| o.step_index == step_index)
+                        .last()
+                        .and_then(|o| o.output.as_deref())
+                        .unwrap_or("");
+                    prompt = prompt.replace(&key, latest_output);
                 }
             }
-            return Ok(prompt);
         }
 
-        // Default prompts by step type
-        match step_def.step_type {
-            WorkflowStepType::Plan => {
-                // Check if this is a retry (rejection happened)
-                let rejections: Vec<&WorkflowStepOutput> = step_outputs
-                    .iter()
-                    .filter(|o| {
-                        o.step_type == WorkflowStepType::HumanGate
-                            && o.status == WorkflowStepStatus::Rejected
-                    })
-                    .collect();
-
-                if let Some(last_rejection) = rejections.last() {
-                    let feedback = last_rejection
-                        .output
-                        .as_deref()
-                        .unwrap_or("No specific feedback provided.");
-                    Ok(format!(
-                        "{} - The previous plan was rejected. Feedback: {} - Please revise the plan based on this feedback. Do NOT implement yet, only output the revised plan.",
-                        task_context, feedback
-                    ))
-                } else {
-                    Ok(format!(
-                        "{} - Investigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.",
-                        task_context
-                    ))
-                }
-            }
-            WorkflowStepType::Implement => {
-                // Find the approved plan
-                let plan_output = step_outputs
-                    .iter()
-                    .filter(|o| {
-                        o.step_type == WorkflowStepType::Plan
-                            && o.status == WorkflowStepStatus::Completed
-                    })
-                    .last()
-                    .and_then(|o| o.output.as_deref());
-
-                // Check for PR review findings to fix
-                let review_findings: Vec<&str> = step_outputs
-                    .iter()
-                    .filter(|o| {
-                        o.step_type == WorkflowStepType::PrReview
-                            && o.status == WorkflowStepStatus::Completed
-                    })
-                    .filter_map(|o| o.output.as_deref())
-                    .collect();
-
-                // Check for human review comments to fix
-                let human_comments: Vec<&str> = step_outputs
-                    .iter()
-                    .filter(|o| {
-                        o.step_type == WorkflowStepType::HumanReview
-                            && o.status == WorkflowStepStatus::Rejected
-                    })
-                    .filter_map(|o| o.output.as_deref())
-                    .collect();
-
-                if !human_comments.is_empty() {
-                    let latest = human_comments.last().unwrap();
-                    Ok(format!(
-                        "The reviewer left these comments on the PR: {} - Fix them and push the changes.",
-                        latest
-                    ))
-                } else if !review_findings.is_empty() {
-                    let latest = review_findings.last().unwrap();
-                    Ok(format!(
-                        "The PR has been reviewed. Fix these findings: {} - Then push the changes.",
-                        latest
-                    ))
-                } else if let Some(plan) = plan_output {
-                    Ok(format!(
-                        "{} - The plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR. - Approved plan: {}",
-                        task_context, plan
-                    ))
-                } else {
-                    Ok(format!(
-                        "{} - Implement this task. Run build, lint, and tests. Fix any failures. Then create a PR.",
-                        task_context
-                    ))
-                }
-            }
-            WorkflowStepType::PrReview => {
-                // Find the PR URLs from the task
-                let pr_urls = &task.pr_urls;
-                let pr_context = if pr_urls.is_empty() {
-                    "Review the changes made in the current branch.".to_string()
-                } else {
-                    format!("Review this PR: {}", pr_urls.join(", "))
-                };
-
-                // Check if this is a re-review (previous PrReview outputs exist)
-                let prior_reviews: Vec<&str> = step_outputs
-                    .iter()
-                    .filter(|o| {
-                        o.step_type == WorkflowStepType::PrReview
-                            && o.status == WorkflowStepStatus::Completed
-                    })
-                    .filter_map(|o| o.output.as_deref())
-                    .collect();
-
-                if !prior_reviews.is_empty() {
-                    let latest_review = prior_reviews.last().unwrap();
-                    Ok(format!(
-                        "{} - This is a re-review after fixes were applied. The previous review found these issues: {} - Check if they have been fixed and look for any new issues. Be specific about file names and line numbers.",
-                        pr_context, latest_review
-                    ))
-                } else {
-                    Ok(format!(
-                        "{} - Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers.",
-                        pr_context
-                    ))
-                }
-            }
-            WorkflowStepType::CompletePr => {
-                let pr_urls = &task.pr_urls;
-                if pr_urls.is_empty() {
-                    Ok(
-                        "The implementation is complete. Find the PR you created earlier and complete it: \
-                         1. Check the CI status using `gh pr checks`. Wait for all checks to pass (poll every 30 seconds, up to 10 minutes). \
-                         2. If there are merge conflicts, resolve them and push. \
-                         3. Once all checks pass, merge the PR using `gh pr merge --squash --delete-branch`. \
-                         4. Confirm the PR is merged successfully.".to_string()
-                    )
-                } else {
-                    let pr_url = pr_urls.last().unwrap();
-                    Ok(format!(
-                        "The implementation is complete and the PR has been approved. Complete the PR at {}: \
-                         1. Check the CI status using `gh pr checks {}`. Wait for all checks to pass (poll every 30 seconds, up to 10 minutes). \
-                         2. If there are merge conflicts, resolve them and push. \
-                         3. Once all checks pass, merge the PR using `gh pr merge {} --squash --delete-branch`. \
-                         4. Confirm the PR is merged successfully.",
-                        pr_url, pr_url, pr_url
-                    ))
-                }
-            }
-            WorkflowStepType::HumanGate | WorkflowStepType::HumanReview => {
-                // Human gates don't need prompts — they pause the workflow
-                Ok(String::new())
+        // Inject {{rejection}} — latest rejected HumanGate output's comments
+        if prompt.contains("{{rejection}}") {
+            let rejection_text = step_outputs.iter()
+                .filter(|o| o.step_type == WorkflowStepType::HumanGate
+                    && o.status == WorkflowStepStatus::Rejected)
+                .last()
+                .and_then(|o| o.output.as_deref())
+                .unwrap_or("");
+            if rejection_text.is_empty() {
+                prompt = prompt.replace("{{rejection}}", "");
+            } else {
+                prompt = prompt.replace("{{rejection}}",
+                    &format!("\n\nThe previous output was rejected. Feedback: {}\nPlease revise based on this feedback.", rejection_text));
             }
         }
+
+        Ok(prompt.trim().to_string())
     }
 
     /// Find the preceding agent step to loop back to on rejection.
     fn find_preceding_agent_step(&self, workflow: &Workflow, current_index: i32) -> i32 {
         for i in (0..current_index).rev() {
             let step = &workflow.definition.steps[i as usize];
-            if matches!(
-                step.step_type,
-                WorkflowStepType::Plan | WorkflowStepType::Implement
-            ) {
+            if matches!(step.step_type, WorkflowStepType::Agentic) {
                 return i;
             }
         }
@@ -1177,14 +1169,11 @@ impl WorkflowEngine {
         step_def: &WorkflowStepDefinition,
         loop_target: i32,
     ) -> anyhow::Result<bool> {
-        // If the loop target is a human step (HumanReview/HumanGate), check if
+        // If the loop target is a HumanGate step, check if
         // the most recent output for that step was approved (Completed).
         // If approved, don't loop — the human is satisfied.
         if let Some(target_step_def) = workflow.definition.steps.get(loop_target as usize) {
-            if matches!(
-                target_step_def.step_type,
-                WorkflowStepType::HumanReview | WorkflowStepType::HumanGate
-            ) {
+            if matches!(target_step_def.step_type, WorkflowStepType::HumanGate) {
                 // Use latest_for_step for deterministic ordering (ORDER BY attempt DESC LIMIT 1)
                 let latest_target_output =
                     composer_db::models::workflow_step_output::latest_for_step(

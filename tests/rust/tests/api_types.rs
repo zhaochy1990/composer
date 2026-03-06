@@ -326,14 +326,11 @@ fn workflow_run_status_serialization() {
 
 #[test]
 fn workflow_step_type_serialization() {
-    let step = WorkflowStepType::Plan;
-    assert_eq!(serde_json::to_value(&step).unwrap(), "plan");
+    let step = WorkflowStepType::Agentic;
+    assert_eq!(serde_json::to_value(&step).unwrap(), "agentic");
 
     let step = WorkflowStepType::HumanGate;
     assert_eq!(serde_json::to_value(&step).unwrap(), "human_gate");
-
-    let step = WorkflowStepType::PrReview;
-    assert_eq!(serde_json::to_value(&step).unwrap(), "pr_review");
 }
 
 #[test]
@@ -350,11 +347,12 @@ fn workflow_definition_roundtrip() {
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
-                step_type: WorkflowStepType::Plan,
+                step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("Do {{task}}".to_string()),
                 max_retries: Some(3),
                 loop_back_to: None,
+                session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::HumanGate,
@@ -362,13 +360,14 @@ fn workflow_definition_roundtrip() {
                 prompt_template: None,
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: None,
             },
         ],
     };
     let json = serde_json::to_string(&def).unwrap();
     let parsed: WorkflowDefinition = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.steps.len(), 2);
-    assert_eq!(parsed.steps[0].step_type, WorkflowStepType::Plan);
+    assert_eq!(parsed.steps[0].step_type, WorkflowStepType::Agentic);
     assert_eq!(
         parsed.steps[0].prompt_template.as_deref(),
         Some("Do {{task}}")

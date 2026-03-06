@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
-import type { Workflow, WorkflowStepDefinition, WorkflowStepType } from '@/types/generated';
+import type { Workflow, WorkflowStepDefinition, WorkflowStepType, SessionMode } from '@/types/generated';
 import { useUpdateWorkflow, useDeleteWorkflow } from '@/hooks/use-workflows';
 
 const STEP_TYPES: { value: WorkflowStepType; label: string }[] = [
-    { value: 'plan', label: 'Plan' },
+    { value: 'agentic', label: 'Agentic' },
     { value: 'human_gate', label: 'Human Gate' },
-    { value: 'implement', label: 'Implement' },
-    { value: 'pr_review', label: 'PR Review' },
-    { value: 'human_review', label: 'Human Review' },
-    { value: 'complete_pr', label: 'Complete PR' },
+];
+
+const SESSION_MODES: { value: SessionMode; label: string }[] = [
+    { value: 'new', label: 'New Session' },
+    { value: 'resume', label: 'Resume Main Session' },
+    { value: 'separate', label: 'Separate Session' },
 ];
 
 interface WorkflowEditPanelProps {
@@ -32,7 +34,12 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
         setShowDeleteConfirm(false);
     }, [workflow.id]);
 
+    const hasValidationError = steps.some(
+        s => s.step_type === 'agentic' && !s.prompt_template?.trim()
+    );
+
     function handleSave() {
+        if (hasValidationError) return;
         updateWorkflow.mutate({
             id: workflow.id,
             name: name.trim() || undefined,
@@ -47,7 +54,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     }
 
     function addStep() {
-        setSteps([...steps, { step_type: 'implement', name: '' }]);
+        setSteps([...steps, { step_type: 'agentic', name: '', session_mode: 'resume' }]);
         setExpandedStep(steps.length);
     }
 
@@ -139,19 +146,42 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
 
                                     {/* Expanded details */}
                                     {isExpanded && (
-                                        <div className="px-3 pb-3 pt-1 border-t border-gray-700">
-                                            <label className="block text-xs text-gray-400 mb-1">
-                                                Prompt Template (optional)
-                                            </label>
-                                            <textarea
-                                                value={step.prompt_template ?? ''}
-                                                onChange={e => updateStep(index, {
-                                                    prompt_template: e.target.value || undefined,
-                                                })}
-                                                placeholder="Custom prompt for this step. Use {{task}} for task context, {{step_N}} for prior step output."
-                                                rows={3}
-                                                className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none font-mono"
-                                            />
+                                        <div className="px-3 pb-3 pt-1 border-t border-gray-700 space-y-2">
+                                            {step.step_type === 'agentic' && (
+                                                <div>
+                                                    <label className="block text-xs text-gray-400 mb-1">Session Mode</label>
+                                                    <select
+                                                        value={step.session_mode ?? 'resume'}
+                                                        onChange={e => updateStep(index, { session_mode: e.target.value as SessionMode })}
+                                                        className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                                    >
+                                                        {SESSION_MODES.map(m => (
+                                                            <option key={m.value} value={m.value}>{m.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            {step.step_type === 'agentic' && (
+                                                <div>
+                                                    <label className="block text-xs text-gray-400 mb-1">
+                                                        Prompt Template <span className="text-red-400">*</span>
+                                                    </label>
+                                                    <textarea
+                                                        value={step.prompt_template ?? ''}
+                                                        onChange={e => updateStep(index, {
+                                                            prompt_template: e.target.value || undefined,
+                                                        })}
+                                                        placeholder="Required. Use {{task}} for task context, {{step_N}} for prior step output, {{rejection}} for rejection feedback."
+                                                        rows={4}
+                                                        className={`w-full bg-gray-700 border rounded-md px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none font-mono ${
+                                                            !step.prompt_template?.trim() ? 'border-red-600' : 'border-gray-600'
+                                                        }`}
+                                                    />
+                                                    {!step.prompt_template?.trim() && (
+                                                        <p className="text-xs text-red-400 mt-1">Prompt template is required for agentic steps.</p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -193,7 +223,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={!name.trim() || steps.length === 0 || updateWorkflow.isPending}
+                        disabled={!name.trim() || steps.length === 0 || hasValidationError || updateWorkflow.isPending}
                         className="px-3 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {updateWorkflow.isPending ? 'Saving...' : 'Save'}

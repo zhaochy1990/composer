@@ -10,11 +10,11 @@ test.describe('Workflow API', () => {
 
     const featCommon = workflows.find(w => w.name === 'Feat-Common');
     expect(featCommon).toBeDefined();
-    expect(featCommon!.definition.steps.length).toBe(7);
+    expect(featCommon!.definition.steps.length).toBe(8);
 
     const stepTypes = featCommon!.definition.steps.map(s => s.step_type);
     expect(stepTypes).toEqual([
-      'plan', 'human_gate', 'implement', 'pr_review', 'implement', 'human_review', 'implement',
+      'agentic', 'human_gate', 'agentic', 'agentic', 'agentic', 'human_gate', 'agentic', 'agentic',
     ]);
   });
 
@@ -30,8 +30,8 @@ test.describe('Workflow API', () => {
       name: 'Quick Fix',
       definition: {
         steps: [
-          { step_type: 'implement', name: 'Fix & PR' },
-          { step_type: 'human_review', name: 'Review' },
+          { step_type: 'agentic', name: 'Fix & PR', session_mode: 'resume', prompt_template: 'Fix and create a PR.' },
+          { step_type: 'human_gate', name: 'Review' },
         ],
       },
     });
@@ -45,7 +45,7 @@ test.describe('Workflow API', () => {
   test('delete custom workflow', async ({ apiClient }) => {
     const workflow = await apiClient.createWorkflow({
       name: 'Temp',
-      definition: { steps: [{ step_type: 'plan', name: 'Plan' }] },
+      definition: { steps: [{ step_type: 'agentic', name: 'Plan', session_mode: 'new', prompt_template: '{{task}} - Create a plan.' }] },
     });
 
     await apiClient.deleteWorkflow(workflow.id);

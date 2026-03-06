@@ -8,6 +8,7 @@ import { TaskColumn } from './TaskColumn';
 import { TaskListView } from './TaskListView';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskDetailPanel } from './TaskDetailPanel';
+import { PriorityFilter } from './PriorityFilter';
 
 const columns: { status: TaskStatus; title: string }[] = [
     { status: 'backlog', title: 'Backlog' },
@@ -25,6 +26,7 @@ export function TaskBoard() {
         () => (localStorage.getItem('taskBoardViewMode') as 'list' | 'kanban') || 'list'
     );
     useEffect(() => { localStorage.setItem('taskBoardViewMode', viewMode); }, [viewMode]);
+    const [priorityFilter, setPriorityFilter] = useState<number[]>([]);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -68,7 +70,10 @@ export function TaskBoard() {
             done: [],
         };
         if (tasks) {
-            for (const task of tasks) {
+            const filtered = priorityFilter.length > 0
+                ? tasks.filter(t => priorityFilter.includes(t.priority))
+                : tasks;
+            for (const task of filtered) {
                 const bucket = grouped[task.status];
                 if (bucket) {
                     bucket.push(task);
@@ -80,7 +85,7 @@ export function TaskBoard() {
             }
         }
         return grouped;
-    }, [tasks]);
+    }, [tasks, priorityFilter]);
 
     function handleEditTask(task: Task) {
         setEditingTask(task);
@@ -96,7 +101,8 @@ export function TaskBoard() {
                         {tasks ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''}` : 'Loading...'}
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                    <PriorityFilter selected={priorityFilter} onChange={setPriorityFilter} />
                     <div className="flex rounded-md border border-gray-700 overflow-hidden">
                         <button
                             type="button"

@@ -14,7 +14,8 @@ export type RepositoryRole = "primary" | "dependency";
 export type WorktreeStatus = "active" | "stale" | "deleted";
 export type LogType = "stdout" | "stderr" | "control" | "status" | "user_input";
 export type WorkflowRunStatus = "running" | "paused" | "completed" | "failed";
-export type WorkflowStepType = "plan" | "human_gate" | "implement" | "pr_review" | "human_review" | "complete_pr";
+export type WorkflowStepType = "agentic" | "human_gate";
+export type SessionMode = "new" | "resume" | "separate";
 export type WorkflowStepStatus = "pending" | "running" | "waiting_for_human" | "completed" | "rejected" | "failed";
 
 // ---------------------------------------------------------------------------
@@ -128,6 +129,7 @@ export interface WorkflowStepDefinition {
     prompt_template?: string;
     max_retries?: number;
     loop_back_to?: number;
+    session_mode?: SessionMode;
 }
 
 export interface WorkflowRun {

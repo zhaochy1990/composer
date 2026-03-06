@@ -1,23 +1,29 @@
 import { Workflow as WorkflowIcon } from 'lucide-react';
-import type { Workflow } from '@/types/generated';
+import type { Workflow, WorkflowStepDefinition } from '@/types/generated';
 
 const STEP_TYPE_LABELS: Record<string, string> = {
-    plan: 'Plan',
+    agentic: 'Agent',
     human_gate: 'Review',
-    implement: 'Implement',
-    pr_review: 'PR Review',
-    human_review: 'Human Review',
-    complete_pr: 'Complete PR',
 };
 
 const STEP_TYPE_COLORS: Record<string, string> = {
-    plan: 'bg-blue-900/40 text-blue-300 border-blue-800',
+    agentic: 'bg-blue-900/40 text-blue-300 border-blue-800',
     human_gate: 'bg-yellow-900/40 text-yellow-300 border-yellow-800',
-    implement: 'bg-green-900/40 text-green-300 border-green-800',
-    pr_review: 'bg-purple-900/40 text-purple-300 border-purple-800',
-    human_review: 'bg-orange-900/40 text-orange-300 border-orange-800',
-    complete_pr: 'bg-teal-900/40 text-teal-300 border-teal-800',
 };
+
+// Differentiate agentic steps by session_mode for better visual variety
+const SESSION_MODE_COLORS: Record<string, string> = {
+    new: 'bg-purple-900/40 text-purple-300 border-purple-800',
+    resume: 'bg-blue-900/40 text-blue-300 border-blue-800',
+    separate: 'bg-cyan-900/40 text-cyan-300 border-cyan-800',
+};
+
+function getStepColor(step: WorkflowStepDefinition): string {
+    if (step.step_type === 'agentic' && step.session_mode) {
+        return SESSION_MODE_COLORS[step.session_mode] ?? STEP_TYPE_COLORS.agentic;
+    }
+    return STEP_TYPE_COLORS[step.step_type] ?? 'bg-gray-700 text-gray-400';
+}
 
 interface WorkflowCardProps {
     workflow: Workflow;
@@ -42,7 +48,7 @@ export function WorkflowCard({ workflow, onClick }: WorkflowCardProps) {
                 {workflow.definition.steps.map((step, i) => (
                     <span
                         key={i}
-                        className={`text-xs px-1.5 py-0.5 rounded border ${STEP_TYPE_COLORS[step.step_type] ?? 'bg-gray-700 text-gray-400'}`}
+                        className={`text-xs px-1.5 py-0.5 rounded border ${getStepColor(step)}`}
                     >
                         {step.name || STEP_TYPE_LABELS[step.step_type] || step.step_type}
                     </span>

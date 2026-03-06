@@ -101,3 +101,43 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
         .bind(id).execute(pool).await?;
     Ok(())
 }
+
+/// List all workflow definitions as raw (id, definition_json) pairs.
+/// Used for migrations that operate on raw JSON before deserialization.
+pub async fn list_all_raw_definitions(pool: &SqlitePool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT id, definition FROM workflows"
+    ).fetch_all(pool).await?;
+    Ok(rows)
+}
+
+/// Update a workflow's raw definition JSON string.
+/// Used for migrations that operate on raw JSON before deserialization.
+pub async fn update_raw_definition(pool: &SqlitePool, id: &str, definition_json: &str) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE workflows SET definition = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+    )
+    .bind(definition_json)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Check if any workflow definitions contain old step types that need migration.
+pub async fn has_legacy_step_types(pool: &SqlitePool) -> anyhow::Result<bool> {
+    let count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM workflows WHERE \
+         definition LIKE '%\"step_type\":\"plan\"%' \
+         OR definition LIKE '%\"step_type\": \"plan\"%' \
+         OR definition LIKE '%\"step_type\":\"implement\"%' \
+         OR definition LIKE '%\"step_type\": \"implement\"%' \
+         OR definition LIKE '%\"step_type\":\"pr_review\"%' \
+         OR definition LIKE '%\"step_type\": \"pr_review\"%' \
+         OR definition LIKE '%\"step_type\":\"human_review\"%' \
+         OR definition LIKE '%\"step_type\": \"human_review\"%' \
+         OR definition LIKE '%\"step_type\":\"complete_pr\"%' \
+         OR definition LIKE '%\"step_type\": \"complete_pr\"%'"
+    ).fetch_one(pool).await?;
+    Ok(count.0 > 0)
+}

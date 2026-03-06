@@ -100,12 +100,22 @@ pub enum WorkflowRunStatus {
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
 pub enum WorkflowStepType {
-    Plan,
+    Agentic,
     HumanGate,
-    Implement,
-    PrReview,
-    HumanReview,
-    CompletePr,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionMode {
+    New,
+    Resume,
+    Separate,
+}
+
+impl Default for SessionMode {
+    fn default() -> Self {
+        SessionMode::Resume
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]
@@ -254,6 +264,9 @@ pub struct WorkflowStepDefinition {
     /// Used for review-fix cycles (e.g., fix step loops back to review step).
     #[serde(default)]
     pub loop_back_to: Option<i32>,
+    /// Session mode for Agentic steps. Defaults to Resume if not specified.
+    #[serde(default)]
+    pub session_mode: Option<SessionMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

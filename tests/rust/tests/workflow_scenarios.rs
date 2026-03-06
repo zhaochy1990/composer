@@ -184,11 +184,12 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
-                step_type: WorkflowStepType::Plan,
+                step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("List the files in the root directory of this project. Keep your response under 5 lines. Do NOT implement anything.".to_string()),
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::HumanGate,
@@ -196,6 +197,7 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
                 prompt_template: None,
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: None,
             },
         ],
     };
@@ -293,11 +295,12 @@ async fn scenario_plan_approve_implement() {
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
-                step_type: WorkflowStepType::Plan,
+                step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("Describe how you would add a comment '// scenario test' to the top of CLAUDE.md. Keep it under 3 lines. Do NOT implement.".to_string()),
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::HumanGate,
@@ -305,13 +308,15 @@ async fn scenario_plan_approve_implement() {
                 prompt_template: None,
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: None,
             },
             WorkflowStepDefinition {
-                step_type: WorkflowStepType::Implement,
+                step_type: WorkflowStepType::Agentic,
                 name: "Implement".to_string(),
                 prompt_template: Some("The plan is approved. Just reply with 'Implementation complete.' and do NOT modify any files.".to_string()),
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: Some(SessionMode::Resume),
             },
         ],
     };
@@ -389,11 +394,12 @@ async fn scenario_plan_rejection_loops_back() {
     let def = WorkflowDefinition {
         steps: vec![
             WorkflowStepDefinition {
-                step_type: WorkflowStepType::Plan,
+                step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
                 prompt_template: Some("Reply with exactly: 'Plan v1'. Nothing else.".to_string()),
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: Some(SessionMode::New),
             },
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::HumanGate,
@@ -401,6 +407,7 @@ async fn scenario_plan_rejection_loops_back() {
                 prompt_template: None,
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: None,
             },
         ],
     };

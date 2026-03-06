@@ -631,14 +631,17 @@ mod workflow_tests {
     fn feat_common_definition_has_expected_steps() {
         let def = workflow_engine::feat_common_definition();
         assert_eq!(def.steps.len(), 8);
-        assert_eq!(def.steps[0].step_type, WorkflowStepType::Plan);
+        assert_eq!(def.steps[0].step_type, WorkflowStepType::Agentic);
+        assert_eq!(def.steps[0].session_mode, Some(SessionMode::New));
         assert_eq!(def.steps[1].step_type, WorkflowStepType::HumanGate);
-        assert_eq!(def.steps[2].step_type, WorkflowStepType::Implement);
-        assert_eq!(def.steps[3].step_type, WorkflowStepType::PrReview);
-        assert_eq!(def.steps[4].step_type, WorkflowStepType::Implement);
-        assert_eq!(def.steps[5].step_type, WorkflowStepType::HumanReview);
-        assert_eq!(def.steps[6].step_type, WorkflowStepType::Implement);
-        assert_eq!(def.steps[7].step_type, WorkflowStepType::CompletePr);
+        assert_eq!(def.steps[2].step_type, WorkflowStepType::Agentic);
+        assert_eq!(def.steps[2].session_mode, Some(SessionMode::Resume));
+        assert_eq!(def.steps[3].step_type, WorkflowStepType::Agentic);
+        assert_eq!(def.steps[3].session_mode, Some(SessionMode::Separate));
+        assert_eq!(def.steps[4].step_type, WorkflowStepType::Agentic);
+        assert_eq!(def.steps[5].step_type, WorkflowStepType::HumanGate);
+        assert_eq!(def.steps[6].step_type, WorkflowStepType::Agentic);
+        assert_eq!(def.steps[7].step_type, WorkflowStepType::Agentic);
     }
 
     #[test]
@@ -681,11 +684,12 @@ mod workflow_tests {
 
         let def = WorkflowDefinition {
             steps: vec![WorkflowStepDefinition {
-                step_type: WorkflowStepType::Plan,
+                step_type: WorkflowStepType::Agentic,
                 name: "Plan".to_string(),
-                prompt_template: None,
+                prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
                 max_retries: None,
                 loop_back_to: None,
+                session_mode: Some(SessionMode::New),
             }],
         };
 
@@ -791,7 +795,7 @@ mod workflow_tests {
             &db.pool,
             &run_id,
             0,
-            &WorkflowStepType::Plan,
+            &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Running,
             None,
         )
@@ -822,7 +826,7 @@ mod workflow_tests {
             &db.pool,
             &run_id,
             0,
-            &WorkflowStepType::Plan,
+            &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Running,
             None,
         )
@@ -889,7 +893,7 @@ mod workflow_tests {
             &db.pool,
             &run_id,
             3,
-            &WorkflowStepType::PrReview,
+            &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Running,
             Some(&review_session_id),
         )
@@ -929,7 +933,7 @@ mod workflow_tests {
             &db.pool,
             &run_id,
             2,
-            &WorkflowStepType::Implement,
+            &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Running,
             None,
         )
@@ -1111,11 +1115,12 @@ mod workflow_tests {
         let def = WorkflowDefinition {
             steps: vec![
                 WorkflowStepDefinition {
-                    step_type: WorkflowStepType::Plan,
+                    step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
-                    prompt_template: None,
+                    prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
                     max_retries: None,
                     loop_back_to: Some(-1),
+                    session_mode: Some(SessionMode::New),
                 },
             ],
         };
@@ -1129,18 +1134,20 @@ mod workflow_tests {
         let def = WorkflowDefinition {
             steps: vec![
                 WorkflowStepDefinition {
-                    step_type: WorkflowStepType::Plan,
+                    step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
-                    prompt_template: None,
+                    prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
                     max_retries: None,
                     loop_back_to: None,
+                    session_mode: Some(SessionMode::New),
                 },
                 WorkflowStepDefinition {
-                    step_type: WorkflowStepType::Implement,
+                    step_type: WorkflowStepType::Agentic,
                     name: "Implement".to_string(),
-                    prompt_template: None,
+                    prompt_template: Some("{{task}}\n\nImplement.".to_string()),
                     max_retries: None,
                     loop_back_to: Some(1), // Points to self, not preceding
+                    session_mode: Some(SessionMode::Resume),
                 },
             ],
         };
@@ -1175,7 +1182,7 @@ mod workflow_tests {
 
         // Simulate 1 completion of step 3 (first execution, not a retry) → should loop
         workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Completed, None,
         ).await.unwrap();
         let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
@@ -1183,11 +1190,11 @@ mod workflow_tests {
 
         // Simulate 2nd and 3rd completions (retries 1 and 2)
         workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Completed, None,
         ).await.unwrap();
         workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Completed, None,
         ).await.unwrap();
         let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
@@ -1195,7 +1202,7 @@ mod workflow_tests {
 
         // 4th completion (retry 3 = max_retries) → should NOT loop
         workflow_step_output::create(
-            &db.pool, &run_id, 3, &WorkflowStepType::PrReview,
+            &db.pool, &run_id, 3, &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Completed, None,
         ).await.unwrap();
         let result = engine.should_loop(&run_id, &wf, step_def, 3).await.unwrap();
@@ -1223,11 +1230,11 @@ mod workflow_tests {
         assert_eq!(step_def.max_retries, None);
 
         // Step 5 (Human PR Review) is a HumanReview step
-        assert_eq!(wf.definition.steps[5].step_type, WorkflowStepType::HumanReview);
+        assert_eq!(wf.definition.steps[5].step_type, WorkflowStepType::HumanGate);
 
         // Simulate human rejection at step 5 → should loop
         let step5_output = workflow_step_output::create(
-            &db.pool, &run_id, 5, &WorkflowStepType::HumanReview,
+            &db.pool, &run_id, 5, &WorkflowStepType::HumanGate,
             &WorkflowStepStatus::WaitingForHuman, None,
         ).await.unwrap();
         workflow_step_output::update_status_and_output(
@@ -1239,7 +1246,7 @@ mod workflow_tests {
 
         // Simulate human approval at step 5 (new attempt) → should NOT loop
         let step5_output2 = workflow_step_output::create(
-            &db.pool, &run_id, 5, &WorkflowStepType::HumanReview,
+            &db.pool, &run_id, 5, &WorkflowStepType::HumanGate,
             &WorkflowStepStatus::WaitingForHuman, None,
         ).await.unwrap();
         workflow_step_output::update_status_and_output(
@@ -1259,18 +1266,20 @@ mod workflow_tests {
         let bad_def = WorkflowDefinition {
             steps: vec![
                 WorkflowStepDefinition {
-                    step_type: WorkflowStepType::Plan,
+                    step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
-                    prompt_template: None,
+                    prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
                     max_retries: None,
                     loop_back_to: None,
+                    session_mode: Some(SessionMode::New),
                 },
                 WorkflowStepDefinition {
-                    step_type: WorkflowStepType::Implement,
+                    step_type: WorkflowStepType::Agentic,
                     name: "Implement".to_string(),
-                    prompt_template: None,
+                    prompt_template: Some("{{task}}\n\nImplement.".to_string()),
                     max_retries: None,
                     loop_back_to: Some(1), // self-loop is invalid
+                    session_mode: Some(SessionMode::Resume),
                 },
             ],
         };

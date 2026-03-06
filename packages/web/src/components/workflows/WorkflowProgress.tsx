@@ -10,12 +10,8 @@ interface WorkflowProgressProps {
 }
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
-    plan: 'Plan',
+    agentic: 'Agent',
     human_gate: 'Review',
-    implement: 'Implement',
-    pr_review: 'PR Review',
-    human_review: 'Human Review',
-    complete_pr: 'Complete PR',
 };
 
 function StepStatusIcon({ status }: { status: WorkflowStepStatus }) {
@@ -47,7 +43,7 @@ function StepStatusBadge({ status }: { status: WorkflowStepStatus }) {
 
     return (
         <span className={`text-xs px-1.5 py-0.5 rounded border ${colors[status]}`}>
-            {status.replaceAll('_', ' ')}
+            {status.replace(/_/g, ' ')}
         </span>
     );
 }
@@ -75,8 +71,14 @@ export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: Workf
     useEffect(() => {
         if (!onPlanContent) return;
         if (currentHumanStep && stepOutputs) {
+            // Use the first agentic step (index 0) as the plan step.
+            // This is more reliable than matching by session_mode, which could
+            // match multiple steps in custom workflows.
+            const planStepIndex = workflow.definition.steps.findIndex(
+                s => s.step_type === 'agentic'
+            );
             const planOutputs = stepOutputs
-                .filter(o => o.step_type === 'plan' && o.status === 'completed');
+                .filter(o => o.step_index === planStepIndex && o.status === 'completed');
             const planOutput = planOutputs.length > 0 ? planOutputs[planOutputs.length - 1] : null;
             onPlanContent(planOutput?.output ?? null);
         } else {

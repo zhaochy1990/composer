@@ -1,6 +1,26 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import type { WorkflowStepDefinition } from '@/types/generated';
 import { useCreateWorkflow } from '@/hooks/use-workflows';
+
+const DEFAULT_STEPS: WorkflowStepDefinition[] = [
+    {
+        step_type: 'agentic',
+        name: 'Plan',
+        session_mode: 'new',
+        prompt_template: '{{task}}\n\nInvestigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.{{rejection}}',
+    },
+    {
+        step_type: 'human_gate',
+        name: 'Review Plan',
+    },
+    {
+        step_type: 'agentic',
+        name: 'Implement',
+        session_mode: 'resume',
+        prompt_template: '{{task}}\n\nThe plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step_0}}',
+    },
+];
 
 interface WorkflowCreateDialogProps {
     isOpen: boolean;
@@ -19,13 +39,7 @@ export function WorkflowCreateDialog({ isOpen, onClose }: WorkflowCreateDialogPr
         createWorkflow.mutate(
             {
                 name: name.trim(),
-                definition: {
-                    steps: [
-                        { step_type: 'plan', name: 'Plan' },
-                        { step_type: 'human_gate', name: 'Review Plan' },
-                        { step_type: 'implement', name: 'Implement' },
-                    ],
-                },
+                definition: { steps: DEFAULT_STEPS },
             },
             {
                 onSuccess: () => {
