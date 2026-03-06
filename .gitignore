@@ -8,5 +8,6 @@ packages/web/dist
 .sqlx
 .claude/
 .composer/
+crates/api-types/bindings/
 packages/web/playwright-report/
 packages/web/test-results/
