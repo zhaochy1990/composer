@@ -1117,7 +1117,7 @@ mod workflow_tests {
                 WorkflowStepDefinition {
                     step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
-                    prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
+                    prompt_template: Some("{{task}}".to_string()),
                     max_retries: None,
                     loop_back_to: Some(-1),
                     session_mode: Some(SessionMode::New),
@@ -1136,7 +1136,7 @@ mod workflow_tests {
                 WorkflowStepDefinition {
                     step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
-                    prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
+                    prompt_template: Some("{{task}}".to_string()),
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
@@ -1144,7 +1144,7 @@ mod workflow_tests {
                 WorkflowStepDefinition {
                     step_type: WorkflowStepType::Agentic,
                     name: "Implement".to_string(),
-                    prompt_template: Some("{{task}}\n\nImplement.".to_string()),
+                    prompt_template: Some("{{task}}".to_string()),
                     max_retries: None,
                     loop_back_to: Some(1), // Points to self, not preceding
                     session_mode: Some(SessionMode::Resume),
@@ -1154,6 +1154,25 @@ mod workflow_tests {
         let result = workflow_engine::validate_workflow_definition(&def);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not a preceding step"));
+    }
+
+    #[test]
+    fn validate_workflow_definition_rejects_agentic_without_prompt() {
+        let def = WorkflowDefinition {
+            steps: vec![
+                WorkflowStepDefinition {
+                    step_type: WorkflowStepType::Agentic,
+                    name: "Plan".to_string(),
+                    prompt_template: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                    session_mode: Some(SessionMode::New),
+                },
+            ],
+        };
+        let result = workflow_engine::validate_workflow_definition(&def);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no prompt_template"));
     }
 
     #[tokio::test]
@@ -1268,7 +1287,7 @@ mod workflow_tests {
                 WorkflowStepDefinition {
                     step_type: WorkflowStepType::Agentic,
                     name: "Plan".to_string(),
-                    prompt_template: Some("{{task}}\n\nCreate a plan.".to_string()),
+                    prompt_template: Some("{{task}}".to_string()),
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
@@ -1276,7 +1295,7 @@ mod workflow_tests {
                 WorkflowStepDefinition {
                     step_type: WorkflowStepType::Agentic,
                     name: "Implement".to_string(),
-                    prompt_template: Some("{{task}}\n\nImplement.".to_string()),
+                    prompt_template: Some("{{task}}".to_string()),
                     max_retries: None,
                     loop_back_to: Some(1), // self-loop is invalid
                     session_mode: Some(SessionMode::Resume),

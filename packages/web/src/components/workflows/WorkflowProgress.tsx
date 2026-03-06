@@ -43,7 +43,7 @@ function StepStatusBadge({ status }: { status: WorkflowStepStatus }) {
 
     return (
         <span className={`text-xs px-1.5 py-0.5 rounded border ${colors[status]}`}>
-            {status.replace(/_/g, ' ')}
+            {(status as string).replace(/_/g, ' ')}
         </span>
     );
 }
@@ -67,20 +67,28 @@ export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: Workf
     const isPausedForRecovery = isWaitingForHuman && !currentHumanStep;
     const canResume = isPausedForRecovery || isFailed;
 
-    // Expose plan content to parent when at a human gate
+    // Expose plan content to parent when at a human gate.
+    // Finds the closest preceding agentic step to the current human gate
+    // (e.g., if we're reviewing at step 1, show output from step 0).
     useEffect(() => {
         if (!onPlanContent) return;
         if (currentHumanStep && stepOutputs) {
-            // Use the first agentic step (index 0) as the plan step.
-            // This is more reliable than matching by session_mode, which could
-            // match multiple steps in custom workflows.
-            const planStepIndex = workflow.definition.steps.findIndex(
-                s => s.step_type === 'agentic'
-            );
-            const planOutputs = stepOutputs
-                .filter(o => o.step_index === planStepIndex && o.status === 'completed');
-            const planOutput = planOutputs.length > 0 ? planOutputs[planOutputs.length - 1] : null;
-            onPlanContent(planOutput?.output ?? null);
+            const gateIndex = currentHumanStep.step_index;
+            let precedingAgentIndex = -1;
+            for (let i = gateIndex - 1; i >= 0; i--) {
+                if (workflow.definition.steps[i]?.step_type === 'agentic') {
+                    precedingAgentIndex = i;
+                    break;
+                }
+            }
+            if (precedingAgentIndex >= 0) {
+                const outputs = stepOutputs
+                    .filter(o => o.step_index === precedingAgentIndex && o.status === 'completed');
+                const latest = outputs.length > 0 ? outputs[outputs.length - 1] : null;
+                onPlanContent(latest?.output ?? null);
+            } else {
+                onPlanContent(null);
+            }
         } else {
             onPlanContent(null);
         }

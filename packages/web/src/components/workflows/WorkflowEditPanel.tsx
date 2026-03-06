@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Plus, Trash2, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import type { Workflow, WorkflowStepDefinition, WorkflowStepType, SessionMode } from '@/types/generated';
 import { useUpdateWorkflow, useDeleteWorkflow } from '@/hooks/use-workflows';
 
@@ -34,12 +34,21 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
         setShowDeleteConfirm(false);
     }, [workflow.id]);
 
-    const hasValidationError = steps.some(
-        s => s.step_type === 'agentic' && !s.prompt_template?.trim()
-    );
-
     function handleSave() {
-        if (hasValidationError) return;
+        // Validate steps
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            if (step.step_type === 'agentic' && !step.prompt_template?.trim()) {
+                return;
+            }
+            if (step.loop_back_to != null) {
+                if (step.loop_back_to < 0 || step.loop_back_to >= i) {
+                    return;
+                }
+            }
+        }
+
+
         updateWorkflow.mutate({
             id: workflow.id,
             name: name.trim() || undefined,
@@ -59,7 +68,27 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     }
 
     function removeStep(index: number) {
-        setSteps(steps.filter((_, i) => i !== index));
+        const newSteps = steps.filter((_, i) => i !== index).map((step, newIdx) => {
+            if (step.loop_back_to == null) return step;
+
+            let newTarget = step.loop_back_to;
+
+            // Target was the removed step — clear
+            if (newTarget === index) {
+                return { ...step, loop_back_to: undefined, max_retries: undefined };
+            }
+            // Target was after the removed step — decrement
+            if (newTarget > index) {
+                newTarget = newTarget - 1;
+            }
+            // Target must still be a preceding step
+            if (newTarget >= newIdx) {
+                return { ...step, loop_back_to: undefined, max_retries: undefined };
+            }
+
+            return { ...step, loop_back_to: newTarget };
+        });
+        setSteps(newSteps);
         setExpandedStep(null);
     }
 
@@ -68,7 +97,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     }
 
     return (
-        <div className="w-[480px] border-l border-gray-800 bg-gray-900 h-full overflow-y-auto flex flex-col">
+        <div className="bg-gray-900 h-full overflow-y-auto flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-800">
                 <h2 className="text-lg font-semibold text-gray-100 truncate">Edit Workflow</h2>
@@ -77,7 +106,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                 </button>
             </div>
 
-            <div className="p-4 space-y-4 flex-1">
+            <div className="p-6 space-y-4 flex-1 max-w-3xl">
                 {/* Name */}
                 <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">Name</label>
@@ -135,6 +164,15 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                                             placeholder="Step name"
                                             className="flex-1 bg-transparent border-none text-sm text-gray-200 placeholder-gray-500 focus:outline-none"
                                         />
+                                        {step.loop_back_to != null && (
+                                            <span
+                                                className="flex items-center gap-0.5 text-xs text-orange-400 shrink-0"
+                                                title={`Loops back to step ${step.loop_back_to + 1}`}
+                                            >
+                                                <RotateCcw className="w-3 h-3" />
+                                                <span className="font-mono">{step.loop_back_to + 1}</span>
+                                            </span>
+                                        )}
                                         <button
                                             onClick={() => removeStep(index)}
                                             className="text-gray-600 hover:text-red-400 p-1"
@@ -173,13 +211,67 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                                                         })}
                                                         placeholder="Required. Use {{task}} for task context, {{step_N}} for prior step output, {{rejection}} for rejection feedback."
                                                         rows={4}
-                                                        className={`w-full bg-gray-700 border rounded-md px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none font-mono ${
-                                                            !step.prompt_template?.trim() ? 'border-red-600' : 'border-gray-600'
-                                                        }`}
+                                                        className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none font-mono"
                                                     />
-                                                    {!step.prompt_template?.trim() && (
-                                                        <p className="text-xs text-red-400 mt-1">Prompt template is required for agentic steps.</p>
-                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Loop Back To */}
+                                            {index > 0 && (
+                                                <div>
+                                                    <label className="block text-xs text-gray-400 mb-1">
+                                                        Loop Back To
+                                                        <span className="text-gray-600 ml-1">(optional)</span>
+                                                    </label>
+                                                    <select
+                                                        value={step.loop_back_to ?? ''}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            if (val === '') {
+                                                                updateStep(index, { loop_back_to: undefined, max_retries: undefined });
+                                                            } else {
+                                                                updateStep(index, { loop_back_to: Number(val) });
+                                                            }
+                                                        }}
+                                                        className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                                    >
+                                                        <option value="">None (proceed to next step)</option>
+                                                        {steps.slice(0, index).map((precedingStep, i) => (
+                                                            <option key={i} value={i}>
+                                                                Step {i + 1}: {precedingStep.name || precedingStep.step_type}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <p className="text-xs text-gray-600 mt-0.5">
+                                                        After this step completes, loop back to the selected step for review-fix cycles.
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {/* Max Retries (only when loop_back_to is set) */}
+                                            {step.loop_back_to != null && (
+                                                <div>
+                                                    <label className="block text-xs text-gray-400 mb-1">
+                                                        Max Retries
+                                                        <span className="text-gray-600 ml-1">(optional)</span>
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        max={10}
+                                                        value={step.max_retries ?? ''}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            updateStep(index, {
+                                                                max_retries: val === '' ? undefined : Number(val),
+                                                            });
+                                                        }}
+                                                        placeholder="Unlimited"
+                                                        className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                                    />
+                                                    <p className="text-xs text-gray-600 mt-0.5">
+                                                        Number of times to repeat the loop before moving forward. Leave empty for unlimited.
+                                                    </p>
                                                 </div>
                                             )}
                                         </div>
@@ -223,7 +315,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={!name.trim() || steps.length === 0 || hasValidationError || updateWorkflow.isPending}
+                        disabled={!name.trim() || steps.length === 0 || updateWorkflow.isPending || steps.some(s => s.step_type === 'agentic' && !s.prompt_template?.trim())}
                         className="px-3 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {updateWorkflow.isPending ? 'Saving...' : 'Save'}

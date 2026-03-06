@@ -23,6 +23,8 @@ async fn create_workflow(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateWorkflowRequest>,
 ) -> Result<Json<Workflow>, ServiceError> {
+    composer_services::workflow_engine::validate_workflow_definition(&req.definition)
+        .map_err(|e| ServiceError::BadRequest(e.to_string()))?;
     let workflow = composer_db::models::workflow::create(
         &state.services.workflows.db().pool,
         &req.name,
@@ -57,6 +59,10 @@ async fn update_workflow(
     Path(id): Path<String>,
     Json(req): Json<UpdateWorkflowRequest>,
 ) -> Result<Json<Workflow>, ServiceError> {
+    if let Some(ref def) = req.definition {
+        composer_services::workflow_engine::validate_workflow_definition(def)
+            .map_err(|e| ServiceError::BadRequest(e.to_string()))?;
+    }
     let workflow = composer_db::models::workflow::update(
         &state.services.workflows.db().pool,
         &id,

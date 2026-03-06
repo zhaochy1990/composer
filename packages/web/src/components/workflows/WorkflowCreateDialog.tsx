@@ -39,7 +39,9 @@ export function WorkflowCreateDialog({ isOpen, onClose }: WorkflowCreateDialogPr
         createWorkflow.mutate(
             {
                 name: name.trim(),
-                definition: { steps: DEFAULT_STEPS },
+                definition: {
+                    steps: DEFAULT_STEPS,
+                },
             },
             {
                 onSuccess: () => {

@@ -28,9 +28,31 @@ function getStepColor(step: WorkflowStepDefinition): string {
 interface WorkflowCardProps {
     workflow: Workflow;
     onClick: () => void;
+    compact?: boolean;
+    isSelected?: boolean;
 }
 
-export function WorkflowCard({ workflow, onClick }: WorkflowCardProps) {
+export function WorkflowCard({ workflow, onClick, compact, isSelected }: WorkflowCardProps) {
+    if (compact) {
+        return (
+            <button
+                type="button"
+                onClick={onClick}
+                className={`w-full text-left px-4 py-2.5 border-b border-gray-800 hover:bg-gray-800 transition-colors ${
+                    isSelected ? 'bg-gray-800 border-l-2 border-l-blue-500' : ''
+                }`}
+            >
+                <div className="flex items-center gap-2">
+                    <WorkflowIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span className="text-sm font-medium text-gray-200 truncate">{workflow.name}</span>
+                    <span className="text-xs text-gray-500 ml-auto shrink-0">
+                        {workflow.definition.steps.length}
+                    </span>
+                </div>
+            </button>
+        );
+    }
+
     return (
         <button
             type="button"
