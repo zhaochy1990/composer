@@ -59,8 +59,17 @@ fn human_gate_step(id: &str, name: &str) -> WorkflowStepDefinition {
 pub fn feat_common_definition() -> WorkflowDefinition {
     WorkflowDefinition {
         steps: vec![
-            agentic_step("plan", "Plan", SessionMode::New,
-                "{{task}}\n\nInvestigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.{{rejection}}"),
+            agentic_step("start", "Start", SessionMode::New,
+                "You are about to work on a task. Read the following instructions and task context carefully.\n\n\
+                {{task}}\n\n\
+                IMPORTANT: Do NOT start implementing or planning yet. \
+                Acknowledge that you understand the task and instructions, then wait for further directions."),
+            {
+                let mut s = agentic_step("plan", "Plan", SessionMode::Resume,
+                    "Investigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.{{rejection}}");
+                s.depends_on = vec!["start".to_string()];
+                s
+            },
             {
                 let mut s = human_gate_step("review_plan", "Review Plan");
                 s.depends_on = vec!["plan".to_string()];
@@ -70,7 +79,7 @@ pub fn feat_common_definition() -> WorkflowDefinition {
             },
             {
                 let mut s = agentic_step("implement", "Implement & Create PR", SessionMode::Resume,
-                    "{{task}}\n\nThe plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step:plan}}{{rejection}}");
+                    "The plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step:plan}}{{rejection}}");
                 s.depends_on = vec!["review_plan".to_string()];
                 s
             },
@@ -102,7 +111,12 @@ pub fn feat_common_definition() -> WorkflowDefinition {
             },
             {
                 let mut s = agentic_step("complete_pr", "Complete PR", SessionMode::Resume,
-                    "The implementation is complete. Find the PR you created earlier and complete it:\n1. Check the CI status using `gh pr checks`. Wait for all checks to pass (poll every 30 seconds, up to 10 minutes).\n2. If there are merge conflicts, resolve them and push.\n3. Once all checks pass, merge the PR using `gh pr merge --squash --delete-branch`.\n4. Confirm the PR is merged successfully.");
+                    "The implementation is complete. Find the PR you created earlier and complete it:\n\
+                    1. Squash all commits on this branch into a single clean commit. The commit message should summarize what the PR accomplishes — do NOT include intermediate review/fix cycle details.\n\
+                    2. Wait for CI checks to pass.\n\
+                    3. Resolve any merge conflicts if needed.\n\
+                    4. Merge the PR and delete the branch.\n\
+                    5. Confirm the PR is merged successfully.");
                 s.depends_on = vec!["human_review".to_string()];
                 s
             },
@@ -698,7 +712,19 @@ impl WorkflowEngine {
             }
         }
 
+        // When rejected, also create a new Pending output for the human gate itself
+        // so that it will be re-evaluated after the target step completes.
+        // Without this, the gate's latest status stays Rejected and compute_ready_steps skips it.
         if !approved {
+            composer_db::models::workflow_step_output::create(
+                &self.db.pool,
+                run_id,
+                step_id,
+                &step_def.step_type,
+                &WorkflowStepStatus::Pending,
+                None,
+            ).await?;
+
             composer_db::models::workflow_run::increment_iteration(&self.db.pool, run_id).await?;
         }
 

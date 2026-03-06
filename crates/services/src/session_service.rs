@@ -408,6 +408,13 @@ impl SessionService {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to spawn agent: {}", e))?;
 
+            // Broadcast the initial prompt so it appears in session logs
+            self.event_bus.broadcast(WsEvent::SessionOutput {
+                session_id: session.id,
+                log_type: LogType::UserInput,
+                content: req.prompt.clone(),
+            });
+
             Ok::<_, anyhow::Error>(session)
         }
         .await;
@@ -520,6 +527,9 @@ impl SessionService {
         )
         .await?;
 
+        // Save prompt for broadcasting after spawn succeeds (prompt is moved into SpawnOptions)
+        let prompt_for_log = prompt.clone();
+
         // Spawn agent process with --resume flag — rollback on failure (fix #2)
         if let Err(e) = self
             .process_manager
@@ -556,6 +566,13 @@ impl SessionService {
             .await;
             return Err(anyhow::anyhow!("Failed to resume agent: {}", e));
         }
+
+        // Broadcast the resume prompt so it appears in session logs (only after spawn succeeds)
+        self.event_bus.broadcast(WsEvent::SessionOutput {
+            session_id: session.id,
+            log_type: LogType::UserInput,
+            content: prompt_for_log,
+        });
 
         composer_db::models::session::find_by_id(&self.db.pool, id)
             .await?
