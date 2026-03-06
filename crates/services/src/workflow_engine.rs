@@ -729,6 +729,17 @@ impl WorkflowEngine {
                                     None,
                                 ).await?;
                             }
+                            // Also create a new Pending output for the current step
+                            // so that downstream steps (which depend on this step)
+                            // don't see it as Completed and advance prematurely.
+                            composer_db::models::workflow_step_output::create(
+                                &self.db.pool,
+                                &run_id,
+                                &step_output.step_id,
+                                &def.step_type,
+                                &WorkflowStepStatus::Pending,
+                                None,
+                            ).await?;
                         } else {
                             // Max retries exhausted → pause for user decision
                             tracing::info!(
