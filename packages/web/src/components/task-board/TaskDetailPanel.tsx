@@ -10,7 +10,7 @@ import { useWorkflows as useAllWorkflows, useWorkflowRun, useWorkflow, useStartW
 import { SessionOutput } from '@/components/sessions/SessionOutput';
 import { StatusBadge } from '@/components/sessions/StatusBadge';
 import { WorkflowProgress } from '@/components/workflows/WorkflowProgress';
-import { PlanReviewPanel } from '@/components/workflows/PlanReviewPanel';
+import { WorkflowReviewSidePanel, type ReviewPanelData } from '@/components/workflows/WorkflowReviewSidePanel';
 import { shortId, formatDuration, formatTime } from '@/lib/utils';
 
 interface TaskDetailPanelProps {
@@ -62,7 +62,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const startWorkflow = useStartWorkflow();
     const { data: workflowRun } = useWorkflowRun(task.workflow_run_id ?? undefined);
     const { data: workflow } = useWorkflow(workflowRun?.workflow_id ?? undefined);
-    const [planContent, setPlanContent] = useState<string | null>(null);
+    const [reviewPanelData, setReviewPanelData] = useState<ReviewPanelData | null>(null);
 
     // Default to first available agent if not set
     useEffect(() => {
@@ -187,14 +187,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
             {/* Workflow Progress */}
             {workflowRun && workflow && (
                 <div className="px-6 py-3 border-b border-gray-800 shrink-0">
-                    <WorkflowProgress workflowRun={workflowRun} workflow={workflow} onPlanContent={setPlanContent} />
-                </div>
-            )}
-
-            {/* Plan Review Panel — rendered inline when in inline mode */}
-            {inline && planContent && (
-                <div className="px-6 py-3 border-b border-gray-800 shrink-0">
-                    <PlanReviewPanel content={planContent} onClose={() => setPlanContent(null)} />
+                    <WorkflowProgress workflowRun={workflowRun} workflow={workflow} onReviewData={setReviewPanelData} />
                 </div>
             )}
 
@@ -579,8 +572,16 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
 
     if (inline) {
         return (
-            <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
-                {panelContent}
+            <div className="flex h-full overflow-hidden">
+                {reviewPanelData && (
+                    <WorkflowReviewSidePanel
+                        data={reviewPanelData}
+                        onClose={() => setReviewPanelData(null)}
+                    />
+                )}
+                <div className="flex-1 flex flex-col min-w-0 bg-gray-900 overflow-hidden">
+                    {panelContent}
+                </div>
             </div>
         );
     }
@@ -593,16 +594,18 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                 onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
             />
 
-            {/* Plan Review Panel — left of task detail panel */}
-            {planContent && (
-                <PlanReviewPanel content={planContent} onClose={() => setPlanContent(null)} />
-            )}
-
-            {/* Panel */}
-            <div className="fixed inset-y-0 right-0 w-[900px] max-w-full z-50 bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
-                {panelContent}
+            {/* Panel container — flex row with optional review side panel */}
+            <div className="fixed inset-y-0 right-0 z-50 flex max-w-full">
+                {reviewPanelData && (
+                    <WorkflowReviewSidePanel
+                        data={reviewPanelData}
+                        onClose={() => setReviewPanelData(null)}
+                    />
+                )}
+                <div className="w-[900px] max-w-full bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
+                    {panelContent}
+                </div>
             </div>
-
         </>
     );
 }

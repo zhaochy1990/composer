@@ -435,7 +435,7 @@ function PropertyPanel({
                                     <input
                                         type="number" min="1"
                                         value={step.max_retries ?? ''}
-                                        onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value) : undefined })}
+                                        onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value, 10) : undefined })}
                                         placeholder="∞"
                                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
                                     />
@@ -461,7 +461,7 @@ function PropertyPanel({
                                 <input
                                     type="number" min="1"
                                     value=""
-                                    onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value) : undefined })}
+                                    onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value, 10) : undefined })}
                                     placeholder="∞"
                                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
                                 />
