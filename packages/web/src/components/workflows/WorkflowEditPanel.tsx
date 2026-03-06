@@ -278,11 +278,13 @@ function PropertyPanel({
     allStepIds,
     onUpdate,
     onDelete,
+    readOnly,
 }: {
     step: WorkflowStepDefinition;
     allStepIds: string[];
     onUpdate: (updates: Partial<WorkflowStepDefinition>) => void;
     onDelete: () => void;
+    readOnly?: boolean;
 }) {
     const otherIds = allStepIds.filter(id => id !== step.id);
 
@@ -290,9 +292,11 @@ function PropertyPanel({
         <div className="w-[380px] shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto p-4 space-y-3">
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-200">Step Properties</h3>
-                <button onClick={onDelete} className="text-gray-500 hover:text-red-400 p-1" title="Delete step">
-                    <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {!readOnly && (
+                    <button onClick={onDelete} className="text-gray-500 hover:text-red-400 p-1" title="Delete step">
+                        <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                )}
             </div>
 
             {/* ID */}
@@ -311,7 +315,8 @@ function PropertyPanel({
                 <input
                     value={step.name}
                     onChange={e => onUpdate({ name: e.target.value })}
-                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                    readOnly={readOnly}
+                    className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-100 ${readOnly ? 'cursor-default' : 'focus:outline-none focus:border-blue-500'}`}
                 />
             </div>
 
@@ -321,7 +326,8 @@ function PropertyPanel({
                 <select
                     value={step.step_type}
                     onChange={e => onUpdate({ step_type: e.target.value as WorkflowStepType })}
-                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                    disabled={readOnly}
+                    className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-100 ${readOnly ? 'cursor-default opacity-80' : 'focus:outline-none focus:border-blue-500'}`}
                 >
                     {STEP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
@@ -330,25 +336,49 @@ function PropertyPanel({
             {/* Depends On */}
             <div>
                 <label className="block text-xs text-gray-400 mb-1">Depends On</label>
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {otherIds.map(id => (
-                        <label key={id} className="flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={step.depends_on.includes(id)}
-                                onChange={e => {
-                                    const deps = e.target.checked
-                                        ? [...step.depends_on, id]
-                                        : step.depends_on.filter(d => d !== id);
-                                    onUpdate({ depends_on: deps });
-                                }}
-                                className="rounded border-gray-600"
-                            />
-                            <span className="font-mono">{id}</span>
-                        </label>
-                    ))}
-                    {otherIds.length === 0 && <p className="text-xs text-gray-600">No other steps</p>}
-                </div>
+                {step.depends_on.length > 0 ? (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        {readOnly ? (
+                            step.depends_on.map(id => (
+                                <span key={id} className="text-xs text-gray-300 font-mono bg-gray-800 px-1.5 py-0.5 rounded">{id}</span>
+                            ))
+                        ) : (
+                            otherIds.map(id => (
+                                <label key={id} className="flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={step.depends_on.includes(id)}
+                                        onChange={e => {
+                                            const deps = e.target.checked
+                                                ? [...step.depends_on, id]
+                                                : step.depends_on.filter(d => d !== id);
+                                            onUpdate({ depends_on: deps });
+                                        }}
+                                        className="rounded border-gray-600"
+                                    />
+                                    <span className="font-mono">{id}</span>
+                                </label>
+                            ))
+                        )}
+                    </div>
+                ) : (
+                    <p className="text-xs text-gray-600">{readOnly ? 'None (entry step)' : 'No other steps to depend on'}</p>
+                )}
+                {!readOnly && step.depends_on.length === 0 && otherIds.length > 0 && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                        {otherIds.map(id => (
+                            <label key={id} className="flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={false}
+                                    onChange={() => onUpdate({ depends_on: [id] })}
+                                    className="rounded border-gray-600"
+                                />
+                                <span className="font-mono">{id}</span>
+                            </label>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Agentic fields */}
@@ -359,48 +389,85 @@ function PropertyPanel({
                         <select
                             value={step.session_mode ?? 'resume'}
                             onChange={e => onUpdate({ session_mode: e.target.value as SessionMode })}
-                            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                            disabled={readOnly}
+                            className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-100 ${readOnly ? 'cursor-default opacity-80' : 'focus:outline-none focus:border-blue-500'}`}
                         >
                             {SESSION_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="block text-xs text-gray-400 mb-1">
-                            Prompt Template <span className="text-red-400">*</span>
+                            Prompt Template {!readOnly && <span className="text-red-400">*</span>}
                         </label>
                         <textarea
                             value={step.prompt_template ?? ''}
                             onChange={e => onUpdate({ prompt_template: e.target.value || undefined })}
+                            readOnly={readOnly}
                             placeholder="{{task}}, {{step:id}}, {{rejection}}"
                             rows={5}
-                            className={`w-full bg-gray-800 border rounded px-2 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-none font-mono ${
-                                !step.prompt_template?.trim() ? 'border-red-600' : 'border-gray-600'
+                            className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-100 placeholder-gray-600 resize-none font-mono ${
+                                readOnly ? 'cursor-default' : `focus:outline-none focus:border-blue-500 ${!step.prompt_template?.trim() ? 'border-red-600' : ''}`
                             }`}
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <div>
-                            <label className="block text-xs text-gray-400 mb-1">Loop Back To</label>
-                            <select
-                                value={step.loop_back_to ?? ''}
-                                onChange={e => onUpdate({ loop_back_to: e.target.value || undefined })}
-                                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
-                            >
-                                <option value="">None</option>
-                                {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
-                            </select>
+                    {(step.loop_back_to || step.max_retries != null) && (
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Loop Back To</label>
+                                {readOnly ? (
+                                    <p className="text-xs text-gray-300 font-mono">{step.loop_back_to ?? 'None'}</p>
+                                ) : (
+                                    <select
+                                        value={step.loop_back_to ?? ''}
+                                        onChange={e => onUpdate({ loop_back_to: e.target.value || undefined })}
+                                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                    >
+                                        <option value="">None</option>
+                                        {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
+                                    </select>
+                                )}
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Max Retries</label>
+                                {readOnly ? (
+                                    <p className="text-xs text-gray-300">{step.max_retries ?? '∞'}</p>
+                                ) : (
+                                    <input
+                                        type="number" min="1"
+                                        value={step.max_retries ?? ''}
+                                        onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value) : undefined })}
+                                        placeholder="∞"
+                                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                    />
+                                )}
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-xs text-gray-400 mb-1">Max Retries</label>
-                            <input
-                                type="number" min="1"
-                                value={step.max_retries ?? ''}
-                                onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value) : undefined })}
-                                placeholder="∞"
-                                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
-                            />
+                    )}
+                    {!readOnly && !step.loop_back_to && step.max_retries == null && (
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Loop Back To</label>
+                                <select
+                                    value=""
+                                    onChange={e => onUpdate({ loop_back_to: e.target.value || undefined })}
+                                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                >
+                                    <option value="">None</option>
+                                    {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Max Retries</label>
+                                <input
+                                    type="number" min="1"
+                                    value=""
+                                    onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value) : undefined })}
+                                    placeholder="∞"
+                                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </>
             )}
 
@@ -409,29 +476,37 @@ function PropertyPanel({
                 <div className="grid grid-cols-2 gap-2">
                     <div>
                         <label className="block text-xs text-gray-400 mb-1">
-                            On Approve → <span className="text-red-400">*</span>
+                            On Approve → {!readOnly && <span className="text-red-400">*</span>}
                         </label>
-                        <select
-                            value={step.on_approve ?? ''}
-                            onChange={e => onUpdate({ on_approve: e.target.value || undefined })}
-                            className={`w-full bg-gray-800 border rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500 ${
-                                !step.on_approve ? 'border-red-600' : 'border-gray-600'
-                            }`}
-                        >
-                            <option value="">Select...</option>
-                            {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
-                        </select>
+                        {readOnly ? (
+                            <p className="text-xs text-green-400 font-mono">{step.on_approve ?? 'Not set'}</p>
+                        ) : (
+                            <select
+                                value={step.on_approve ?? ''}
+                                onChange={e => onUpdate({ on_approve: e.target.value || undefined })}
+                                className={`w-full bg-gray-800 border rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500 ${
+                                    !step.on_approve ? 'border-red-600' : 'border-gray-600'
+                                }`}
+                            >
+                                <option value="">Select...</option>
+                                {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
+                            </select>
+                        )}
                     </div>
                     <div>
                         <label className="block text-xs text-gray-400 mb-1">On Reject →</label>
-                        <select
-                            value={step.on_reject ?? ''}
-                            onChange={e => onUpdate({ on_reject: e.target.value || undefined })}
-                            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
-                        >
-                            <option value="">None</option>
-                            {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
-                        </select>
+                        {readOnly ? (
+                            <p className="text-xs text-red-400 font-mono">{step.on_reject ?? 'None'}</p>
+                        ) : (
+                            <select
+                                value={step.on_reject ?? ''}
+                                onChange={e => onUpdate({ on_reject: e.target.value || undefined })}
+                                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                            >
+                                <option value="">None</option>
+                                {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
+                            </select>
+                        )}
                     </div>
                 </div>
             )}
@@ -548,6 +623,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
 
     // Template read-only view
     if (workflow.is_template) {
+        const templateSelectedStep = steps.find(s => s.id === selectedStepId);
         return (
             <div className="h-full flex flex-col bg-gray-950">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900">
@@ -570,20 +646,33 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                         </button>
                     </div>
                 </div>
-                <div className="flex-1">
-                    <ReactFlow
-                        nodes={layoutNodes(steps)}
-                        edges={buildEdges(steps)}
-                        nodeTypes={nodeTypes}
-                        fitView
-                        nodesDraggable={false}
-                        nodesConnectable={false}
-                        elementsSelectable={false}
-                        proOptions={{ hideAttribution: true }}
-                    >
-                        <Background color="#374151" gap={20} variant={BackgroundVariant.Dots} />
-                        <Controls showInteractive={false} />
-                    </ReactFlow>
+                <div className="flex-1 flex min-h-0">
+                    <div className="flex-1 min-w-0">
+                        <ReactFlow
+                            nodes={layoutNodes(steps)}
+                            edges={buildEdges(steps)}
+                            nodeTypes={nodeTypes}
+                            onNodeClick={handleNodeClick}
+                            onPaneClick={handlePaneClick}
+                            fitView
+                            nodesDraggable={false}
+                            nodesConnectable={false}
+                            proOptions={{ hideAttribution: true }}
+                            deleteKeyCode={null}
+                        >
+                            <Background color="#374151" gap={20} variant={BackgroundVariant.Dots} />
+                            <Controls showInteractive={false} />
+                        </ReactFlow>
+                    </div>
+                    {templateSelectedStep && (
+                        <PropertyPanel
+                            step={templateSelectedStep}
+                            allStepIds={stepIds}
+                            onUpdate={() => {}}
+                            onDelete={() => {}}
+                            readOnly
+                        />
+                    )}
                 </div>
             </div>
         );
