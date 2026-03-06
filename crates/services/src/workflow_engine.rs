@@ -468,9 +468,38 @@ impl WorkflowEngine {
         if let (Some(step_id), Some(action)) = (&req.step_id, &req.action) {
             match action {
                 WorkflowResumeAction::ContinueLoop => {
-                    // Reset the retry count by marking old attempts' loop target as ready for re-execution
-                    // The advance_frontier will pick it up again
                     tracing::info!("Continuing loop for step '{}' in run {}", step_id, run_id);
+
+                    // Reset the fix step from Failed back to Pending so the loop can re-enter
+                    if let Some(step_output) = composer_db::models::workflow_step_output::latest_for_step(
+                        &self.db.pool, run_id, step_id,
+                    ).await? {
+                        composer_db::models::workflow_step_output::update_status(
+                            &self.db.pool,
+                            &step_output.id.to_string(),
+                            &WorkflowStepStatus::Pending,
+                        ).await?;
+                    }
+
+                    // Create a new Pending output for the loop target step so
+                    // compute_ready_steps picks it up for re-execution
+                    let step_def = workflow.definition.steps.iter().find(|s| s.id == *step_id);
+                    if let Some(def) = step_def {
+                        if let Some(ref loop_target) = def.loop_back_to {
+                            let target_def = workflow.definition.steps.iter()
+                                .find(|s| s.id == *loop_target);
+                            if let Some(td) = target_def {
+                                composer_db::models::workflow_step_output::create(
+                                    &self.db.pool,
+                                    run_id,
+                                    loop_target,
+                                    &td.step_type,
+                                    &WorkflowStepStatus::Pending,
+                                    None,
+                                ).await?;
+                            }
+                        }
+                    }
                 }
                 WorkflowResumeAction::SkipToNext => {
                     // Mark the step as skipped and advance
@@ -685,7 +714,21 @@ impl WorkflowEngine {
                                 run_id, step_output.step_id, loop_target
                             );
                             composer_db::models::workflow_run::increment_iteration(&self.db.pool, &run_id).await?;
-                            // The advance_frontier will re-execute the loop target
+                            // Create a new Pending output for the loop target so
+                            // compute_ready_steps will pick it up (the previous
+                            // Completed output would cause it to be skipped).
+                            let target_def = workflow.definition.steps.iter()
+                                .find(|s| s.id == *loop_target);
+                            if let Some(td) = target_def {
+                                composer_db::models::workflow_step_output::create(
+                                    &self.db.pool,
+                                    &run_id,
+                                    loop_target,
+                                    &td.step_type,
+                                    &WorkflowStepStatus::Pending,
+                                    None,
+                                ).await?;
+                            }
                         } else {
                             // Max retries exhausted → pause for user decision
                             tracing::info!(
@@ -751,6 +794,8 @@ impl WorkflowEngine {
         };
 
         let run_id = run.id.to_string();
+        let lock = self.run_lock(&run_id);
+        let _guard = lock.lock().await;
 
         if let Some(step_output) = composer_db::models::workflow_step_output::find_by_session(
             &self.db.pool, session_id,
