@@ -5,7 +5,7 @@ import type { TaskStatus, Workflow } from '@/types/generated';
 import { useCreateTask } from '@/hooks/use-tasks';
 import { useProjects } from '@/hooks/use-projects';
 import { useAgents } from '@/hooks/use-agents';
-import { useWorkflows, useStartWorkflow } from '@/hooks/use-workflows';
+import { useWorkflows } from '@/hooks/use-workflows';
 
 interface TaskCreateDialogProps {
     isOpen: boolean;
@@ -20,13 +20,11 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
     const [projectId, setProjectId] = useState('');
     const [assignedAgentId, setAssignedAgentId] = useState('');
     const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
-    const [workflowError, setWorkflowError] = useState('');
 
     const createTask = useCreateTask();
     const { data: projects } = useProjects();
     const { data: agents } = useAgents();
     const { data: workflows } = useWorkflows();
-    const startWorkflow = useStartWorkflow();
 
     // Default to first available agent (Claude Code)
     useEffect(() => {
@@ -48,56 +46,33 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
         setPriority(2);
         setProjectId('');
         setSelectedWorkflowId('');
-        setWorkflowError('');
         setAssignedAgentId(agents?.[0]?.id ?? '');
         onClose();
     }
 
-    const isPending = createTask.isPending || startWorkflow.isPending;
+    const isPending = createTask.isPending;
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (!title.trim() || isPending) return;
-
-        setWorkflowError('');
-
-        // If workflow selected, force status to backlog (workflow will transition to in_progress)
-        const effectiveStatus = selectedWorkflowId ? 'backlog' as TaskStatus : defaultStatus;
 
         createTask.mutate(
             {
                 title: title.trim(),
                 description: description.trim() || undefined,
                 priority,
-                status: effectiveStatus,
+                status: defaultStatus,
                 project_id: projectId || undefined,
                 assigned_agent_id: assignedAgentId || undefined,
+                workflow_id: selectedWorkflowId || undefined,
             },
             {
-                onSuccess: (createdTask) => {
-                    if (selectedWorkflowId && assignedAgentId) {
-                        startWorkflow.mutate(
-                            { taskId: createdTask.id, workflowId: selectedWorkflowId },
-                            {
-                                onSuccess: () => resetAndClose(),
-                                onError: (err) => {
-                                    setWorkflowError(
-                                        `Task created but workflow failed to start: ${err.message}. You can start it from the task detail panel.`,
-                                    );
-                                },
-                            },
-                        );
-                    } else {
-                        resetAndClose();
-                    }
-                },
+                onSuccess: () => resetAndClose(),
             },
         );
     }
 
-    let buttonText = 'Create Task';
-    if (startWorkflow.isPending) buttonText = 'Starting Workflow...';
-    else if (createTask.isPending) buttonText = 'Creating...';
+    const buttonText = createTask.isPending ? 'Creating...' : 'Create Task';
 
     return (
         <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open && !isPending) resetAndClose(); }}>
@@ -210,7 +185,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                 <select
                                     id="create-workflow"
                                     value={selectedWorkflowId}
-                                    onChange={e => { setSelectedWorkflowId(e.target.value); setWorkflowError(''); }}
+                                    onChange={e => setSelectedWorkflowId(e.target.value)}
                                     disabled={!assignedAgentId || !projectId}
                                     className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -231,15 +206,9 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                             </div>
                         )}
 
-                        {workflowError && (
-                            <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 rounded-md px-3 py-2">
-                                {workflowError}
-                            </p>
-                        )}
-
                         <p className="text-xs text-gray-500">
                             {selectedWorkflowId
-                                ? 'Task will be created and workflow will start automatically'
+                                ? 'Task will be created in backlog with workflow ready to start'
                                 : <>Task will be created in <span className="font-medium text-gray-400">{formatStatus(defaultStatus)}</span></>
                             }
                         </p>

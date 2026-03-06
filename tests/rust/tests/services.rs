@@ -30,6 +30,7 @@ mod event_bus_tests {
             simple_id: String::new(),
             pr_urls: vec![],
             workflow_run_id: None,
+            workflow_id: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })
@@ -94,6 +95,7 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
+                workflow_id: None,
             })
             .await
             .unwrap();
@@ -120,6 +122,7 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
+                workflow_id: None,
             })
             .await
             .unwrap();
@@ -148,6 +151,7 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
+                workflow_id: None,
             })
             .await
             .unwrap();
@@ -164,6 +168,7 @@ mod task_service_tests {
                     position: None,
                     project_id: None,
                     assigned_agent_id: None,
+                    workflow_id: None,
                 },
             )
             .await
@@ -184,6 +189,7 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
+                workflow_id: None,
             })
             .await
             .unwrap();
@@ -205,6 +211,7 @@ mod task_service_tests {
                 status: None,
                 project_id: None,
                 assigned_agent_id: None,
+                workflow_id: None,
             })
             .await
             .unwrap();
@@ -730,6 +737,7 @@ mod workflow_tests {
             None,
             Some(&project_id),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -786,7 +794,7 @@ mod workflow_tests {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
 
@@ -861,7 +869,7 @@ mod workflow_tests {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
 
@@ -883,7 +891,7 @@ mod workflow_tests {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string()).await.unwrap();
         let run_id = run.id.to_string();
 
@@ -916,7 +924,7 @@ mod workflow_tests {
 
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
         let task_id = task_obj.id.to_string();
 
         // Simulate a running workflow run that was interrupted by server crash
@@ -977,7 +985,7 @@ mod workflow_tests {
         let (_engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
         let task_id = task_obj.id.to_string();
 
         assert!(task_obj.workflow_run_id.is_none());
@@ -999,10 +1007,10 @@ mod workflow_tests {
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None)
+        let t1 = task::create(&db.pool, "T1", None, None, None, Some(&project_id), None, None)
             .await
             .unwrap();
-        let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None)
+        let t2 = task::create(&db.pool, "T2", None, None, None, Some(&project_id), None, None)
             .await
             .unwrap();
 
@@ -1028,7 +1036,7 @@ mod workflow_tests {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None).await.unwrap();
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None).await.unwrap();
 
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
             .await
@@ -1056,6 +1064,7 @@ mod workflow_tests {
             Some(&TaskStatus::InProgress),
             Some(&project_id),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -1071,7 +1080,7 @@ mod workflow_tests {
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
 
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
             .await
             .unwrap();
         // No agent assigned
@@ -1180,7 +1189,7 @@ mod workflow_tests {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
             .await
             .unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
@@ -1233,7 +1242,7 @@ mod workflow_tests {
         let (engine, db, _) = setup().await;
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
             .await
             .unwrap();
         let run = workflow_run::create(&db.pool, &wf_id, &task_obj.id.to_string())
@@ -1307,7 +1316,7 @@ mod workflow_tests {
         let agent = composer_db::models::agent::create(
             &db.pool, "Agent", &AgentType::ClaudeCode, None,
         ).await.unwrap();
-        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None)
+        let task_obj = task::create(&db.pool, "Test", None, None, None, Some(&project_id), None, None)
             .await
             .unwrap();
         task::update_assigned_agent(

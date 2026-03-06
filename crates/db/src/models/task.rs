@@ -17,6 +17,7 @@ struct TaskRow {
     simple_id: String,
     pr_urls: String,
     workflow_run_id: Option<String>,
+    workflow_id: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -40,6 +41,7 @@ impl TryFrom<TaskRow> for Task {
             simple_id: row.simple_id,
             pr_urls,
             workflow_run_id: row.workflow_run_id.map(|s| s.parse()).transpose()?,
+            workflow_id: row.workflow_id.map(|s| s.parse()).transpose()?,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
         })
@@ -54,6 +56,7 @@ pub async fn create(
     status: Option<&TaskStatus>,
     project_id: Option<&str>,
     assigned_agent_id: Option<&str>,
+    workflow_id: Option<&str>,
 ) -> anyhow::Result<Task> {
     let id = Uuid::new_v4().to_string();
     let priority = priority.unwrap_or(0);
@@ -95,7 +98,7 @@ pub async fn create(
     };
 
     sqlx::query(
-        "INSERT INTO tasks (id, title, description, status, priority, position, project_id, assigned_agent_id, task_number, simple_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, title, description, status, priority, position, project_id, assigned_agent_id, task_number, simple_id, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(title)
@@ -107,6 +110,7 @@ pub async fn create(
     .bind(assigned_agent_id)
     .bind(task_number)
     .bind(&simple_id)
+    .bind(workflow_id)
     .execute(&mut *tx)
     .await?;
 
@@ -115,7 +119,7 @@ pub async fn create(
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
 }
 
-const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, task_number, simple_id, pr_urls, workflow_run_id, created_at, updated_at";
+const TASK_COLUMNS: &str = "id, title, description, status, priority, assigned_agent_id, project_id, auto_approve, position, task_number, simple_id, pr_urls, workflow_run_id, workflow_id, created_at, updated_at";
 
 pub async fn update_workflow_run_id(pool: &SqlitePool, id: &str, workflow_run_id: &str) -> anyhow::Result<()> {
     sqlx::query("UPDATE tasks SET workflow_run_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
@@ -161,6 +165,7 @@ pub async fn update(
     position: Option<f64>,
     project_id: Option<&str>,
     assigned_agent_id: Option<&str>,
+    workflow_id: Option<&str>,
 ) -> anyhow::Result<Task> {
     let status_str: Option<String> = status
         .map(|s| serde_json::to_value(s).ok()
@@ -176,6 +181,7 @@ pub async fn update(
          position = COALESCE(?, position), \
          project_id = COALESCE(?, project_id), \
          assigned_agent_id = COALESCE(?, assigned_agent_id), \
+         workflow_id = COALESCE(?, workflow_id), \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE id = ?"
     )
@@ -186,6 +192,7 @@ pub async fn update(
     .bind(position)
     .bind(project_id)
     .bind(assigned_agent_id)
+    .bind(workflow_id)
     .bind(id)
     .execute(pool)
     .await?;

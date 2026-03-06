@@ -19,6 +19,7 @@ impl TaskService {
     pub async fn create(&self, req: CreateTaskRequest) -> anyhow::Result<Task> {
         let project_id_str = req.project_id.map(|id| id.to_string());
         let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
+        let workflow_id_str = req.workflow_id.map(|id| id.to_string());
         let task = composer_db::models::task::create(
             &self.db.pool,
             &req.title,
@@ -27,6 +28,7 @@ impl TaskService {
             req.status.as_ref(),
             project_id_str.as_deref(),
             assigned_agent_id_str.as_deref(),
+            workflow_id_str.as_deref(),
         )
         .await?;
         self.event_bus.broadcast(WsEvent::TaskCreated(task.clone()));
@@ -44,6 +46,7 @@ impl TaskService {
     pub async fn update(&self, id: &str, req: UpdateTaskRequest) -> anyhow::Result<Task> {
         let project_id_str = req.project_id.map(|id| id.to_string());
         let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
+        let workflow_id_str = req.workflow_id.map(|id| id.to_string());
         let task = composer_db::models::task::update(
             &self.db.pool,
             id,
@@ -54,6 +57,7 @@ impl TaskService {
             req.position,
             project_id_str.as_deref(),
             assigned_agent_id_str.as_deref(),
+            workflow_id_str.as_deref(),
         )
         .await?;
         self.event_bus.broadcast(WsEvent::TaskUpdated(task.clone()));
@@ -85,7 +89,7 @@ impl TaskService {
         let from_status = old_task.status.clone();
         composer_db::models::task::update_status(&self.db.pool, id, &req.status).await?;
         if let Some(pos) = req.position {
-            composer_db::models::task::update(&self.db.pool, id, None, None, None, None, Some(pos), None, None)
+            composer_db::models::task::update(&self.db.pool, id, None, None, None, None, Some(pos), None, None, None)
                 .await?;
         }
         let task = composer_db::models::task::find_by_id(&self.db.pool, id)

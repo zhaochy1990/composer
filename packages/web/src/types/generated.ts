@@ -48,6 +48,7 @@ export interface Task {
     simple_id: string;
     pr_urls: string[];
     workflow_run_id?: string;
+    workflow_id?: string;
     created_at: string;
     updated_at: string;
 }
@@ -175,6 +176,7 @@ export interface CreateTaskRequest {
     status?: TaskStatus;
     project_id?: string;
     assigned_agent_id?: string;
+    workflow_id?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -185,6 +187,7 @@ export interface UpdateTaskRequest {
     position?: number;
     project_id?: string;
     assigned_agent_id?: string;
+    workflow_id?: string;
 }
 
 export interface AssignTaskRequest {

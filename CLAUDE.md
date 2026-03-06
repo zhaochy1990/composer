@@ -82,18 +82,17 @@ The workflow engine orchestrates agent sessions through defined step sequences. 
 **Step types:**
 | Type | Behavior |
 |------|----------|
-| `plan` | Spawns a new agent session with a "plan only" prompt |
+| `agentic` | Runs an agent session. `SessionMode` controls session behavior: `new` (fresh session), `resume` (reuse main session via `--resume`), `separate` (independent session). Requires a `prompt_template`. |
 | `human_gate` | Pauses workflow, sets task to Waiting. User approves or rejects with comments |
-| `implement` | Resumes the main agent session with implementation/fix prompt |
-| `pr_review` | Spawns a separate review session; findings fed back to main session |
-| `human_review` | Like human_gate but for PR review — rejection loops back to implement |
 
-**Built-in "Feat-Common" workflow** (7 steps):
-Plan → Review Plan → Implement & Create PR → Automated PR Review → Fix Review Findings → Human PR Review → Fix Human Comments
+Prompt templates support `{{task}}` (task context), `{{step_N}}` (output of step N), and `{{rejection}}` (latest rejection feedback).
 
-Rejection at human gates loops back to the preceding agent step with feedback. Steps 3-4 and 5-6 form review/fix cycles.
+**Built-in "Feat-Common" workflow** (8 steps):
+Plan → Review Plan → Implement & Create PR → Automated PR Review → Fix Review Findings → Human PR Review → Fix Human Comments → Complete PR
 
-**Session model:** Most steps reuse a single Claude Code session via `--resume`. Only PR review creates a separate session. Worktrees are preserved throughout the workflow and cleaned up only on completion.
+Rejection at human gates loops back to the preceding agent step with feedback. Steps 4→5→4 and 6→7→6 form review/fix cycles via `loop_back_to`.
+
+**Session model:** Each `agentic` step specifies a `SessionMode`: `new` creates a fresh session, `resume` continues the main session via `--resume`, `separate` creates an independent session (used for PR review). Worktrees are preserved throughout the workflow and cleaned up only on completion.
 
 **Crash recovery:** On startup, `WorkflowEngine` finds orphaned running workflow runs, marks their current step as failed, pauses the run, and sets the task to Waiting. Users can resume from the UI.
 

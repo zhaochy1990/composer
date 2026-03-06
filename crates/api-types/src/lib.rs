@@ -164,6 +164,7 @@ pub struct Task {
     pub simple_id: String,
     pub pr_urls: Vec<String>,
     pub workflow_run_id: Option<Uuid>,
+    pub workflow_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -320,6 +321,7 @@ pub struct CreateTaskRequest {
     pub status: Option<TaskStatus>,
     pub project_id: Option<Uuid>,
     pub assigned_agent_id: Option<Uuid>,
+    pub workflow_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -332,6 +334,7 @@ pub struct UpdateTaskRequest {
     pub position: Option<f64>,
     pub project_id: Option<Uuid>,
     pub assigned_agent_id: Option<Uuid>,
+    pub workflow_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize, TS)]

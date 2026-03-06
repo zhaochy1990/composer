@@ -214,6 +214,7 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
         None,
         Some(&project_id),
         Some(&agent_id),
+        None,
     )
     .await
     .unwrap();
@@ -332,6 +333,7 @@ async fn scenario_plan_approve_implement() {
         None,
         Some(&project_id),
         Some(&agent_id),
+        None,
     )
     .await
     .unwrap();
@@ -423,6 +425,7 @@ async fn scenario_plan_rejection_loops_back() {
         None,
         Some(&project_id),
         Some(&agent_id),
+        None,
     )
     .await
     .unwrap();

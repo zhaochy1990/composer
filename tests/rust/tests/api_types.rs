@@ -199,6 +199,7 @@ fn ws_event_tagged_serialization_task_created() {
         simple_id: String::new(),
         pr_urls: vec![],
         workflow_run_id: None,
+        workflow_id: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };

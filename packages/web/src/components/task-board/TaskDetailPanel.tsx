@@ -36,6 +36,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
         setPriority(task.priority);
         setAssignedAgentId(task.assigned_agent_id ?? '');
         setProjectId(task.project_id ?? '');
+        setSelectedWorkflowId(task.workflow_id ?? '');
         setShowDeleteConfirm(false);
     }, [task.id, task.updated_at]);
 
@@ -57,7 +58,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
 
     // --- Workflows ---
     const { data: allWorkflows } = useAllWorkflows();
-    const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('');
+    const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(task.workflow_id ?? '');
     const startWorkflow = useStartWorkflow();
     const { data: workflowRun } = useWorkflowRun(task.workflow_run_id ?? undefined);
     const { data: workflow } = useWorkflow(workflowRun?.workflow_id ?? undefined);

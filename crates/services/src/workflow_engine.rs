@@ -1162,7 +1162,6 @@ impl WorkflowEngine {
             }
         }
 
-
         Ok(prompt.trim().to_string())
     }
 
