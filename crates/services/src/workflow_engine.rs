@@ -7,6 +7,16 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use tokio::sync::Mutex;
 
+/// Result of evaluating whether a workflow step should loop back.
+enum LoopDecision {
+    /// Continue looping — re-run the loop target step.
+    Loop,
+    /// No issues found in the loop target output — advance to the next step.
+    NoIssuesFound,
+    /// Max retries exhausted — pause the workflow for user decision.
+    MaxRetriesExhausted,
+}
+
 // ---------------------------------------------------------------------------
 // Built-in workflow definition helpers
 // ---------------------------------------------------------------------------
@@ -60,13 +70,18 @@ pub fn feat_common_definition() -> WorkflowDefinition {
             },
             {
                 let mut s = agentic_step("implement", "Implement & Create PR", SessionMode::Resume,
-                    "{{task}}\n\nThe plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step:plan}}");
+                    "{{task}}\n\nThe plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step:plan}}{{rejection}}");
                 s.depends_on = vec!["review_plan".to_string()];
                 s
             },
             {
-                let mut s = agentic_step("auto_review", "Automated PR Review", SessionMode::Separate,
-                    "Review the changes in the current branch. Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers.");
+                let mut s = agentic_step("auto_review", "Automated PR Review", SessionMode::Resume,
+                    "Review the PR on the current branch. Follow these rules in order:\n\n\
+                    1. First, check if the PR has any merge conflicts with its target branch. \
+                    If there are conflicts, STOP immediately, report the conflicts, and do NOT proceed to code review.\n\n\
+                    2. Only if there are no merge conflicts, use the /code-review:code-review skill to perform code review of the PR. \
+                    This is a force re-review — the PR may have been reviewed before, but we need a fresh review of the latest changes.\n\n\
+                    IMPORTANT: If you find NO issues at all (no conflicts and no code review findings), you MUST include the exact marker [NO_ISSUES_FOUND] in your response. Only use this marker if there are truly zero issues to report.");
                 s.depends_on = vec!["implement".to_string()];
                 s
             },
@@ -777,76 +792,86 @@ impl WorkflowEngine {
                 }
                 if let Some(def) = step_def {
                     if let Some(ref loop_target) = def.loop_back_to {
-                        if self.should_loop(&run_id, def, loop_target).await? {
-                            tracing::info!(
-                                "Workflow run {}: looping from step '{}' back to '{}'",
-                                run_id, step_output.step_id, loop_target
-                            );
-                            composer_db::models::workflow_run::increment_iteration(&self.db.pool, &run_id).await?;
-                            // Create a new Pending output for the loop target so
-                            // compute_ready_steps will pick it up (the previous
-                            // Completed output would cause it to be skipped).
-                            let target_def = workflow.definition.steps.iter()
-                                .find(|s| s.id == *loop_target);
-                            if let Some(td) = target_def {
+                        match self.should_loop(&run_id, def, loop_target).await? {
+                            LoopDecision::Loop => {
+                                tracing::info!(
+                                    "Workflow run {}: looping from step '{}' back to '{}'",
+                                    run_id, step_output.step_id, loop_target
+                                );
+                                composer_db::models::workflow_run::increment_iteration(&self.db.pool, &run_id).await?;
+                                // Create a new Pending output for the loop target so
+                                // compute_ready_steps will pick it up (the previous
+                                // Completed output would cause it to be skipped).
+                                let target_def = workflow.definition.steps.iter()
+                                    .find(|s| s.id == *loop_target);
+                                if let Some(td) = target_def {
+                                    composer_db::models::workflow_step_output::create(
+                                        &self.db.pool,
+                                        &run_id,
+                                        loop_target,
+                                        &td.step_type,
+                                        &WorkflowStepStatus::Pending,
+                                        None,
+                                    ).await?;
+                                }
+                                // Also create a new Pending output for the current step
+                                // so that downstream steps (which depend on this step)
+                                // don't see it as Completed and advance prematurely.
                                 composer_db::models::workflow_step_output::create(
                                     &self.db.pool,
                                     &run_id,
-                                    loop_target,
-                                    &td.step_type,
+                                    &step_output.step_id,
+                                    &def.step_type,
                                     &WorkflowStepStatus::Pending,
                                     None,
                                 ).await?;
                             }
-                            // Also create a new Pending output for the current step
-                            // so that downstream steps (which depend on this step)
-                            // don't see it as Completed and advance prematurely.
-                            composer_db::models::workflow_step_output::create(
-                                &self.db.pool,
-                                &run_id,
-                                &step_output.step_id,
-                                &def.step_type,
-                                &WorkflowStepStatus::Pending,
-                                None,
-                            ).await?;
-                        } else {
-                            // Max retries exhausted → pause for user decision
-                            tracing::info!(
-                                "Workflow run {}: max retries reached at step '{}', pausing",
-                                run_id, step_output.step_id
-                            );
+                            LoopDecision::NoIssuesFound => {
+                                // Review found no issues — no need to loop, just
+                                // let the workflow advance to the next step naturally.
+                                tracing::info!(
+                                    "Workflow run {}: no issues found at step '{}', advancing",
+                                    run_id, step_output.step_id
+                                );
+                            }
+                            LoopDecision::MaxRetriesExhausted => {
+                                tracing::info!(
+                                    "Workflow run {}: max retries reached at step '{}', pausing",
+                                    run_id, step_output.step_id
+                                );
 
-                            // Mark as failed with retry exhaustion message
-                            composer_db::models::workflow_step_output::update_status_and_output(
-                                &self.db.pool,
-                                &step_output.id.to_string(),
-                                &WorkflowStepStatus::Failed,
-                                Some("Max retries exceeded"),
-                            ).await?;
+                                // Mark as failed with retry exhaustion message
+                                composer_db::models::workflow_step_output::update_status_and_output(
+                                    &self.db.pool,
+                                    &step_output.id.to_string(),
+                                    &WorkflowStepStatus::Failed,
+                                    Some("Max retries exceeded"),
+                                ).await?;
 
-                            composer_db::models::workflow_run::update_status(
-                                &self.db.pool,
-                                &run_id,
-                                &WorkflowRunStatus::Paused,
-                            ).await?;
+                                composer_db::models::workflow_run::update_status(
+                                    &self.db.pool,
+                                    &run_id,
+                                    &WorkflowRunStatus::Paused,
+                                ).await?;
 
-                            composer_db::models::task::update_status(
-                                &self.db.pool,
-                                &run.task_id.to_string(),
-                                &TaskStatus::Waiting,
-                            ).await?;
+                                composer_db::models::task::update_status(
+                                    &self.db.pool,
+                                    &run.task_id.to_string(),
+                                    &TaskStatus::Waiting,
+                                ).await?;
 
-                            self.event_bus.broadcast(WsEvent::WorkflowWaitingForHuman {
-                                workflow_run_id: run.id,
-                                task_id: run.task_id,
-                                step_id: step_output.step_id.clone(),
-                            });
+                                self.event_bus.broadcast(WsEvent::WorkflowWaitingForHuman {
+                                    workflow_run_id: run.id,
+                                    task_id: run.task_id,
+                                    step_id: step_output.step_id.clone(),
+                                });
 
-                            let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id).await?
-                                .ok_or_else(|| anyhow::anyhow!("Workflow run not found after update"))?;
-                            self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
+                                let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id).await?
+                                    .ok_or_else(|| anyhow::anyhow!("Workflow run not found after update"))?;
+                                self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
 
-                            return Ok(true);
+                                return Ok(true);
+                            }
                         }
                     }
                 }
@@ -1538,29 +1563,48 @@ impl WorkflowEngine {
     // Loop logic
     // -----------------------------------------------------------------------
 
-    pub async fn should_loop(
+    async fn should_loop(
         &self,
         run_id: &str,
         step_def: &WorkflowStepDefinition,
         loop_target: &str,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<LoopDecision> {
+        let step_outputs =
+            composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
+
+        // Check if the loop target's latest output indicates no issues were found.
+        // If the review step reported [NO_ISSUES_FOUND], there is nothing to fix
+        // and we should skip the loop entirely, advancing to the next step.
+        let target_latest = step_outputs.iter()
+            .filter(|o| o.step_id == loop_target && matches!(o.status, WorkflowStepStatus::Completed))
+            .max_by_key(|o| o.created_at);
+        if let Some(target_output) = target_latest {
+            if let Some(ref output) = target_output.output {
+                if output.contains("[NO_ISSUES_FOUND]") {
+                    tracing::info!(
+                        "Workflow run {}: loop target '{}' reported no issues, skipping loop",
+                        run_id, loop_target
+                    );
+                    return Ok(LoopDecision::NoIssuesFound);
+                }
+            }
+        }
+
         if let Some(max) = step_def.max_retries {
-            let step_outputs =
-                composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
             let target_completed_count = step_outputs.iter()
                 .filter(|o| o.step_id == loop_target && matches!(o.status, WorkflowStepStatus::Completed))
                 .count() as i32;
 
             if target_completed_count == 0 {
-                return Ok(false);
+                return Ok(LoopDecision::Loop);
             }
             let retries_done = (target_completed_count - 1).max(0);
             if retries_done >= max {
-                return Ok(false);
+                return Ok(LoopDecision::MaxRetriesExhausted);
             }
         }
 
-        Ok(true)
+        Ok(LoopDecision::Loop)
     }
 
     // -----------------------------------------------------------------------
