@@ -229,8 +229,9 @@ pub async fn update_result(
     result_summary: Option<&str>,
     resume_session_id: Option<&str>,
 ) -> anyhow::Result<()> {
+    // Use COALESCE to preserve resume_session_id if already set by SessionResumeIdCaptured
     sqlx::query(
-        "UPDATE sessions SET result_summary = ?, resume_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+        "UPDATE sessions SET result_summary = ?, resume_session_id = COALESCE(?, resume_session_id), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
     )
     .bind(result_summary)
     .bind(resume_session_id)

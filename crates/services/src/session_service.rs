@@ -511,11 +511,21 @@ impl SessionService {
             .unwrap_or_else(|| "Continue from where you left off.".to_string());
 
         // The resume_session_id is the Claude Code session ID, which we may have stored
-        // from the original session. For now, use the session's own ID as a reference.
-        let resume_id = session
-            .resume_session_id
-            .clone()
-            .unwrap_or_else(|| session.id.to_string());
+        // from the original session.
+        let resume_id = match &session.resume_session_id {
+            Some(id) => {
+                tracing::info!("Resuming session {} with Claude Code session {}", session.id, id);
+                id.clone()
+            }
+            None => {
+                tracing::warn!(
+                    "Session {} has no resume_session_id — Claude Code history will be lost. \
+                     This may happen if the server crashed before the ID was captured.",
+                    session.id
+                );
+                session.id.to_string()
+            }
+        };
 
         // Update session status back to Running
         composer_db::models::session::update_status(&self.db.pool, id, &SessionStatus::Running)
