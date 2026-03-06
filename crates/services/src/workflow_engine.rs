@@ -614,15 +614,44 @@ impl WorkflowEngine {
             });
         }
 
-        // Activate branch target
-        if approved {
-            if let Some(ref target) = step_def.on_approve {
-                composer_db::models::workflow_run::add_activated_step(&self.db.pool, run_id, target).await?;
-            }
+        // Activate branch target and create a new Pending output so
+        // compute_ready_steps won't skip it if it already ran before.
+        let branch_target = if approved {
+            step_def.on_approve.as_deref()
         } else {
-            if let Some(ref target) = step_def.on_reject {
-                composer_db::models::workflow_run::add_activated_step(&self.db.pool, run_id, target).await?;
+            step_def.on_reject.as_deref()
+        };
+
+        if let Some(target) = branch_target {
+            composer_db::models::workflow_run::add_activated_step(&self.db.pool, run_id, target).await?;
+
+            // If the target step already has a terminal output (Completed/Rejected/Failed),
+            // create a new Pending output so it will be picked up by compute_ready_steps.
+            if let Some(existing) = composer_db::models::workflow_step_output::latest_for_step(
+                &self.db.pool, run_id, target,
+            ).await? {
+                if matches!(existing.status,
+                    WorkflowStepStatus::Completed
+                    | WorkflowStepStatus::Rejected
+                    | WorkflowStepStatus::Failed
+                ) {
+                    let target_def = workflow.definition.steps.iter()
+                        .find(|s| s.id == target);
+                    if let Some(td) = target_def {
+                        composer_db::models::workflow_step_output::create(
+                            &self.db.pool,
+                            run_id,
+                            target,
+                            &td.step_type,
+                            &WorkflowStepStatus::Pending,
+                            None,
+                        ).await?;
+                    }
+                }
             }
+        }
+
+        if !approved {
             composer_db::models::workflow_run::increment_iteration(&self.db.pool, run_id).await?;
         }
 
