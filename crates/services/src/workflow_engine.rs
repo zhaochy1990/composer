@@ -42,7 +42,7 @@ pub fn feat_common_definition() -> WorkflowDefinition {
             WorkflowStepDefinition {
                 step_type: WorkflowStepType::Agentic,
                 name: "Automated PR Review".to_string(),
-                prompt_template: Some("Review the changes in the current branch. Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers.".to_string()),
+                prompt_template: Some("Review the changes in the current branch. Provide a thorough code review. List any bugs, logic errors, security issues, code quality problems, and suggestions for improvement. Be specific about file names and line numbers.\n\n{{step_3}}".to_string()),
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::Separate),
