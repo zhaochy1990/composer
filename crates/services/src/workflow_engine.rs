@@ -1021,20 +1021,12 @@ impl WorkflowEngine {
                 }
             }
 
-            // Check reachability: if it's a branch target, it must be activated.
-            // Exception: entry steps (no dependencies) are always reachable on first run.
+            // Branch target gating: steps referenced by on_approve/on_reject
+            // must be explicitly activated before they can RE-execute.
+            // On first run (no prior output), allow them through — deps_met
+            // already prevents premature execution.
             if branch_targets.contains(step_id)
                 && !activated_steps.contains(&step.id)
-                && !step.depends_on.is_empty()
-            {
-                continue;
-            }
-
-            // For entry steps that are also branch targets, only block them if they
-            // already ran once (have any output) and haven't been re-activated.
-            if branch_targets.contains(step_id)
-                && !activated_steps.contains(&step.id)
-                && step.depends_on.is_empty()
                 && latest_status.contains_key(step_id)
             {
                 continue;
