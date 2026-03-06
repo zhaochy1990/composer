@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { X, Plus, Trash2, AlertCircle, Lock } from 'lucide-react';
+import { X, Plus, Trash2, AlertCircle, Lock, Copy } from 'lucide-react';
 import type { Workflow, WorkflowStepDefinition, WorkflowStepType, SessionMode } from '@/types/generated';
-import { useUpdateWorkflow, useDeleteWorkflow } from '@/hooks/use-workflows';
+import { useUpdateWorkflow, useDeleteWorkflow, useCloneWorkflow } from '@/hooks/use-workflows';
 import {
     ReactFlow,
     Background,
@@ -287,7 +287,7 @@ function PropertyPanel({
     const otherIds = allStepIds.filter(id => id !== step.id);
 
     return (
-        <div className="w-[300px] shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto p-4 space-y-3">
+        <div className="w-[380px] shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto p-4 space-y-3">
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-200">Step Properties</h3>
                 <button onClick={onDelete} className="text-gray-500 hover:text-red-400 p-1" title="Delete step">
@@ -544,6 +544,8 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
         deleteWorkflow.mutate(workflow.id, { onSuccess: onClose });
     }
 
+    const cloneWorkflow = useCloneWorkflow();
+
     // Template read-only view
     if (workflow.is_template) {
         return (
@@ -554,9 +556,19 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                         <h2 className="text-sm font-semibold text-gray-100">{workflow.name}</h2>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-800">Template</span>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-200 p-1 rounded hover:bg-gray-800">
-                        <X className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => cloneWorkflow.mutate(workflow.id)}
+                            disabled={cloneWorkflow.isPending}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors disabled:opacity-50"
+                        >
+                            <Copy className="w-3 h-3" />
+                            {cloneWorkflow.isPending ? 'Cloning...' : 'Clone to edit'}
+                        </button>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-200 p-1 rounded hover:bg-gray-800">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
                 <div className="flex-1">
                     <ReactFlow
