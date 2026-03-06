@@ -56,7 +56,7 @@ function getStepName(step: WorkflowStepDefinition): string {
 }
 
 export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: WorkflowProgressProps) {
-    const { data: stepOutputs } = useWorkflowStepOutputs(workflowRun.id);
+    const { data: stepOutputs } = useWorkflowStepOutputs(workflowRun.id, workflowRun.status);
     const submitDecision = useSubmitWorkflowDecision();
     const resumeRun = useResumeWorkflowRun();
     const [comments, setComments] = useState<Record<string, string>>({});

@@ -382,22 +382,31 @@ mod session_service_tests {
             claude_session_id: None,
         });
 
-        // Give the background event listener time to process
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // Poll until the background event listener has processed (up to 2s)
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let ag_after = agent::find_by_id(&db.pool, &agent_id).await.unwrap().unwrap();
+            if ag_after.status == AgentStatus::Idle {
+                break;
+            }
+            if std::time::Instant::now() > deadline {
+                panic!("Timed out waiting for agent to reset to Idle");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
 
-        // Verify agent is reset to Idle
-        let ag_after = agent::find_by_id(&db.pool, &agent_id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(ag_after.status, AgentStatus::Idle);
-
-        // Verify worktree is marked Deleted in DB
-        let wt_after = worktree::find_by_id(&db.pool, &wt_id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(wt_after.status, WorktreeStatus::Deleted);
+        // Poll until worktree is marked Deleted in DB (cleanup may be async)
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let wt_after = worktree::find_by_id(&db.pool, &wt_id).await.unwrap().unwrap();
+            if wt_after.status == WorktreeStatus::Deleted {
+                break;
+            }
+            if std::time::Instant::now() > deadline {
+                panic!("Timed out waiting for worktree to be marked Deleted");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
     }
 
     #[tokio::test]
@@ -441,15 +450,18 @@ mod session_service_tests {
             claude_session_id: None,
         });
 
-        // Give the background event listener time to process
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-        // Verify agent is reset to Idle
-        let ag_after = agent::find_by_id(&db.pool, &agent_id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(ag_after.status, AgentStatus::Idle);
+        // Poll until the background event listener has processed (up to 2s)
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let ag_after = agent::find_by_id(&db.pool, &agent_id).await.unwrap().unwrap();
+            if ag_after.status == AgentStatus::Idle {
+                break;
+            }
+            if std::time::Instant::now() > deadline {
+                panic!("Timed out waiting for agent to reset to Idle");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
 
         // Verify worktree is still Active (preserved for retry)
         let wt_after = worktree::find_by_id(&db.pool, &wt_id)
@@ -1113,6 +1125,59 @@ mod workflow_tests {
         let result = workflow_engine::validate_dag(&def);
         assert!(result.is_err());
         assert!(result.unwrap_err().iter().any(|e| e.contains("cycle")));
+    }
+
+    /// Routing cycles via on_approve/on_reject are intentionally allowed (for reject→redo loops),
+    /// but a mutual on_approve cycle between two HumanGate steps with no `depends_on` links
+    /// would still pass the depends_on-only Kahn's sort. This test documents that on_approve/on_reject
+    /// back-edges are legitimate and don't fail validation, since runtime guards (max_retries,
+    /// activation tracking) prevent infinite loops.
+    #[test]
+    fn validate_dag_allows_on_approve_back_edges() {
+        // This mimics the Feat-Common pattern: review_plan rejects back to plan
+        let def = WorkflowDefinition {
+            steps: vec![
+                WorkflowStepDefinition {
+                    id: "plan".to_string(),
+                    step_type: WorkflowStepType::Agentic,
+                    name: "Plan".to_string(),
+                    prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec![],
+                    on_approve: None,
+                    on_reject: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                    session_mode: Some(SessionMode::New),
+                },
+                WorkflowStepDefinition {
+                    id: "review".to_string(),
+                    step_type: WorkflowStepType::HumanGate,
+                    name: "Review".to_string(),
+                    prompt_template: None,
+                    depends_on: vec!["plan".to_string()],
+                    on_approve: Some("implement".to_string()),
+                    on_reject: Some("plan".to_string()), // back-edge to plan
+                    max_retries: None,
+                    loop_back_to: None,
+                    session_mode: None,
+                },
+                WorkflowStepDefinition {
+                    id: "implement".to_string(),
+                    step_type: WorkflowStepType::Agentic,
+                    name: "Implement".to_string(),
+                    prompt_template: Some("{{task}}".to_string()),
+                    depends_on: vec!["review".to_string()],
+                    on_approve: None,
+                    on_reject: None,
+                    max_retries: None,
+                    loop_back_to: None,
+                    session_mode: Some(SessionMode::Resume),
+                },
+            ],
+        };
+        // This should pass — on_reject back-edges are intentional
+        let result = workflow_engine::validate_dag(&def);
+        assert!(result.is_ok(), "on_approve/on_reject back-edges should be allowed: {:?}", result);
     }
 
     #[test]

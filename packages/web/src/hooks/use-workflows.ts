@@ -103,12 +103,17 @@ export function useWorkflowRun(id: string | undefined) {
     });
 }
 
-export function useWorkflowStepOutputs(runId: string | undefined) {
+export function useWorkflowStepOutputs(runId: string | undefined, runStatus?: string) {
     return useQuery({
         queryKey: ['workflow-runs', runId, 'steps'],
         queryFn: () => apiFetch<WorkflowStepOutput[]>(`/workflow-runs/${runId}/steps`),
         enabled: !!runId,
-        refetchInterval: 5000,
+        refetchInterval: () => {
+            if (runStatus && runStatus !== 'running' && runStatus !== 'paused') {
+                return false;
+            }
+            return 5000;
+        },
     });
 }
 

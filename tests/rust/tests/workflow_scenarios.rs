@@ -19,7 +19,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
 
-const TEST_REPO_PATH: &str = "Q:/src/composer";
+fn test_repo_path() -> String {
+    std::env::var("TEST_REPO_PATH").unwrap_or_else(|_| {
+        let cwd = std::env::current_dir().expect("Failed to get current directory");
+        cwd.to_string_lossy().to_string()
+    })
+}
 const STEP_TIMEOUT: Duration = Duration::from_secs(300); // 5 min per step
 
 struct TestHarness {
@@ -60,7 +65,7 @@ async fn create_project_with_repo(db: &Database) -> String {
     composer_db::models::project_repository::create(
         &db.pool,
         &pid,
-        TEST_REPO_PATH,
+        &test_repo_path(),
         None,
         Some(&RepositoryRole::Primary),
         None,
@@ -504,7 +509,7 @@ async fn scenario_exit_on_result_completes_session() {
         agent_id,
         task_id: None,
         prompt: "Reply with exactly: EXIT_TEST. Nothing else.".to_string(),
-        working_dir: TEST_REPO_PATH.to_string(),
+        working_dir: test_repo_path(),
         auto_approve: true,
         resume_session_id: None,
         resume_at_message_id: None,

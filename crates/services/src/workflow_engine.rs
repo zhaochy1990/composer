@@ -441,6 +441,9 @@ impl WorkflowEngine {
 
     /// Resume a paused/failed workflow run.
     pub async fn resume_run(&self, run_id: &str, req: &WorkflowResumeRequest) -> anyhow::Result<WorkflowRun> {
+        let lock = self.run_lock(run_id);
+        let _guard = lock.lock().await;
+
         let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
@@ -593,6 +596,12 @@ impl WorkflowEngine {
         if let Some(step_output) = composer_db::models::workflow_step_output::latest_for_step(
             &self.db.pool, run_id, step_id,
         ).await? {
+            if !matches!(step_output.status, WorkflowStepStatus::WaitingForHuman) {
+                return Err(anyhow::anyhow!(
+                    "Step '{}' is not waiting for human decision (status: {:?})",
+                    step_id, step_output.status
+                ));
+            }
             let status = if approved {
                 WorkflowStepStatus::Completed
             } else {
@@ -605,12 +614,14 @@ impl WorkflowEngine {
                 comments,
             ).await?;
 
+            let refreshed_step = composer_db::models::workflow_step_output::find_by_id(
+                &self.db.pool,
+                &step_output.id.to_string(),
+            ).await?
+            .ok_or_else(|| anyhow::anyhow!("Step output not found after write"))?;
             self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
                 workflow_run_id: run.id,
-                step: composer_db::models::workflow_step_output::find_by_id(
-                    &self.db.pool,
-                    &step_output.id.to_string(),
-                ).await?.unwrap(),
+                step: refreshed_step,
             });
         }
 
@@ -695,12 +706,14 @@ impl WorkflowEngine {
                     result_summary,
                 ).await?;
 
+                let refreshed_step = composer_db::models::workflow_step_output::find_by_id(
+                    &self.db.pool,
+                    &step_output.id.to_string(),
+                ).await?
+                .ok_or_else(|| anyhow::anyhow!("Step output not found after write"))?;
                 self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
                     workflow_run_id: run.id,
-                    step: composer_db::models::workflow_step_output::find_by_id(
-                        &self.db.pool,
-                        &step_output.id.to_string(),
-                    ).await?.unwrap(),
+                    step: refreshed_step,
                 });
 
                 // Check if this step has a loop_back_to and should loop
@@ -773,7 +786,8 @@ impl WorkflowEngine {
                                 step_id: step_output.step_id.clone(),
                             });
 
-                            let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id).await?.unwrap();
+                            let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id).await?
+                                .ok_or_else(|| anyhow::anyhow!("Workflow run not found after update"))?;
                             self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
 
                             return Ok(true);
@@ -1089,6 +1103,12 @@ impl WorkflowEngine {
             &WorkflowRunStatus::Completed,
         ).await?;
 
+        // Read current task status before updating, so the event has the correct from_status
+        let task = composer_db::models::task::find_by_id(&self.db.pool, &run.task_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+        let from_status = task.status;
+
         composer_db::models::task::update_status(
             &self.db.pool,
             &run.task_id.to_string(),
@@ -1113,7 +1133,7 @@ impl WorkflowEngine {
         self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
         self.event_bus.broadcast(WsEvent::TaskMoved {
             task_id: run.task_id,
-            from_status: TaskStatus::InProgress,
+            from_status,
             to_status: TaskStatus::Done,
         });
 
@@ -1214,7 +1234,8 @@ impl WorkflowEngine {
         let updated_step = composer_db::models::workflow_step_output::find_by_id(
             &self.db.pool,
             &step_output.id.to_string(),
-        ).await?.unwrap();
+        ).await?
+        .ok_or_else(|| anyhow::anyhow!("Step output not found after write"))?;
         self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
             workflow_run_id: run_id.parse()?,
             step: updated_step,
