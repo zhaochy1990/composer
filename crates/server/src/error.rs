@@ -17,8 +17,11 @@ impl IntoResponse for ServiceError {
             ServiceError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             ServiceError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             ServiceError::Internal(err) => {
+                // Log full error chain for debugging, but only expose the top-level
+                // message to clients (avoids leaking SQL queries, file paths, stack traces)
                 tracing::error!("Internal error: {:?}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                let msg = format!("{}", err);
+                (StatusCode::INTERNAL_SERVER_ERROR, msg)
             }
         };
         (status, Json(json!({ "error": message }))).into_response()

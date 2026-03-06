@@ -292,6 +292,11 @@ impl WorkflowEngine {
             .clone()
     }
 
+    /// Remove the per-run lock when a workflow run reaches a terminal state.
+    fn cleanup_run_lock(&self, run_id: &str) {
+        self.run_locks.remove(run_id);
+    }
+
     /// Ensure the built-in "Feat-Common" workflow exists as a template.
     pub async fn ensure_builtin_workflow(&self) -> anyhow::Result<Workflow> {
         let canonical = feat_common_definition();
@@ -441,6 +446,9 @@ impl WorkflowEngine {
 
     /// Resume a paused/failed workflow run.
     pub async fn resume_run(&self, run_id: &str, req: &WorkflowResumeRequest) -> anyhow::Result<WorkflowRun> {
+        let lock = self.run_lock(run_id);
+        let _guard = lock.lock().await;
+
         let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
@@ -466,6 +474,10 @@ impl WorkflowEngine {
 
         // Handle retry-exhaustion resume actions
         if let (Some(step_id), Some(action)) = (&req.step_id, &req.action) {
+            let step_def = workflow.definition.steps.iter()
+                .find(|s| s.id == *step_id)
+                .ok_or_else(|| anyhow::anyhow!("Step '{}' not found in workflow definition", step_id))?;
+
             match action {
                 WorkflowResumeAction::ContinueLoop => {
                     tracing::info!("Continuing loop for step '{}' in run {}", step_id, run_id);
@@ -515,19 +527,16 @@ impl WorkflowEngine {
                     }
 
                     // Also mark the loop target as completed/skipped so dependencies can proceed
-                    let step_def = workflow.definition.steps.iter().find(|s| s.id == *step_id);
-                    if let Some(def) = step_def {
-                        if let Some(ref loop_target) = def.loop_back_to {
-                            if let Some(target_output) = composer_db::models::workflow_step_output::latest_for_step(
-                                &self.db.pool, run_id, loop_target,
-                            ).await? {
-                                if !matches!(target_output.status, WorkflowStepStatus::Completed) {
-                                    composer_db::models::workflow_step_output::update_status(
-                                        &self.db.pool,
-                                        &target_output.id.to_string(),
-                                        &WorkflowStepStatus::Completed,
-                                    ).await?;
-                                }
+                    if let Some(ref loop_target) = step_def.loop_back_to {
+                        if let Some(target_output) = composer_db::models::workflow_step_output::latest_for_step(
+                            &self.db.pool, run_id, loop_target,
+                        ).await? {
+                            if !matches!(target_output.status, WorkflowStepStatus::Completed) {
+                                composer_db::models::workflow_step_output::update_status(
+                                    &self.db.pool,
+                                    &target_output.id.to_string(),
+                                    &WorkflowStepStatus::Completed,
+                                ).await?;
                             }
                         }
                     }
@@ -593,6 +602,12 @@ impl WorkflowEngine {
         if let Some(step_output) = composer_db::models::workflow_step_output::latest_for_step(
             &self.db.pool, run_id, step_id,
         ).await? {
+            if !matches!(step_output.status, WorkflowStepStatus::WaitingForHuman) {
+                return Err(anyhow::anyhow!(
+                    "Step '{}' is not waiting for human decision (status: {:?})",
+                    step_id, step_output.status
+                ));
+            }
             let status = if approved {
                 WorkflowStepStatus::Completed
             } else {
@@ -605,12 +620,14 @@ impl WorkflowEngine {
                 comments,
             ).await?;
 
+            let refreshed_step = composer_db::models::workflow_step_output::find_by_id(
+                &self.db.pool,
+                &step_output.id.to_string(),
+            ).await?
+            .ok_or_else(|| anyhow::anyhow!("Step output not found after write"))?;
             self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
                 workflow_run_id: run.id,
-                step: composer_db::models::workflow_step_output::find_by_id(
-                    &self.db.pool,
-                    &step_output.id.to_string(),
-                ).await?.unwrap(),
+                step: refreshed_step,
             });
         }
 
@@ -724,17 +741,25 @@ impl WorkflowEngine {
                     result_summary,
                 ).await?;
 
+                let refreshed_step = composer_db::models::workflow_step_output::find_by_id(
+                    &self.db.pool,
+                    &step_output.id.to_string(),
+                ).await?
+                .ok_or_else(|| anyhow::anyhow!("Step output not found after write"))?;
                 self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
                     workflow_run_id: run.id,
-                    step: composer_db::models::workflow_step_output::find_by_id(
-                        &self.db.pool,
-                        &step_output.id.to_string(),
-                    ).await?.unwrap(),
+                    step: refreshed_step,
                 });
 
                 // Check if this step has a loop_back_to and should loop
                 let step_def = workflow.definition.steps.iter()
                     .find(|s| s.id == step_output.step_id);
+                if step_def.is_none() {
+                    tracing::warn!(
+                        "Step definition '{}' not found in workflow for run {}",
+                        step_output.step_id, run_id
+                    );
+                }
                 if let Some(def) = step_def {
                     if let Some(ref loop_target) = def.loop_back_to {
                         if self.should_loop(&run_id, &workflow, def, loop_target).await? {
@@ -758,6 +783,17 @@ impl WorkflowEngine {
                                     None,
                                 ).await?;
                             }
+                            // Also create a new Pending output for the current step
+                            // so that downstream steps (which depend on this step)
+                            // don't see it as Completed and advance prematurely.
+                            composer_db::models::workflow_step_output::create(
+                                &self.db.pool,
+                                &run_id,
+                                &step_output.step_id,
+                                &def.step_type,
+                                &WorkflowStepStatus::Pending,
+                                None,
+                            ).await?;
                         } else {
                             // Max retries exhausted → pause for user decision
                             tracing::info!(
@@ -791,7 +827,8 @@ impl WorkflowEngine {
                                 step_id: step_output.step_id.clone(),
                             });
 
-                            let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id).await?.unwrap();
+                            let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id).await?
+                                .ok_or_else(|| anyhow::anyhow!("Workflow run not found after update"))?;
                             self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
 
                             return Ok(true);
@@ -848,6 +885,8 @@ impl WorkflowEngine {
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
         self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
 
+        self.cleanup_run_lock(&run_id);
+
         Ok(true)
     }
 
@@ -868,6 +907,31 @@ impl WorkflowEngine {
     // Core DAG engine
     // -----------------------------------------------------------------------
 
+    /// Collect all branch target step IDs (steps referenced by on_approve/on_reject of HumanGate steps).
+    fn collect_branch_targets(workflow: &Workflow) -> HashSet<String> {
+        workflow.definition.steps.iter()
+            .filter(|s| s.step_type == WorkflowStepType::HumanGate)
+            .flat_map(|s| {
+                let mut targets = Vec::new();
+                if let Some(ref t) = s.on_approve { targets.push(t.clone()); }
+                if let Some(ref t) = s.on_reject { targets.push(t.clone()); }
+                targets
+            })
+            .collect()
+    }
+
+    /// Build a map of step_id -> latest output status from step outputs.
+    fn build_latest_status(step_outputs: &[WorkflowStepOutput]) -> HashMap<&str, &WorkflowStepStatus> {
+        let mut map: HashMap<&str, (&WorkflowStepOutput, i32)> = HashMap::new();
+        for output in step_outputs {
+            let entry = map.entry(output.step_id.as_str()).or_insert((output, output.attempt));
+            if output.attempt > entry.1 {
+                *entry = (output, output.attempt);
+            }
+        }
+        map.into_iter().map(|(k, (v, _))| (k, &v.status)).collect()
+    }
+
     /// Compute which steps are ready to execute.
     fn compute_ready_steps(
         &self,
@@ -875,46 +939,19 @@ impl WorkflowEngine {
         step_outputs: &[WorkflowStepOutput],
         activated_steps: &[String],
     ) -> Vec<String> {
-        // Collect all branch targets (steps that appear as on_approve/on_reject of any HumanGate)
-        let branch_targets: HashSet<&str> = workflow.definition.steps.iter()
-            .filter(|s| s.step_type == WorkflowStepType::HumanGate)
-            .flat_map(|s| {
-                let mut targets = Vec::new();
-                if let Some(ref t) = s.on_approve {
-                    targets.push(t.as_str());
-                }
-                if let Some(ref t) = s.on_reject {
-                    targets.push(t.as_str());
-                }
-                targets
-            })
-            .collect();
-
-        // Build a map of step_id -> latest output status
-        let latest_status: HashMap<&str, &WorkflowStepStatus> = {
-            let mut map: HashMap<&str, (&WorkflowStepOutput, i32)> = HashMap::new();
-            for output in step_outputs {
-                let entry = map.entry(output.step_id.as_str()).or_insert((output, output.attempt));
-                if output.attempt > entry.1 {
-                    *entry = (output, output.attempt);
-                }
-            }
-            map.into_iter().map(|(k, (v, _))| (k, &v.status)).collect()
-        };
+        let branch_targets = Self::collect_branch_targets(workflow);
+        let latest_status = Self::build_latest_status(step_outputs);
 
         let mut ready = Vec::new();
 
         for step in &workflow.definition.steps {
             let step_id = step.id.as_str();
 
-            // Skip if already has a running/completed/waiting/skipped output
+            // Skip if already has a non-pending output (only Pending steps are re-executable)
             if let Some(status) = latest_status.get(step_id) {
                 match status {
-                    WorkflowStepStatus::Running
-                    | WorkflowStepStatus::Completed
-                    | WorkflowStepStatus::WaitingForHuman
-                    | WorkflowStepStatus::Skipped => continue,
-                    _ => {}
+                    WorkflowStepStatus::Pending => {} // fall through — ready for execution
+                    _ => continue, // Running, Completed, WaitingForHuman, Skipped, Failed, Rejected
                 }
             }
 
@@ -1013,26 +1050,8 @@ impl WorkflowEngine {
         step_outputs: &[WorkflowStepOutput],
         activated_steps: &[String],
     ) -> bool {
-        let branch_targets: HashSet<&str> = workflow.definition.steps.iter()
-            .filter(|s| s.step_type == WorkflowStepType::HumanGate)
-            .flat_map(|s| {
-                let mut targets = Vec::new();
-                if let Some(ref t) = s.on_approve { targets.push(t.as_str()); }
-                if let Some(ref t) = s.on_reject { targets.push(t.as_str()); }
-                targets
-            })
-            .collect();
-
-        let latest_status: HashMap<&str, &WorkflowStepStatus> = {
-            let mut map: HashMap<&str, (&WorkflowStepOutput, i32)> = HashMap::new();
-            for output in step_outputs {
-                let entry = map.entry(output.step_id.as_str()).or_insert((output, output.attempt));
-                if output.attempt > entry.1 {
-                    *entry = (output, output.attempt);
-                }
-            }
-            map.into_iter().map(|(k, (v, _))| (k, &v.status)).collect()
-        };
+        let branch_targets = Self::collect_branch_targets(workflow);
+        let latest_status = Self::build_latest_status(step_outputs);
 
         for step in &workflow.definition.steps {
             let step_id = step.id.as_str();
@@ -1071,18 +1090,10 @@ impl WorkflowEngine {
         step_outputs: &[WorkflowStepOutput],
     ) -> anyhow::Result<()> {
         // Mark unreachable branch targets as Skipped
-        let branch_targets: HashSet<&str> = workflow.definition.steps.iter()
-            .filter(|s| s.step_type == WorkflowStepType::HumanGate)
-            .flat_map(|s| {
-                let mut targets = Vec::new();
-                if let Some(ref t) = s.on_approve { targets.push(t.as_str()); }
-                if let Some(ref t) = s.on_reject { targets.push(t.as_str()); }
-                targets
-            })
-            .collect();
+        let branch_targets = Self::collect_branch_targets(workflow);
 
         for step in &workflow.definition.steps {
-            if branch_targets.contains(step.id.as_str())
+            if branch_targets.contains(&step.id)
                 && !run.activated_steps.contains(&step.id)
                 && !step.depends_on.is_empty()
             {
@@ -1106,6 +1117,12 @@ impl WorkflowEngine {
             run_id,
             &WorkflowRunStatus::Completed,
         ).await?;
+
+        // Read current task status before updating, so the event has the correct from_status
+        let task = composer_db::models::task::find_by_id(&self.db.pool, &run.task_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+        let from_status = task.status;
 
         composer_db::models::task::update_status(
             &self.db.pool,
@@ -1131,9 +1148,11 @@ impl WorkflowEngine {
         self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(updated_run));
         self.event_bus.broadcast(WsEvent::TaskMoved {
             task_id: run.task_id,
-            from_status: TaskStatus::InProgress,
+            from_status,
             to_status: TaskStatus::Done,
         });
+
+        self.cleanup_run_lock(run_id);
 
         Ok(())
     }
@@ -1232,7 +1251,8 @@ impl WorkflowEngine {
         let updated_step = composer_db::models::workflow_step_output::find_by_id(
             &self.db.pool,
             &step_output.id.to_string(),
-        ).await?.unwrap();
+        ).await?
+        .ok_or_else(|| anyhow::anyhow!("Step output not found after write"))?;
         self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
             workflow_run_id: run_id.parse()?,
             step: updated_step,

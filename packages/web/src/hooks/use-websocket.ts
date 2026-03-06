@@ -98,6 +98,40 @@ export function useWebSocket() {
                     break;
                 }
 
+                // Workflow lifecycle events
+                case 'WorkflowRunUpdated': {
+                    queryClient.invalidateQueries({ queryKey: ['workflow-runs', parsed.payload.id] });
+                    queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                    break;
+                }
+                case 'WorkflowStepChanged': {
+                    queryClient.invalidateQueries({
+                        queryKey: ['workflow-runs', parsed.payload.workflow_run_id, 'steps'],
+                    });
+                    break;
+                }
+                case 'WorkflowWaitingForHuman': {
+                    queryClient.invalidateQueries({
+                        queryKey: ['workflow-runs', parsed.payload.workflow_run_id],
+                    });
+                    queryClient.invalidateQueries({
+                        queryKey: ['workflow-runs', parsed.payload.workflow_run_id, 'steps'],
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                    break;
+                }
+                case 'WorkflowRunCompleted': {
+                    queryClient.invalidateQueries({
+                        queryKey: ['workflow-runs', parsed.payload.workflow_run_id],
+                    });
+                    queryClient.invalidateQueries({
+                        queryKey: ['workflow-runs', parsed.payload.workflow_run_id, 'steps'],
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                    break;
+                }
+
                 // Worktree events
                 case 'WorktreeCreated':
                 case 'WorktreeDeleted': {

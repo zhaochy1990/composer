@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Check, Circle, Clock, AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, RotateCcw, SkipForward, Ban } from 'lucide-react';
+import { useEffect } from 'react';
+import { Check, Circle, Clock, AlertTriangle, X, Loader2, RotateCcw, SkipForward, Ban } from 'lucide-react';
 import type { WorkflowRun, WorkflowStepType, WorkflowStepStatus, Workflow, WorkflowStepDefinition } from '@/types/generated';
-import { useWorkflowStepOutputs, useSubmitWorkflowDecision, useResumeWorkflowRun } from '@/hooks/use-workflows';
+import { useWorkflowStepOutputs, useResumeWorkflowRun } from '@/hooks/use-workflows';
+import type { ReviewPanelData } from './WorkflowReviewSidePanel';
 
 interface WorkflowProgressProps {
     workflowRun: WorkflowRun;
     workflow: Workflow;
-    onPlanContent?: (content: string | null) => void;
+    onReviewData?: (data: ReviewPanelData | null) => void;
 }
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
@@ -55,11 +56,9 @@ function getStepName(step: WorkflowStepDefinition): string {
     return step.name || STEP_TYPE_LABELS[step.step_type] || step.id;
 }
 
-export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: WorkflowProgressProps) {
-    const { data: stepOutputs } = useWorkflowStepOutputs(workflowRun.id);
-    const submitDecision = useSubmitWorkflowDecision();
+export function WorkflowProgress({ workflowRun, workflow, onReviewData }: WorkflowProgressProps) {
+    const { data: stepOutputs } = useWorkflowStepOutputs(workflowRun.id, workflowRun.status);
     const resumeRun = useResumeWorkflowRun();
-    const [comments, setComments] = useState<Record<string, string>>({});
 
     const steps = workflow.definition.steps;
     const isWaitingForHuman = workflowRun.status === 'paused';
@@ -79,35 +78,29 @@ export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: Workf
     const isPausedForRecovery = isWaitingForHuman && humanGateSteps.length === 0 && retryExhaustedSteps.length === 0;
     const canResume = isPausedForRecovery || isFailed;
 
-    // Expose plan content to parent when at a human gate
+    // Expose review data to parent when at a human gate
     useEffect(() => {
-        if (!onPlanContent) return;
+        if (!onReviewData) return;
         if (humanGateSteps.length > 0 && stepOutputs) {
             const planStep = workflow.definition.steps.find(s => s.step_type === 'agentic');
+            let content = '';
             if (planStep) {
                 const planOutputs = stepOutputs
                     .filter(o => o.step_id === planStep.id && o.status === 'completed');
                 const planOutput = planOutputs.length > 0 ? planOutputs[planOutputs.length - 1] : null;
-                onPlanContent(planOutput?.output ?? null);
-            } else {
-                onPlanContent(null);
+                content = planOutput?.output ?? '';
             }
+            onReviewData({
+                content,
+                humanGateSteps,
+                steps: workflow.definition.steps,
+                workflowRunId: workflowRun.id,
+            });
         } else {
-            onPlanContent(null);
+            onReviewData(null);
         }
-        return () => onPlanContent(null);
-    }, [humanGateSteps.length, stepOutputs, onPlanContent]);
-
-    function handleDecision(stepId: string, approved: boolean) {
-        submitDecision.mutate({
-            runId: workflowRun.id,
-            stepId,
-            approved,
-            comments: comments[stepId]?.trim() || undefined,
-        }, {
-            onSuccess: () => setComments(prev => ({ ...prev, [stepId]: '' })),
-        });
-    }
+        return () => onReviewData(null);
+    }, [humanGateSteps.length, stepOutputs, onReviewData]);
 
     function handleRetryResume(stepId: string, action: 'continue_loop' | 'skip_to_next') {
         resumeRun.mutate({
@@ -264,56 +257,6 @@ export function WorkflowProgress({ workflowRun, workflow, onPlanContent }: Workf
                 </div>
             ))}
 
-            {/* Human gate decision UI — one card per waiting gate */}
-            {humanGateSteps.map(gateOutput => {
-                const gateDef = steps.find(s => s.id === gateOutput.step_id);
-                const stepComments = comments[gateOutput.step_id] ?? '';
-
-                return (
-                    <div key={gateOutput.id} className="border border-yellow-700 rounded-lg p-4 bg-yellow-900/20 space-y-3">
-                        <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-yellow-400" />
-                            <span className="text-sm font-medium text-yellow-300">
-                                Your review is needed: {gateDef?.name ?? gateOutput.step_id}
-                            </span>
-                        </div>
-
-                        <textarea
-                            value={stepComments}
-                            onChange={(e) => setComments(prev => ({ ...prev, [gateOutput.step_id]: e.target.value }))}
-                            placeholder="Optional comments or feedback..."
-                            rows={3}
-                            className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 resize-none"
-                        />
-
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={() => handleDecision(gateOutput.step_id, true)}
-                                disabled={submitDecision.isPending}
-                                className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50"
-                            >
-                                <ThumbsUp className="w-3.5 h-3.5" />
-                                {submitDecision.isPending ? 'Submitting...' : `Approve${gateDef?.on_approve ? ` → ${gateDef.on_approve}` : ''}`}
-                            </button>
-                            {gateDef?.on_reject && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleDecision(gateOutput.step_id, false)}
-                                    disabled={submitDecision.isPending || !stepComments.trim()}
-                                    className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-red-900/40 text-red-300 border border-red-700 hover:bg-red-900/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <ThumbsDown className="w-3.5 h-3.5" />
-                                    Reject → {gateDef.on_reject}
-                                </button>
-                            )}
-                            {gateDef?.on_reject && !stepComments.trim() && (
-                                <span className="text-xs text-gray-500">Add comments to reject</span>
-                            )}
-                        </div>
-                    </div>
-                );
-            })}
         </div>
     );
 }

@@ -43,7 +43,7 @@ export function TaskListView({
     return (
         <div className="flex h-full">
             {/* Left panel — task list */}
-            <div className="w-[380px] shrink-0 border-r border-gray-800 overflow-y-auto">
+            <div className="flex-1 min-w-0 border-r border-gray-800 overflow-y-auto">
                 <div className="border-b border-gray-800">
                     {sections.map((section) => (
                         <TaskListSection
@@ -61,7 +61,7 @@ export function TaskListView({
             </div>
 
             {/* Right panel — task detail (always visible) */}
-            <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="w-[900px] shrink-0 overflow-hidden">
                 {selectedTask ? (
                     <TaskDetailPanel
                         key={selectedTask.id}

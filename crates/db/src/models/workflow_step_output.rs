@@ -45,9 +45,9 @@ pub async fn create(
 ) -> anyhow::Result<WorkflowStepOutput> {
     let id = Uuid::new_v4().to_string();
     let type_str = serde_json::to_value(step_type)?
-        .as_str().unwrap_or("agentic").to_string();
+        .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize step type"))?.to_string();
     let status_str = serde_json::to_value(status)?
-        .as_str().unwrap_or("pending").to_string();
+        .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize step status"))?.to_string();
 
     // Get current max attempt for this step
     let max_attempt: Option<(i32,)> = sqlx::query_as(
@@ -134,7 +134,7 @@ pub async fn find_completed_step_ids(pool: &SqlitePool, workflow_run_id: &str) -
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorkflowStepStatus) -> anyhow::Result<()> {
     let status_str = serde_json::to_value(status)?
-        .as_str().unwrap_or("pending").to_string();
+        .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize step status"))?.to_string();
     sqlx::query("UPDATE workflow_step_outputs SET status = ? WHERE id = ?")
         .bind(&status_str)
         .bind(id)
@@ -159,7 +159,7 @@ pub async fn update_status_and_output(
     output: Option<&str>,
 ) -> anyhow::Result<()> {
     let status_str = serde_json::to_value(status)?
-        .as_str().unwrap_or("pending").to_string();
+        .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize step status"))?.to_string();
     sqlx::query("UPDATE workflow_step_outputs SET status = ?, output = COALESCE(?, output) WHERE id = ?")
         .bind(&status_str)
         .bind(output)

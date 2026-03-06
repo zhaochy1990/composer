@@ -91,6 +91,15 @@ async fn delete_workflow(
     if existing.is_template {
         return Err(ServiceError::BadRequest("Cannot delete a template workflow".into()));
     }
+    // Guard: don't delete if there are active (running/paused) workflow runs
+    let active_runs = composer_db::models::workflow_run::find_active(
+        &state.services.workflows.db().pool,
+    ).await?;
+    if active_runs.iter().any(|r| r.workflow_id == existing.id) {
+        return Err(ServiceError::Conflict(
+            "Cannot delete workflow with active runs. Wait for runs to complete or fail first.".into(),
+        ));
+    }
     composer_db::models::workflow::delete(
         &state.services.workflows.db().pool,
         &id,

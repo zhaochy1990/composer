@@ -78,7 +78,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
         <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open && !isPending) resetAndClose(); }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6" onEscapeKeyDown={(e) => { if (isPending) e.preventDefault(); }} onPointerDownOutside={(e) => { if (isPending) e.preventDefault(); }}>
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[640px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6" onEscapeKeyDown={(e) => { if (isPending) e.preventDefault(); }} onPointerDownOutside={(e) => { if (isPending) e.preventDefault(); }}>
                     <div className="flex items-center justify-between mb-4">
                         <Dialog.Title className="text-lg font-semibold text-gray-100">
                             New Task
@@ -119,8 +119,8 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                 value={description}
                                 onChange={e => setDescription(e.target.value)}
                                 placeholder="Optional description"
-                                rows={3}
-                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                                rows={6}
+                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
                             />
                         </div>
 

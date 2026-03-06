@@ -87,10 +87,10 @@ The workflow engine orchestrates agent sessions through defined step sequences. 
 
 Prompt templates support `{{task}}` (task context), `{{step_N}}` (output of step N), and `{{rejection}}` (latest rejection feedback).
 
-**Built-in "Feat-Common" workflow** (8 steps):
-Plan → Review Plan → Implement & Create PR → Automated PR Review → Fix Review Findings → Human PR Review → Fix Human Comments → Complete PR
+**Built-in "Feat-Common" workflow** (7 steps):
+Plan → Review Plan → Implement & Create PR → Automated PR Review → Fix Review Findings → Human PR Review → Complete PR
 
-Rejection at human gates loops back to the preceding agent step with feedback. Steps 4→5→4 and 6→7→6 form review/fix cycles via `loop_back_to`.
+Rejection at human gates loops back to the preceding agent step with feedback. Steps 4→5→4 form an auto-review/fix cycle via `loop_back_to`. Human review rejection loops back to implement.
 
 **Session model:** Each `agentic` step specifies a `SessionMode`: `new` creates a fresh session, `resume` continues the main session via `--resume`, `separate` creates an independent session (used for PR review). Worktrees are preserved throughout the workflow and cleaned up only on completion.
 

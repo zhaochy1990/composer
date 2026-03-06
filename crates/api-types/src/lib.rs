@@ -173,6 +173,7 @@ pub struct Task {
     pub pr_urls: Vec<String>,
     pub workflow_run_id: Option<Uuid>,
     pub workflow_id: Option<Uuid>,
+    pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

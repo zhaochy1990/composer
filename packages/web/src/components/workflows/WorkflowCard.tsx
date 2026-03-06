@@ -53,7 +53,10 @@ export function WorkflowCard({ workflow, onClick, compact, isSelected }: Workflo
                     <WorkflowIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <span className="text-sm font-medium text-gray-200 truncate">{workflow.name}</span>
                     {workflow.is_template && (
-                        <Lock className="w-3 h-3 text-purple-400 shrink-0" />
+                        <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-400 border border-purple-800/50 shrink-0">
+                            <Lock className="w-2.5 h-2.5" />
+                            Built-in
+                        </span>
                     )}
                     <span className="text-xs text-gray-500 ml-auto shrink-0">
                         {workflow.definition.steps.length}

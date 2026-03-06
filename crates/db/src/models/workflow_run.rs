@@ -87,7 +87,7 @@ pub async fn find_by_step_session(pool: &SqlitePool, session_id: &str) -> anyhow
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorkflowRunStatus) -> anyhow::Result<()> {
     let status_str = serde_json::to_value(status)?
-        .as_str().unwrap_or("running").to_string();
+        .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize workflow run status"))?.to_string();
     sqlx::query(
         "UPDATE workflow_runs SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
     )
@@ -99,18 +99,20 @@ pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorkflowRunStat
 }
 
 pub async fn add_activated_step(pool: &SqlitePool, id: &str, step_id: &str) -> anyhow::Result<()> {
-    let run = find_by_id(pool, id).await?
-        .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
-    let mut steps = run.activated_steps;
-    if !steps.contains(&step_id.to_string()) {
-        steps.push(step_id.to_string());
-    }
-    let steps_json = serde_json::to_string(&steps)?;
+    // Atomic conditional append using a single UPDATE to avoid read-modify-write races.
+    // The subquery checks if the step_id already exists in the JSON array.
     sqlx::query(
-        "UPDATE workflow_runs SET activated_steps = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+        "UPDATE workflow_runs \
+         SET activated_steps = json_insert(activated_steps, '$[#]', ?), \
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+         WHERE id = ? \
+           AND NOT EXISTS ( \
+               SELECT 1 FROM json_each(workflow_runs.activated_steps) WHERE value = ? \
+           )"
     )
-    .bind(&steps_json)
+    .bind(step_id)
     .bind(id)
+    .bind(step_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -130,6 +132,16 @@ pub async fn increment_iteration(pool: &SqlitePool, id: &str) -> anyhow::Result<
 pub async fn find_running(pool: &SqlitePool) -> anyhow::Result<Vec<WorkflowRun>> {
     let rows = sqlx::query_as::<_, WorkflowRunRow>(
         &format!("SELECT {RUN_COLUMNS} FROM workflow_runs WHERE status = 'running'")
+    )
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(WorkflowRun::try_from).collect()
+}
+
+/// Find all workflow runs that are not in a terminal state (running or paused).
+pub async fn find_active(pool: &SqlitePool) -> anyhow::Result<Vec<WorkflowRun>> {
+    let rows = sqlx::query_as::<_, WorkflowRunRow>(
+        &format!("SELECT {RUN_COLUMNS} FROM workflow_runs WHERE status IN ('running', 'paused')")
     )
     .fetch_all(pool)
     .await?;
