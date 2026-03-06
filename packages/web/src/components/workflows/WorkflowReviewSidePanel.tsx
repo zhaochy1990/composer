@@ -52,7 +52,7 @@ export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePan
         : 'Review';
 
     return (
-        <div className="w-[500px] shrink-0 h-full bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden">
+        <div className="w-[800px] shrink-0 h-full bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 shrink-0">
                 <div className="flex items-center gap-2">
@@ -70,10 +70,12 @@ export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePan
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+            <div className="flex-1 overflow-y-auto px-8 py-6 min-h-0">
                 {content ? (
-                    <div className="prose prose-invert prose-sm max-w-none leading-relaxed">
-                        <MarkdownContent content={content} />
+                    <div className="max-w-[680px] mx-auto">
+                        <div className="prose prose-invert max-w-none leading-relaxed">
+                            <MarkdownContent content={content} />
+                        </div>
                     </div>
                 ) : (
                     <p className="text-sm text-gray-500 text-center py-8">No content to review</p>
