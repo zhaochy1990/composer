@@ -63,7 +63,9 @@ pub async fn create(
     .execute(pool)
     .await?;
 
-    find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create session"))
+    find_by_id(pool, &id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Failed to create session"))
 }
 
 pub async fn create_with_status(
@@ -87,7 +89,7 @@ pub async fn create_with_status(
     sqlx::query(
         "INSERT INTO sessions (id, agent_id, task_id, worktree_id, prompt, status, name, \
          started_at) VALUES (?, ?, ?, ?, ?, ?, ?, \
-         CASE WHEN ? = 'running' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END)"
+         CASE WHEN ? = 'running' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END)",
     )
     .bind(id)
     .bind(agent_id)
@@ -100,7 +102,9 @@ pub async fn create_with_status(
     .execute(pool)
     .await?;
 
-    find_by_id(pool, id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create session"))
+    find_by_id(pool, id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Failed to create session"))
 }
 
 pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Session>> {
@@ -120,7 +124,7 @@ pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Session>> {
 
 pub async fn list_by_agent(pool: &SqlitePool, agent_id: &str) -> anyhow::Result<Vec<Session>> {
     let rows = sqlx::query_as::<_, SessionRow>(
-        "SELECT * FROM sessions WHERE agent_id = ? ORDER BY created_at DESC"
+        "SELECT * FROM sessions WHERE agent_id = ? ORDER BY created_at DESC",
     )
     .bind(agent_id)
     .fetch_all(pool)
@@ -130,7 +134,7 @@ pub async fn list_by_agent(pool: &SqlitePool, agent_id: &str) -> anyhow::Result<
 
 pub async fn list_by_task(pool: &SqlitePool, task_id: &str) -> anyhow::Result<Vec<Session>> {
     let rows = sqlx::query_as::<_, SessionRow>(
-        "SELECT * FROM sessions WHERE task_id = ? ORDER BY created_at DESC"
+        "SELECT * FROM sessions WHERE task_id = ? ORDER BY created_at DESC",
     )
     .bind(task_id)
     .fetch_all(pool)
@@ -138,7 +142,11 @@ pub async fn list_by_task(pool: &SqlitePool, task_id: &str) -> anyhow::Result<Ve
     rows.into_iter().map(Session::try_from).collect()
 }
 
-pub async fn update_status(pool: &SqlitePool, id: &str, status: &SessionStatus) -> anyhow::Result<()> {
+pub async fn update_status(
+    pool: &SqlitePool,
+    id: &str,
+    status: &SessionStatus,
+) -> anyhow::Result<()> {
     let status_str = match status {
         SessionStatus::Created => "created",
         SessionStatus::Running => "running",
@@ -173,7 +181,7 @@ pub async fn fail_orphaned_running(pool: &SqlitePool) -> anyhow::Result<u64> {
          result_summary = COALESCE(result_summary, 'Server restarted while session was running'), \
          completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
-         WHERE status = 'running'"
+         WHERE status = 'running'",
     )
     .execute(pool)
     .await?;
@@ -182,7 +190,11 @@ pub async fn fail_orphaned_running(pool: &SqlitePool) -> anyhow::Result<u64> {
 
 /// Persist the Claude Code session ID for --resume support.
 /// Called eagerly when the ID is first captured from stdout, so it survives server crashes.
-pub async fn update_resume_session_id(pool: &SqlitePool, id: &str, resume_session_id: &str) -> anyhow::Result<()> {
+pub async fn update_resume_session_id(
+    pool: &SqlitePool,
+    id: &str,
+    resume_session_id: &str,
+) -> anyhow::Result<()> {
     sqlx::query(
         "UPDATE sessions SET resume_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND resume_session_id IS NULL"
     )
@@ -193,7 +205,27 @@ pub async fn update_resume_session_id(pool: &SqlitePool, id: &str, resume_sessio
     Ok(())
 }
 
-pub async fn update_result(pool: &SqlitePool, id: &str, result_summary: Option<&str>, resume_session_id: Option<&str>) -> anyhow::Result<()> {
+pub async fn update_worktree_id(
+    pool: &SqlitePool,
+    id: &str,
+    worktree_id: &str,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE sessions SET worktree_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+    )
+    .bind(worktree_id)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn update_result(
+    pool: &SqlitePool,
+    id: &str,
+    result_summary: Option<&str>,
+    resume_session_id: Option<&str>,
+) -> anyhow::Result<()> {
     sqlx::query(
         "UPDATE sessions SET result_summary = ?, resume_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
     )

@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use once_cell::sync::Lazy;
-use regex::Regex;
+use crate::event_bus::EventBus;
+use crate::worktree_service::WorktreeService;
 use composer_api_types::*;
 use composer_db::Database;
 use composer_executors::process_manager::{AgentProcessManager, SpawnOptions};
-use crate::event_bus::EventBus;
-use crate::worktree_service::WorktreeService;
+use once_cell::sync::Lazy;
+use regex::Regex;
+use std::sync::Arc;
 use std::sync::OnceLock;
 
 /// Matches PR URLs from GitHub, Azure DevOps, GitLab, and self-hosted instances.
@@ -23,7 +23,11 @@ pub struct SessionService {
 }
 
 impl SessionService {
-    pub fn new(db: Arc<Database>, event_bus: EventBus, process_manager: Arc<AgentProcessManager>) -> Self {
+    pub fn new(
+        db: Arc<Database>,
+        event_bus: EventBus,
+        process_manager: Arc<AgentProcessManager>,
+    ) -> Self {
         let worktree_service = WorktreeService::new(db.clone());
 
         let service = Self {
@@ -49,7 +53,9 @@ impl SessionService {
         let db = self.db.clone();
         tokio::spawn(async move {
             match composer_db::models::session::fail_orphaned_running(&db.pool).await {
-                Ok(n) if n > 0 => tracing::warn!("Recovered {} orphaned running session(s) → failed", n),
+                Ok(n) if n > 0 => {
+                    tracing::warn!("Recovered {} orphaned running session(s) → failed", n)
+                }
                 Ok(_) => {}
                 Err(e) => tracing::error!("Failed to recover orphaned sessions: {}", e),
             }
@@ -78,26 +84,38 @@ impl SessionService {
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 };
                 match event {
-                    WsEvent::SessionOutput { session_id, log_type, ref content } => {
+                    WsEvent::SessionOutput {
+                        session_id,
+                        log_type,
+                        ref content,
+                    } => {
                         let session_id_str = session_id.to_string();
                         if let Err(e) = composer_db::models::session_log::append(
                             &db.pool,
                             &session_id_str,
                             &log_type,
                             content,
-                        ).await {
+                        )
+                        .await
+                        {
                             tracing::warn!("Failed to persist session log: {}", e);
                         }
                         // Detect PR URLs in session output
                         Self::extract_and_save_pr_urls(&db, &session_id_str, content).await;
                     }
-                    WsEvent::SessionCompleted { session_id, ref result_summary, ref claude_session_id } => {
+                    WsEvent::SessionCompleted {
+                        session_id,
+                        ref result_summary,
+                        ref claude_session_id,
+                    } => {
                         let id_str = session_id.to_string();
                         if let Err(e) = composer_db::models::session::update_status(
                             &db.pool,
                             &id_str,
                             &SessionStatus::Completed,
-                        ).await {
+                        )
+                        .await
+                        {
                             tracing::error!("Failed to update session status to completed: {}", e);
                         }
                         // Persist Claude Code's session_id from event payload for --resume support
@@ -106,7 +124,9 @@ impl SessionService {
                             &id_str,
                             result_summary.as_deref(),
                             claude_session_id.as_deref(),
-                        ).await {
+                        )
+                        .await
+                        {
                             tracing::error!("Failed to update session result: {}", e);
                         }
                         // Also scan result_summary for PR URLs
@@ -116,7 +136,10 @@ impl SessionService {
 
                         // Check if this session belongs to a workflow run
                         let handled_by_workflow = if let Some(engine) = workflow_engine.get() {
-                            match engine.on_session_completed(&id_str, result_summary.as_deref()).await {
+                            match engine
+                                .on_session_completed(&id_str, result_summary.as_deref())
+                                .await
+                            {
                                 Ok(true) => {
                                     // Workflow handled it — only reset agent, don't cleanup worktree
                                     Self::reset_agent_only(&db, &id_str).await;
@@ -124,7 +147,10 @@ impl SessionService {
                                 }
                                 Ok(false) => false,
                                 Err(e) => {
-                                    tracing::error!("Workflow engine error on session completed: {}", e);
+                                    tracing::error!(
+                                        "Workflow engine error on session completed: {}",
+                                        e
+                                    );
                                     false
                                 }
                             }
@@ -137,23 +163,34 @@ impl SessionService {
                             Self::reset_agent_and_cleanup_worktree(&db, &id_str).await;
                         }
                     }
-                    WsEvent::SessionResumeIdCaptured { session_id, ref claude_session_id } => {
+                    WsEvent::SessionResumeIdCaptured {
+                        session_id,
+                        ref claude_session_id,
+                    } => {
                         let id_str = session_id.to_string();
                         if let Err(e) = composer_db::models::session::update_resume_session_id(
                             &db.pool,
                             &id_str,
                             claude_session_id,
-                        ).await {
+                        )
+                        .await
+                        {
                             tracing::warn!("Failed to eagerly persist resume_session_id: {}", e);
                         }
                     }
-                    WsEvent::SessionFailed { session_id, ref error, ref claude_session_id } => {
+                    WsEvent::SessionFailed {
+                        session_id,
+                        ref error,
+                        ref claude_session_id,
+                    } => {
                         let id_str = session_id.to_string();
                         if let Err(e) = composer_db::models::session::update_status(
                             &db.pool,
                             &id_str,
                             &SessionStatus::Failed,
-                        ).await {
+                        )
+                        .await
+                        {
                             tracing::error!("Failed to update session status to failed: {}", e);
                         }
                         // Persist Claude Code's session_id from event payload for --resume
@@ -162,7 +199,9 @@ impl SessionService {
                             &id_str,
                             Some(error.as_str()),
                             claude_session_id.as_deref(),
-                        ).await {
+                        )
+                        .await
+                        {
                             tracing::error!("Failed to update session error result: {}", e);
                         }
 
@@ -279,7 +318,9 @@ impl SessionService {
         // Validate name length
         if let Some(ref name) = req.name {
             if name.len() > 255 {
-                return Err(anyhow::anyhow!("Session name must be 255 characters or fewer"));
+                return Err(anyhow::anyhow!(
+                    "Session name must be 255 characters or fewer"
+                ));
             }
         }
 
@@ -291,7 +332,10 @@ impl SessionService {
         let canonical = std::fs::canonicalize(repo_path)
             .map_err(|_| anyhow::anyhow!("repo_path does not exist: {}", req.repo_path))?;
         if !canonical.join(".git").exists() {
-            return Err(anyhow::anyhow!("repo_path is not a git repository: {}", req.repo_path));
+            return Err(anyhow::anyhow!(
+                "repo_path is not a git repository: {}",
+                req.repo_path
+            ));
         }
         // Strip Windows UNC prefix (\\?\) that canonicalize produces — git doesn't understand it
         let canonical_str = canonical.to_string_lossy().to_string();
@@ -393,7 +437,11 @@ impl SessionService {
         }
     }
 
-    pub async fn resume_session(&self, id: &str, req: ResumeSessionRequest) -> anyhow::Result<Session> {
+    pub async fn resume_session(
+        &self,
+        id: &str,
+        req: ResumeSessionRequest,
+    ) -> anyhow::Result<Session> {
         let session = composer_db::models::session::find_by_id(&self.db.pool, id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
@@ -401,43 +449,80 @@ impl SessionService {
         // Fix #25: only allow resuming sessions that are in a terminal or paused state.
         // Completed sessions can be resumed for workflow multi-step execution (the same
         // Claude Code session is reused across plan → implement → fix steps via --resume).
-        if !matches!(session.status, SessionStatus::Paused | SessionStatus::Failed | SessionStatus::Completed) {
-            return Err(anyhow::anyhow!("Session cannot be resumed from status {:?}", session.status));
+        if !matches!(
+            session.status,
+            SessionStatus::Paused | SessionStatus::Failed | SessionStatus::Completed
+        ) {
+            return Err(anyhow::anyhow!(
+                "Session cannot be resumed from status {:?}",
+                session.status
+            ));
         }
 
-        let agent = composer_db::models::agent::find_by_id(&self.db.pool, &session.agent_id.to_string())
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
+        let agent =
+            composer_db::models::agent::find_by_id(&self.db.pool, &session.agent_id.to_string())
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
 
-        // Determine working directory from worktree or fallback
+        // Determine working directory from worktree, recreating if deleted
         let working_dir = if let Some(wt_id) = &session.worktree_id {
             let wt = composer_db::models::worktree::find_by_id(&self.db.pool, &wt_id.to_string())
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Worktree not found"))?;
-            wt.worktree_path
+
+            // If the worktree was deleted (e.g., after workflow completion), recreate it
+            if wt.status == WorktreeStatus::Deleted
+                || !std::path::Path::new(&wt.worktree_path).exists()
+            {
+                let new_wt = self
+                    .worktree_service
+                    .create_for_session(
+                        &wt.repo_path,
+                        &agent.name,
+                        &agent.id.to_string(),
+                        &session.id.to_string(),
+                    )
+                    .await?;
+                composer_db::models::session::update_worktree_id(
+                    &self.db.pool,
+                    id,
+                    &new_wt.id.to_string(),
+                )
+                .await?;
+                new_wt.worktree_path
+            } else {
+                wt.worktree_path
+            }
         } else {
             return Err(anyhow::anyhow!("Session has no worktree, cannot resume"));
         };
 
         // Use explicit prompt, or consume a queued message, or fallback to default
-        let prompt = req.prompt
+        let prompt = req
+            .prompt
             .or_else(|| self.process_manager.take_queued_message(&session.id))
             .unwrap_or_else(|| "Continue from where you left off.".to_string());
 
         // The resume_session_id is the Claude Code session ID, which we may have stored
         // from the original session. For now, use the session's own ID as a reference.
-        let resume_id = session.resume_session_id.clone().unwrap_or_else(|| session.id.to_string());
+        let resume_id = session
+            .resume_session_id
+            .clone()
+            .unwrap_or_else(|| session.id.to_string());
 
         // Update session status back to Running
-        composer_db::models::session::update_status(&self.db.pool, id, &SessionStatus::Running).await?;
+        composer_db::models::session::update_status(&self.db.pool, id, &SessionStatus::Running)
+            .await?;
         composer_db::models::agent::update_status(
             &self.db.pool,
             &agent.id.to_string(),
             &AgentStatus::Busy,
-        ).await?;
+        )
+        .await?;
 
         // Spawn agent process with --resume flag — rollback on failure (fix #2)
-        if let Err(e) = self.process_manager
+        if let Err(e) = self
+            .process_manager
             .spawn(SpawnOptions {
                 session_id: session.id,
                 agent_id: agent.id,
@@ -447,17 +532,28 @@ impl SessionService {
                 auto_approve: true,
                 resume_session_id: Some(resume_id),
                 resume_at_message_id: None,
-                exit_on_result: req.exit_on_result,
+                // continue_chat overrides exit_on_result to keep the session alive
+                exit_on_result: if req.continue_chat {
+                    false
+                } else {
+                    req.exit_on_result
+                },
             })
             .await
         {
             // Rollback: set session to Failed, agent to Idle
             let _ = composer_db::models::session::update_status(
-                &self.db.pool, id, &SessionStatus::Failed,
-            ).await;
+                &self.db.pool,
+                id,
+                &SessionStatus::Failed,
+            )
+            .await;
             let _ = composer_db::models::agent::update_status(
-                &self.db.pool, &agent.id.to_string(), &AgentStatus::Idle,
-            ).await;
+                &self.db.pool,
+                &agent.id.to_string(),
+                &AgentStatus::Idle,
+            )
+            .await;
             return Err(anyhow::anyhow!("Failed to resume agent: {}", e));
         }
 
@@ -466,7 +562,11 @@ impl SessionService {
             .ok_or_else(|| anyhow::anyhow!("Session not found"))
     }
 
-    pub async fn retry_session(&self, id: &str, req: ResumeSessionRequest) -> anyhow::Result<Session> {
+    pub async fn retry_session(
+        &self,
+        id: &str,
+        req: ResumeSessionRequest,
+    ) -> anyhow::Result<Session> {
         let session = composer_db::models::session::find_by_id(&self.db.pool, id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
@@ -502,7 +602,10 @@ impl SessionService {
             match self.resume_session(id, req).await {
                 Ok(session) => return Ok(session),
                 Err(e) => {
-                    tracing::warn!("Resume failed during retry, falling back to new session: {}", e);
+                    tracing::warn!(
+                        "Resume failed during retry, falling back to new session: {}",
+                        e
+                    );
                     // Fall through to create a new session
                 }
             }
@@ -534,8 +637,8 @@ impl SessionService {
             None
         };
 
-        let repo_path = repo_path
-            .ok_or_else(|| anyhow::anyhow!("Cannot determine repo_path for retry"))?;
+        let repo_path =
+            repo_path.ok_or_else(|| anyhow::anyhow!("Cannot determine repo_path for retry"))?;
 
         self.create_session(CreateSessionRequest {
             agent_id: session.agent_id,
@@ -592,7 +695,14 @@ impl SessionService {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> anyhow::Result<Vec<SessionLog>> {
-        composer_db::models::session_log::list_by_session(&self.db.pool, session_id, since, limit, offset).await
+        composer_db::models::session_log::list_by_session(
+            &self.db.pool,
+            session_id,
+            since,
+            limit,
+            offset,
+        )
+        .await
     }
 
     pub async fn send_input(&self, id: &str, message: String) -> anyhow::Result<()> {
@@ -601,7 +711,10 @@ impl SessionService {
             .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
 
         if !matches!(session.status, SessionStatus::Running) {
-            return Err(anyhow::anyhow!("Session is not running (status: {:?})", session.status));
+            return Err(anyhow::anyhow!(
+                "Session is not running (status: {:?})",
+                session.status
+            ));
         }
 
         // Broadcast the user input as session output so it gets persisted and shown in the UI

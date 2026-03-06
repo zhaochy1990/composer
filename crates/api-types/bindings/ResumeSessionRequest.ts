@@ -5,4 +5,9 @@ export type ResumeSessionRequest = { prompt: string | null,
  * When true, close stdin after the agent produces a Result so the process
  * exits after one turn. Used internally by the workflow engine.
  */
-exit_on_result: boolean, };
+exit_on_result: boolean, 
+/**
+ * When true, resume the session for interactive multi-turn conversation
+ * (keeps the process alive after each result). Used for post-completion chat.
+ */
+continue_chat: boolean, };

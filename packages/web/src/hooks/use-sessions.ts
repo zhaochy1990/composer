@@ -47,10 +47,10 @@ export function useInterruptSession() {
 export function useResumeSession() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, prompt }: { id: string; prompt?: string }) =>
+        mutationFn: ({ id, prompt, continueChat }: { id: string; prompt?: string; continueChat?: boolean }) =>
             apiFetch<Session>(`/sessions/${id}/resume`, {
                 method: 'POST',
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({ prompt, continue_chat: continueChat }),
             }),
         onSuccess: (_data, { id }) => {
             queryClient.invalidateQueries({ queryKey: ['sessions'] });
@@ -88,7 +88,7 @@ export function useRetrySession() {
 export function useSessionLogs(id: string | undefined) {
     return useQuery({
         queryKey: ['sessions', id, 'logs'],
-        queryFn: () => apiFetch<SessionLog[]>(`/sessions/${id}/logs`),
+        queryFn: () => apiFetch<SessionLog[]>(`/sessions/${id}/logs?limit=5000`),
         enabled: !!id,
     });
 }

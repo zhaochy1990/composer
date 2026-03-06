@@ -155,7 +155,9 @@ impl WorkflowEngine {
         let canonical = feat_common_definition();
         validate_workflow_definition(&canonical)?;
 
-        if let Some(wf) = composer_db::models::workflow::find_by_name(&self.db.pool, FEAT_COMMON_NAME).await? {
+        if let Some(wf) =
+            composer_db::models::workflow::find_by_name(&self.db.pool, FEAT_COMMON_NAME).await?
+        {
             // Auto-update if the stored definition differs from the canonical one,
             // but only if there are no active (running/paused) workflow runs using it.
             if wf.definition != canonical {
@@ -170,10 +172,7 @@ impl WorkflowEngine {
                         Some(&canonical),
                     )
                     .await?;
-                    tracing::info!(
-                        "Updated built-in workflow '{}'",
-                        FEAT_COMMON_NAME,
-                    );
+                    tracing::info!("Updated built-in workflow '{}'", FEAT_COMMON_NAME,);
                     return Ok(updated);
                 } else {
                     tracing::info!(
@@ -185,11 +184,8 @@ impl WorkflowEngine {
             return Ok(wf);
         }
 
-        let wf = composer_db::models::workflow::create(
-            &self.db.pool,
-            FEAT_COMMON_NAME,
-            &canonical,
-        ).await?;
+        let wf = composer_db::models::workflow::create(&self.db.pool, FEAT_COMMON_NAME, &canonical)
+            .await?;
         tracing::info!("Created built-in workflow '{}'", FEAT_COMMON_NAME);
         Ok(wf)
     }
@@ -216,9 +212,9 @@ impl WorkflowEngine {
 
     /// Migrate existing workflow definitions from old step types to new consolidated types.
     async fn migrate_workflow_definitions(&self) -> anyhow::Result<()> {
-        let rows: Vec<(String, String)> = sqlx::query_as(
-            "SELECT id, definition FROM workflows"
-        ).fetch_all(&self.db.pool).await?;
+        let rows: Vec<(String, String)> = sqlx::query_as("SELECT id, definition FROM workflows")
+            .fetch_all(&self.db.pool)
+            .await?;
 
         for (id, def_json) in rows {
             let needs_migration = def_json.contains("\"step_type\":\"plan\"")
@@ -239,13 +235,22 @@ impl WorkflowEngine {
 
             let parse_result = serde_json::from_str::<serde_json::Value>(&def_json);
             if let Err(ref e) = parse_result {
-                tracing::warn!("Failed to parse workflow {} definition for migration: {}", id, e);
+                tracing::warn!(
+                    "Failed to parse workflow {} definition for migration: {}",
+                    id,
+                    e
+                );
             }
             if let Ok(mut value) = parse_result {
                 if let Some(steps) = value.get_mut("steps").and_then(|s| s.as_array_mut()) {
                     for step in steps {
-                        if let Some(st) = step.get("step_type").and_then(|v| v.as_str()).map(String::from) {
-                            let has_prompt = step.get("prompt_template")
+                        if let Some(st) = step
+                            .get("step_type")
+                            .and_then(|v| v.as_str())
+                            .map(String::from)
+                        {
+                            let has_prompt = step
+                                .get("prompt_template")
                                 .and_then(|v| v.as_str())
                                 .is_some_and(|s| !s.is_empty());
                             match st.as_str() {
@@ -495,12 +500,16 @@ impl WorkflowEngine {
                 let mode = step_def.session_mode.clone().unwrap_or(SessionMode::Resume);
                 match mode {
                     SessionMode::New => {
-                        self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, true)
-                            .await?;
+                        self.execute_agent_step(
+                            run_id, task, agent_id, step_index, &step_def, true,
+                        )
+                        .await?;
                     }
                     SessionMode::Resume => {
-                        self.execute_agent_step(run_id, task, agent_id, step_index, &step_def, false)
-                            .await?;
+                        self.execute_agent_step(
+                            run_id, task, agent_id, step_index, &step_def, false,
+                        )
+                        .await?;
                     }
                     SessionMode::Separate => {
                         self.execute_pr_review(run_id, task, agent_id, step_index, &step_def)
@@ -527,7 +536,9 @@ impl WorkflowEngine {
         step_def: &WorkflowStepDefinition,
         is_new_session: bool,
     ) -> anyhow::Result<()> {
-        let prompt = self.build_prompt(run_id, task, step_index, step_def).await?;
+        let prompt = self
+            .build_prompt(run_id, task, step_index, step_def)
+            .await?;
 
         // Create step output record
         let step_output = composer_db::models::workflow_step_output::create(
@@ -577,6 +588,7 @@ impl WorkflowEngine {
                     ResumeSessionRequest {
                         prompt: Some(prompt),
                         exit_on_result: true,
+                        continue_chat: false,
                     },
                 )
                 .await?
@@ -683,7 +695,9 @@ impl WorkflowEngine {
         step_index: i32,
         step_def: &WorkflowStepDefinition,
     ) -> anyhow::Result<()> {
-        let prompt = self.build_prompt(run_id, task, step_index, step_def).await?;
+        let prompt = self
+            .build_prompt(run_id, task, step_index, step_def)
+            .await?;
         let repo_path = self.get_repo_path(task).await?;
 
         // Create a NEW session for the reviewer (not the main session)
@@ -935,9 +949,9 @@ impl WorkflowEngine {
         } else {
             // Determine where to loop back: use step's loop_back_to if configured,
             // otherwise fall back to the closest preceding agent step.
-            let loop_back_index = step_def
-                .loop_back_to
-                .unwrap_or_else(|| self.find_preceding_agent_step(&workflow, run.current_step_index));
+            let loop_back_index = step_def.loop_back_to.unwrap_or_else(|| {
+                self.find_preceding_agent_step(&workflow, run.current_step_index)
+            });
             let task =
                 composer_db::models::task::find_by_id(&self.db.pool, &run.task_id.to_string())
                     .await?
@@ -1093,8 +1107,12 @@ impl WorkflowEngine {
             return Ok(String::new());
         }
 
-        let template = step_def.prompt_template.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Agentic step '{}' requires a prompt_template", step_def.name))?;
+        let template = step_def.prompt_template.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Agentic step '{}' requires a prompt_template",
+                step_def.name
+            )
+        })?;
 
         let step_outputs =
             composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
@@ -1110,8 +1128,10 @@ impl WorkflowEngine {
             let instructions = composer_db::models::project_instruction::list_by_project(
                 &self.db.pool,
                 &pid.to_string(),
-            ).await?;
-            match composer_db::models::project_instruction::format_instructions_block(&instructions) {
+            )
+            .await?;
+            match composer_db::models::project_instruction::format_instructions_block(&instructions)
+            {
                 Some(block) => format!("{}\n\n{}", block, base_task_context),
                 None => base_task_context,
             }
@@ -1128,9 +1148,15 @@ impl WorkflowEngine {
         for step_index in 0..=max_step {
             let key = format!("{{{{step_{}}}}}", step_index);
             if prompt.contains(&key) {
-                let latest_output = step_outputs.iter()
-                    .filter(|o| o.step_index == step_index
-                        && matches!(o.status, WorkflowStepStatus::Completed | WorkflowStepStatus::Rejected))
+                let latest_output = step_outputs
+                    .iter()
+                    .filter(|o| {
+                        o.step_index == step_index
+                            && matches!(
+                                o.status,
+                                WorkflowStepStatus::Completed | WorkflowStepStatus::Rejected
+                            )
+                    })
                     .last()
                     .and_then(|o| o.output.as_deref())
                     .unwrap_or("");
@@ -1142,16 +1168,23 @@ impl WorkflowEngine {
         // to human gates that follow the current step (i.e., the gate that
         // triggered this re-execution). Falls back to global latest if none found.
         if prompt.contains("{{rejection}}") {
-            let scoped = step_outputs.iter()
-                .filter(|o| o.step_type == WorkflowStepType::HumanGate
-                    && o.status == WorkflowStepStatus::Rejected
-                    && o.step_index > current_step_index)
+            let scoped = step_outputs
+                .iter()
+                .filter(|o| {
+                    o.step_type == WorkflowStepType::HumanGate
+                        && o.status == WorkflowStepStatus::Rejected
+                        && o.step_index > current_step_index
+                })
                 .last();
-            let fallback = step_outputs.iter()
-                .filter(|o| o.step_type == WorkflowStepType::HumanGate
-                    && o.status == WorkflowStepStatus::Rejected)
+            let fallback = step_outputs
+                .iter()
+                .filter(|o| {
+                    o.step_type == WorkflowStepType::HumanGate
+                        && o.status == WorkflowStepStatus::Rejected
+                })
                 .last();
-            let rejection_text = scoped.or(fallback)
+            let rejection_text = scoped
+                .or(fallback)
                 .and_then(|o| o.output.as_deref())
                 .unwrap_or("");
             if rejection_text.is_empty() {

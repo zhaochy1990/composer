@@ -485,6 +485,7 @@ mod session_service_tests {
                 ResumeSessionRequest {
                     prompt: None,
                     exit_on_result: false,
+                    continue_chat: false,
                 },
             )
             .await;

@@ -141,6 +141,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const isRunning = selectedSession?.status === 'running';
     const isPaused = selectedSession?.status === 'paused';
     const isFailed = selectedSession?.status === 'failed';
+    const isCompleted = selectedSession?.status === 'completed';
 
     // Shared panel body — used by both inline and overlay modes
     const panelContent = (
@@ -504,6 +505,17 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                     <span className="text-xs text-red-400">{(retryMutation.error as Error).message}</span>
                                 )}
                             </>
+                        )}
+                        {isCompleted && (
+                            <button
+                                type="button"
+                                onClick={() => resumeMutation.mutate({ id: selectedSession.id, continueChat: true })}
+                                disabled={resumeMutation.isPending}
+                                className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-blue-900/40 text-blue-300 border border-blue-700 hover:bg-blue-900/60 transition-colors disabled:opacity-50"
+                            >
+                                <Send className="w-3 h-3" />
+                                {resumeMutation.isPending ? 'Continuing...' : 'Continue Chat'}
+                            </button>
                         )}
                         {selectedSession.prompt && (
                             <span className="text-xs text-gray-500 truncate max-w-md" title={selectedSession.prompt}>

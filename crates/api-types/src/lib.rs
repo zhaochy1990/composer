@@ -380,6 +380,10 @@ pub struct ResumeSessionRequest {
     /// exits after one turn. Used internally by the workflow engine.
     #[serde(default)]
     pub exit_on_result: bool,
+    /// When true, resume the session for interactive multi-turn conversation
+    /// (keeps the process alive after each result). Used for post-completion chat.
+    #[serde(default)]
+    pub continue_chat: bool,
 }
 
 #[derive(Debug, Deserialize, TS)]

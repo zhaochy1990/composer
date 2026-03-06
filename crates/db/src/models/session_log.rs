@@ -31,15 +31,15 @@ pub async fn append(
     content: &str,
 ) -> anyhow::Result<()> {
     let log_type_str = serde_json::to_value(log_type)?
-        .as_str().unwrap_or("stdout").to_string();
-    sqlx::query(
-        "INSERT INTO session_logs (session_id, log_type, content) VALUES (?, ?, ?)"
-    )
-    .bind(session_id)
-    .bind(&log_type_str)
-    .bind(content)
-    .execute(pool)
-    .await?;
+        .as_str()
+        .unwrap_or("stdout")
+        .to_string();
+    sqlx::query("INSERT INTO session_logs (session_id, log_type, content) VALUES (?, ?, ?)")
+        .bind(session_id)
+        .bind(&log_type_str)
+        .bind(content)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -50,7 +50,7 @@ pub async fn list_by_session(
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> anyhow::Result<Vec<SessionLog>> {
-    let limit = limit.unwrap_or(500).min(5000);
+    let limit = limit.unwrap_or(5000).min(5000);
     let offset = offset.unwrap_or(0);
 
     let rows = if let Some(since) = since {
@@ -65,7 +65,7 @@ pub async fn list_by_session(
         .await?
     } else {
         sqlx::query_as::<_, SessionLogRow>(
-            "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC LIMIT ? OFFSET ?"
+            "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC LIMIT ? OFFSET ?",
         )
         .bind(session_id)
         .bind(limit)

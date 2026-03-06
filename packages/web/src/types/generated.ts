@@ -219,6 +219,8 @@ export interface ResumeSessionRequest {
     prompt?: string;
     /** Internal: close stdin after Result so process exits after one turn. Used by workflow engine. */
     exit_on_result?: boolean;
+    /** Resume session for interactive multi-turn conversation. Used for post-completion chat. */
+    continue_chat?: boolean;
 }
 
 export interface SendSessionInputRequest {
