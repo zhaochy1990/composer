@@ -11,3 +11,4 @@ packages/web/dist
 crates/api-types/bindings/
 packages/web/playwright-report/
 packages/web/test-results/
+*.tsbuildinfo
