@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Check, Circle, Clock, AlertTriangle, X, Loader2, RotateCcw, SkipForward, Ban } from 'lucide-react';
-import type { WorkflowRun, WorkflowStepType, WorkflowStepStatus, Workflow, WorkflowStepDefinition } from '@/types/generated';
+import type { WorkflowRun, WorkflowStepType, WorkflowStepStatus, WorkflowStepOutput, Workflow, WorkflowStepDefinition } from '@/types/generated';
 import { useWorkflowStepOutputs, useResumeWorkflowRun } from '@/hooks/use-workflows';
 import type { ReviewPanelData } from './WorkflowReviewSidePanel';
 
@@ -82,13 +82,22 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData }: Workfl
     useEffect(() => {
         if (!onReviewData) return;
         if (humanGateSteps.length > 0 && stepOutputs) {
-            const planStep = workflow.definition.steps.find(s => s.step_type === 'agentic');
+            // Find the agentic step immediately preceding the active human gate
+            const activeGateId = humanGateSteps[0].step_id;
+            const gateIndex = workflow.definition.steps.findIndex(s => s.id === activeGateId);
+            let precedingStep: WorkflowStepDefinition | undefined;
+            for (let i = gateIndex - 1; i >= 0; i--) {
+                if (workflow.definition.steps[i].step_type === 'agentic') {
+                    precedingStep = workflow.definition.steps[i];
+                    break;
+                }
+            }
             let content = '';
-            if (planStep) {
-                const planOutputs = stepOutputs
-                    .filter(o => o.step_id === planStep.id && o.status === 'completed');
-                const planOutput = planOutputs.length > 0 ? planOutputs[planOutputs.length - 1] : null;
-                content = planOutput?.output ?? '';
+            if (precedingStep) {
+                const outputs = stepOutputs
+                    .filter(o => o.step_id === precedingStep!.id && o.status === 'completed');
+                const latestOutput = outputs.length > 0 ? outputs[outputs.length - 1] : null;
+                content = latestOutput?.output ?? '';
             }
             onReviewData({
                 content,
@@ -99,8 +108,8 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData }: Workfl
         } else {
             onReviewData(null);
         }
-        return () => onReviewData(null);
-    }, [humanGateSteps.length, stepOutputs, onReviewData]);
+        // No cleanup — avoids flicker from cleanup nulling then effect re-setting
+    }, [humanGateSteps.length, stepOutputs, onReviewData, workflow, workflowRun.id]);
 
     function handleRetryResume(stepId: string, action: 'continue_loop' | 'skip_to_next') {
         resumeRun.mutate({
@@ -111,7 +120,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData }: Workfl
     }
 
     // Build a map of step_id -> latest output
-    const latestOutputMap = new Map<string, (typeof stepOutputs extends (infer T)[] | undefined ? T : never)>();
+    const latestOutputMap = new Map<string, WorkflowStepOutput>();
     if (stepOutputs) {
         for (const output of stepOutputs) {
             const existing = latestOutputMap.get(output.step_id);

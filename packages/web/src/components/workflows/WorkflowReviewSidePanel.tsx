@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import type { WorkflowStepOutput, WorkflowStepDefinition } from '@/types/generated';
 import { MarkdownContent } from '@/components/sessions/MarkdownContent';
@@ -20,6 +20,11 @@ export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePan
     const { content, humanGateSteps, steps, workflowRunId } = data;
     const submitDecision = useSubmitWorkflowDecision();
     const [comments, setComments] = useState<Record<string, string>>({});
+
+    // Reset comments when the workflow run changes
+    useEffect(() => {
+        setComments({});
+    }, [workflowRunId]);
 
     function handleDecision(stepId: string, approved: boolean) {
         submitDecision.mutate({

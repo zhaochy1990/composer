@@ -305,7 +305,7 @@ impl WorkflowEngine {
         if let Some(wf) = composer_db::models::workflow::find_by_name(&self.db.pool, FEAT_COMMON_NAME).await? {
             if wf.definition != canonical {
                 let active_runs =
-                    composer_db::models::workflow_run::find_running(&self.db.pool).await?;
+                    composer_db::models::workflow_run::find_active(&self.db.pool).await?;
                 let has_active_runs = active_runs.iter().any(|r| r.workflow_id == wf.id);
                 if !has_active_runs {
                     let updated = composer_db::models::workflow::update(
@@ -421,13 +421,27 @@ impl WorkflowEngine {
 
         let run = composer_db::models::workflow_run::create(&self.db.pool, workflow_id, task_id).await?;
 
-        composer_db::models::task::update_workflow_run_id(
-            &self.db.pool,
-            task_id,
-            &run.id.to_string(),
-        ).await?;
+        // Atomic conditional update: claim the task for this workflow run.
+        // If another concurrent start() already moved this task out of backlog,
+        // affected_rows will be 0 and we bail out.
+        let result = sqlx::query(
+            "UPDATE tasks SET workflow_run_id = ?, status = 'in_progress', \
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+             WHERE id = ? AND status = 'backlog' AND workflow_run_id IS NULL"
+        )
+        .bind(&run.id.to_string())
+        .bind(task_id)
+        .execute(&self.db.pool)
+        .await?;
 
-        composer_db::models::task::update_status(&self.db.pool, task_id, &TaskStatus::InProgress).await?;
+        if result.rows_affected() == 0 {
+            // Another call won the race — clean up orphaned run
+            sqlx::query("DELETE FROM workflow_runs WHERE id = ?")
+                .bind(&run.id.to_string())
+                .execute(&self.db.pool)
+                .await?;
+            return Err(anyhow::anyhow!("Task was already claimed by another workflow run"));
+        }
         self.event_bus.broadcast(WsEvent::TaskMoved {
             task_id: task.id,
             from_status: TaskStatus::Backlog,
@@ -437,7 +451,11 @@ impl WorkflowEngine {
 
         // Advance frontier to kick off entry steps
         let run_id = run.id.to_string();
-        self.advance_frontier(&run_id, &workflow, &task, agent_id).await?;
+        {
+            let lock = self.run_lock(&run_id);
+            let _guard = lock.lock().await;
+            self.advance_frontier(&run_id, &workflow, &task, agent_id).await?;
+        }
 
         composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id)
             .await?
@@ -495,21 +513,18 @@ impl WorkflowEngine {
 
                     // Create a new Pending output for the loop target step so
                     // compute_ready_steps picks it up for re-execution
-                    let step_def = workflow.definition.steps.iter().find(|s| s.id == *step_id);
-                    if let Some(def) = step_def {
-                        if let Some(ref loop_target) = def.loop_back_to {
-                            let target_def = workflow.definition.steps.iter()
-                                .find(|s| s.id == *loop_target);
-                            if let Some(td) = target_def {
-                                composer_db::models::workflow_step_output::create(
-                                    &self.db.pool,
-                                    run_id,
-                                    loop_target,
-                                    &td.step_type,
-                                    &WorkflowStepStatus::Pending,
-                                    None,
-                                ).await?;
-                            }
+                    if let Some(ref loop_target) = step_def.loop_back_to {
+                        let target_def = workflow.definition.steps.iter()
+                            .find(|s| s.id == *loop_target);
+                        if let Some(td) = target_def {
+                            composer_db::models::workflow_step_output::create(
+                                &self.db.pool,
+                                run_id,
+                                loop_target,
+                                &td.step_type,
+                                &WorkflowStepStatus::Pending,
+                                None,
+                            ).await?;
                         }
                     }
                 }
@@ -762,7 +777,7 @@ impl WorkflowEngine {
                 }
                 if let Some(def) = step_def {
                     if let Some(ref loop_target) = def.loop_back_to {
-                        if self.should_loop(&run_id, &workflow, def, loop_target).await? {
+                        if self.should_loop(&run_id, def, loop_target).await? {
                             tracing::info!(
                                 "Workflow run {}: looping from step '{}' back to '{}'",
                                 run_id, step_output.step_id, loop_target
@@ -1017,7 +1032,7 @@ impl WorkflowEngine {
         for step_id in ready_steps {
             let step_def = workflow.definition.steps.iter()
                 .find(|s| s.id == step_id)
-                .unwrap();
+                .ok_or_else(|| anyhow::anyhow!("Step '{}' not found in workflow definition", step_id))?;
 
             match step_def.step_type {
                 WorkflowStepType::Agentic => {
@@ -1231,11 +1246,11 @@ impl WorkflowEngine {
         };
 
         // Update step output with session_id
-        sqlx::query("UPDATE workflow_step_outputs SET session_id = ? WHERE id = ?")
-            .bind(&session.id.to_string())
-            .bind(&step_output.id.to_string())
-            .execute(&self.db.pool)
-            .await?;
+        composer_db::models::workflow_step_output::update_session_id(
+            &self.db.pool,
+            &step_output.id.to_string(),
+            &session.id.to_string(),
+        ).await?;
 
         composer_db::models::workflow_run::update_status(
             &self.db.pool,
@@ -1320,6 +1335,17 @@ impl WorkflowEngine {
         let prompt = self.build_prompt(run_id, task, step_def).await?;
         let repo_path = self.get_repo_path(task).await?;
 
+        // Create step output BEFORE starting the session so that
+        // on_session_completed can always find the matching record.
+        let step_output = composer_db::models::workflow_step_output::create(
+            &self.db.pool,
+            run_id,
+            &step_def.id,
+            &step_def.step_type,
+            &WorkflowStepStatus::Running,
+            None,
+        ).await?;
+
         let session = self
             .session_service
             .create_session(CreateSessionRequest {
@@ -1333,13 +1359,11 @@ impl WorkflowEngine {
             })
             .await?;
 
-        let step_output = composer_db::models::workflow_step_output::create(
+        // Update step output with the session_id
+        composer_db::models::workflow_step_output::update_session_id(
             &self.db.pool,
-            run_id,
-            &step_def.id,
-            &step_def.step_type,
-            &WorkflowStepStatus::Running,
-            Some(&session.id.to_string()),
+            &step_output.id.to_string(),
+            &session.id.to_string(),
         ).await?;
 
         composer_db::models::workflow_run::update_status(
@@ -1352,9 +1376,15 @@ impl WorkflowEngine {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
         self.event_bus.broadcast(WsEvent::WorkflowRunUpdated(run));
+
+        let updated_step = composer_db::models::workflow_step_output::find_by_id(
+            &self.db.pool,
+            &step_output.id.to_string(),
+        ).await?
+        .ok_or_else(|| anyhow::anyhow!("Step output not found after write"))?;
         self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
             workflow_run_id: run_id.parse()?,
-            step: step_output,
+            step: updated_step,
         });
 
         Ok(())
@@ -1404,7 +1434,9 @@ impl WorkflowEngine {
         prompt = prompt.replace("{{task}}", &task_context);
 
         // Inject {{step:step_id}} — resolves to latest output for step
-        let step_id_pattern = regex::Regex::new(r"\{\{step:(\w+)\}\}").unwrap();
+        static STEP_ID_PATTERN: std::sync::LazyLock<regex::Regex> =
+            std::sync::LazyLock::new(|| regex::Regex::new(r"\{\{step:([\w-]+)\}\}").unwrap());
+        let step_id_pattern = &*STEP_ID_PATTERN;
         let prompt_clone = prompt.clone();
         for cap in step_id_pattern.captures_iter(&prompt_clone) {
             let full_match = &cap[0];
@@ -1509,7 +1541,6 @@ impl WorkflowEngine {
     pub async fn should_loop(
         &self,
         run_id: &str,
-        _workflow: &Workflow,
         step_def: &WorkflowStepDefinition,
         loop_target: &str,
     ) -> anyhow::Result<bool> {
@@ -1520,6 +1551,9 @@ impl WorkflowEngine {
                 .filter(|o| o.step_id == loop_target && matches!(o.status, WorkflowStepStatus::Completed))
                 .count() as i32;
 
+            if target_completed_count == 0 {
+                return Ok(false);
+            }
             let retries_done = (target_completed_count - 1).max(0);
             if retries_done >= max {
                 return Ok(false);

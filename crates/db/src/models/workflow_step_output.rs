@@ -169,6 +169,15 @@ pub async fn update_status_and_output(
     Ok(())
 }
 
+pub async fn update_session_id(pool: &SqlitePool, id: &str, session_id: &str) -> anyhow::Result<()> {
+    sqlx::query("UPDATE workflow_step_outputs SET session_id = ? WHERE id = ?")
+        .bind(session_id)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Find step output by session_id (for review sessions).
 pub async fn find_by_session(pool: &SqlitePool, session_id: &str) -> anyhow::Result<Option<WorkflowStepOutput>> {
     let row = sqlx::query_as::<_, StepOutputRow>(

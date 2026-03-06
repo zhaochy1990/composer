@@ -132,6 +132,13 @@ export function useWebSocket() {
                     break;
                 }
 
+                case 'SessionResumeIdCaptured': {
+                    queryClient.invalidateQueries({
+                        queryKey: ['sessions', parsed.payload.session_id],
+                    });
+                    break;
+                }
+
                 // Worktree events
                 case 'WorktreeCreated':
                 case 'WorktreeDeleted': {

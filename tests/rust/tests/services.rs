@@ -1231,9 +1231,9 @@ mod workflow_tests {
         assert_eq!(step_def.loop_back_to, Some("auto_review".to_string()));
         assert_eq!(step_def.max_retries, Some(3));
 
-        // No completions of target step yet → should loop
-        let result = engine.should_loop(&run_id, &wf, step_def, "auto_review").await.unwrap();
-        assert!(result, "should loop when target has no completions");
+        // No completions of target step yet → should NOT loop (crash recovery guard)
+        let result = engine.should_loop(&run_id, step_def, "auto_review").await.unwrap();
+        assert!(!result, "should not loop when target has no completions");
 
         // Simulate completions
         for _ in 0..3 {
@@ -1242,7 +1242,7 @@ mod workflow_tests {
                 &WorkflowStepStatus::Completed, None,
             ).await.unwrap();
         }
-        let result = engine.should_loop(&run_id, &wf, step_def, "auto_review").await.unwrap();
+        let result = engine.should_loop(&run_id, step_def, "auto_review").await.unwrap();
         assert!(result, "should loop after 3 completions (2 retries done, max is 3)");
 
         // 4th completion → should NOT loop
@@ -1250,7 +1250,7 @@ mod workflow_tests {
             &db.pool, &run_id, "auto_review", &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Completed, None,
         ).await.unwrap();
-        let result = engine.should_loop(&run_id, &wf, step_def, "auto_review").await.unwrap();
+        let result = engine.should_loop(&run_id, step_def, "auto_review").await.unwrap();
         assert!(!result, "should stop looping after 4 completions (3 retries = max)");
     }
 

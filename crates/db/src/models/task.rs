@@ -210,7 +210,7 @@ pub async fn update_status(pool: &SqlitePool, id: &str, status: &TaskStatus) -> 
         .as_str().unwrap_or("backlog").to_string();
     sqlx::query(
         "UPDATE tasks SET status = ?, \
-         completed_at = CASE WHEN ? = 'done' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END, \
+         completed_at = CASE WHEN ? = 'done' THEN COALESCE(completed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE NULL END, \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
     )
     .bind(&status_str).bind(&status_str).bind(id).execute(pool).await?;
@@ -242,9 +242,10 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
 /// Append PR URLs to a task, deduplicating against existing entries.
 /// Returns true if any new URLs were actually added.
 pub async fn append_pr_urls(pool: &SqlitePool, id: &str, new_urls: &[String]) -> anyhow::Result<bool> {
+    let mut tx = pool.begin().await?;
     let row: Option<(String,)> = sqlx::query_as("SELECT pr_urls FROM tasks WHERE id = ?")
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?;
     let existing_json = row.map(|r| r.0).unwrap_or_else(|| "[]".to_string());
     let mut urls: Vec<String> = serde_json::from_str(&existing_json).unwrap_or_default();
@@ -261,7 +262,8 @@ pub async fn append_pr_urls(pool: &SqlitePool, id: &str, new_urls: &[String]) ->
     sqlx::query("UPDATE tasks SET pr_urls = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
         .bind(&json)
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(true)
 }

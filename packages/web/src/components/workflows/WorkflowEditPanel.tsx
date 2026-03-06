@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { X, Plus, Trash2, AlertCircle, Lock, Copy } from 'lucide-react';
 import type { Workflow, WorkflowStepDefinition, WorkflowStepType, SessionMode } from '@/types/generated';
 import { useUpdateWorkflow, useDeleteWorkflow, useCloneWorkflow } from '@/hooks/use-workflows';
@@ -289,7 +289,7 @@ function PropertyPanel({
     const otherIds = allStepIds.filter(id => id !== step.id);
 
     return (
-        <div className="w-[380px] shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto p-4 space-y-3">
+        <div className="w-[520px] shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto p-4 space-y-3">
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-200">Step Properties</h3>
                 {!readOnly && (
@@ -404,8 +404,8 @@ function PropertyPanel({
                             onChange={e => onUpdate({ prompt_template: e.target.value || undefined })}
                             readOnly={readOnly}
                             placeholder="{{task}}, {{step:id}}, {{rejection}}"
-                            rows={5}
-                            className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-100 placeholder-gray-600 resize-none font-mono ${
+                            rows={12}
+                            className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-100 placeholder-gray-600 resize-y font-mono ${
                                 readOnly ? 'cursor-default' : `focus:outline-none focus:border-blue-500 ${!step.prompt_template?.trim() ? 'border-red-600' : ''}`
                             }`}
                         />
@@ -532,6 +532,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
 
     const updateWorkflow = useUpdateWorkflow();
     const deleteWorkflow = useDeleteWorkflow();
+    const stepCounterRef = useRef(workflow.definition.steps.length);
 
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -545,7 +546,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     useEffect(() => {
         setNodes(layoutNodes(steps, nodePositions));
         setEdges(buildEdges(steps));
-    }, [steps]);
+    }, [steps, nodePositions]);
 
     // Reset on workflow change
     useEffect(() => {
@@ -561,9 +562,10 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
         onNodesChange(changes);
         for (const change of changes) {
             if (change.type === 'position' && change.position) {
+                const pos = change.position;
                 setNodePositions(prev => {
                     const next = new Map(prev);
-                    next.set(change.id, change.position!);
+                    next.set(change.id, pos);
                     return next;
                 });
             }
@@ -583,7 +585,8 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     }
 
     function addStep() {
-        const newId = `step_${steps.length + 1}`;
+        stepCounterRef.current += 1;
+        const newId = `step_${stepCounterRef.current}`;
         const newStep: WorkflowStepDefinition = {
             id: newId,
             step_type: 'agentic',

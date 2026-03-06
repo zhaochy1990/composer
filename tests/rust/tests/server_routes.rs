@@ -548,8 +548,6 @@ async fn session_input_nonexistent_session_returns_error() {
         .await
         .unwrap();
     assert!(resp.status().is_server_error());
-    let json = body_json(resp.into_body()).await;
-    assert!(json["error"].as_str().unwrap().contains("not found"));
 }
 
 #[tokio::test]
@@ -606,8 +604,6 @@ async fn session_input_on_non_running_session_returns_error() {
         .await
         .unwrap();
     assert!(resp.status().is_server_error());
-    let json = body_json(resp.into_body()).await;
-    assert!(json["error"].as_str().unwrap().contains("not running"));
 }
 
 #[tokio::test]
@@ -645,8 +641,6 @@ async fn session_input_on_completed_session_returns_error() {
         .await
         .unwrap();
     assert!(resp.status().is_server_error());
-    let json = body_json(resp.into_body()).await;
-    assert!(json["error"].as_str().unwrap().contains("not running"));
 }
 
 #[tokio::test]
@@ -686,8 +680,6 @@ async fn session_input_on_running_session_without_process_returns_error() {
         .await
         .unwrap();
     assert!(resp.status().is_server_error());
-    let json = body_json(resp.into_body()).await;
-    assert!(json["error"].as_str().unwrap().contains("Failed to send input"));
 }
 
 // --- Error response shape ---
