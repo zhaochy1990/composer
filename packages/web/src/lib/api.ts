@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 const BASE_URL = '/api';
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -17,8 +19,9 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
             const body = await res.json();
             if (body?.error) message = body.error;
         } catch {
-            // ignore parse failures
+            logger.warn('Failed to parse API error body', { path });
         }
+        logger.error(`API error: ${message}`, { path, status: res.status });
         throw new Error(message);
     }
     if (res.status === 204) return undefined as T;

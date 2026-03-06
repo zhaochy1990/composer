@@ -20,6 +20,7 @@ async fn list_worktrees(State(state): State<Arc<AppState>>) -> Result<Json<Vec<W
 }
 
 async fn cleanup_worktree(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), ServiceError> {
+    tracing::info!(worktree_id = %id, "API: cleanup worktree");
     state.services.worktrees.cleanup(&id).await?;
     Ok(())
 }

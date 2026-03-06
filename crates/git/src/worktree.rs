@@ -28,7 +28,10 @@ pub async fn create_worktree(
     let worktree_dir = repo_path.join(".composer").join("worktrees").join(name);
     let branch_name = format!("composer/{}", name);
 
+    tracing::info!(name = %name, path = %worktree_dir.display(), "Creating git worktree");
+
     if worktree_dir.exists() {
+        tracing::warn!(path = %worktree_dir.display(), "Worktree already exists");
         return Err(GitWorktreeError::AlreadyExists(worktree_dir));
     }
 
@@ -52,8 +55,11 @@ pub async fn create_worktree(
     let output = cmd.output().await?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(name = %name, error = %stderr, "git worktree add failed");
         return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
     }
+
+    tracing::info!(name = %name, branch = %branch_name, path = %worktree_dir.display(), "Git worktree created");
 
     Ok(WorktreeInfo {
         worktree_path: worktree_dir,
@@ -67,6 +73,8 @@ pub async fn remove_worktree(
     worktree_path: &Path,
     branch_name: &str,
 ) -> Result<(), GitWorktreeError> {
+    tracing::info!(path = %worktree_path.display(), branch = %branch_name, "Removing git worktree");
+
     let output = Command::new("git")
         .current_dir(repo_path)
         .args(["worktree", "remove", "--force"])
@@ -75,22 +83,31 @@ pub async fn remove_worktree(
         .await?;
 
     if !output.status.success() {
+        tracing::warn!(path = %worktree_path.display(), "git worktree remove failed, falling back to rm -rf");
         if worktree_path.exists() {
             tokio::fs::remove_dir_all(worktree_path).await?;
         }
     }
 
-    let _ = Command::new("git")
+    if let Err(e) = Command::new("git")
         .current_dir(repo_path)
         .args(["worktree", "prune"])
         .output()
-        .await;
+        .await
+    {
+        tracing::debug!(error = %e, "git worktree prune failed");
+    }
 
-    let _ = Command::new("git")
+    if let Err(e) = Command::new("git")
         .current_dir(repo_path)
         .args(["branch", "-D", branch_name])
         .output()
-        .await;
+        .await
+    {
+        tracing::debug!(branch = %branch_name, error = %e, "git branch -D failed");
+    }
+
+    tracing::info!(path = %worktree_path.display(), "Git worktree removed");
 
     Ok(())
 }
@@ -139,6 +156,7 @@ pub async fn list_worktrees(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(error = %stderr, "git worktree list failed");
         return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
     }
 

@@ -49,6 +49,7 @@ pub async fn create(
     prompt: &str,
     name: Option<&str>,
 ) -> anyhow::Result<Session> {
+    tracing::debug!(agent_id = %agent_id, "DB: creating session");
     let id = Uuid::new_v4().to_string();
 
     sqlx::query(
@@ -147,6 +148,7 @@ pub async fn update_status(
     id: &str,
     status: &SessionStatus,
 ) -> anyhow::Result<()> {
+    tracing::debug!(session_id = %id, status = ?status, "DB: updating session status");
     let status_str = match status {
         SessionStatus::Created => "created",
         SessionStatus::Running => "running",
@@ -175,6 +177,7 @@ pub async fn update_status(
 
 /// Mark all sessions in "running" status as "failed" (used on server startup to recover orphaned sessions).
 pub async fn fail_orphaned_running(pool: &SqlitePool) -> anyhow::Result<u64> {
+    tracing::debug!("DB: failing orphaned running sessions");
     let result = sqlx::query(
         "UPDATE sessions SET \
          status = 'failed', \

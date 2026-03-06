@@ -18,6 +18,7 @@ impl ProjectService {
     // ---- Project CRUD ----
 
     pub async fn create(&self, req: CreateProjectRequest) -> anyhow::Result<Project> {
+        tracing::info!(name = %req.name, "Creating project");
         let project = composer_db::models::project::create(
             &self.db.pool,
             &req.name,
@@ -49,6 +50,7 @@ impl ProjectService {
     }
 
     pub async fn delete(&self, id: &str) -> anyhow::Result<()> {
+        tracing::info!(project_id = %id, "Deleting project");
         let uuid: uuid::Uuid = id.parse()?;
         composer_db::models::project::delete(&self.db.pool, id).await?;
         self.event_bus.broadcast(WsEvent::ProjectDeleted { project_id: uuid });
@@ -62,6 +64,7 @@ impl ProjectService {
         project_id: &str,
         req: AddProjectRepositoryRequest,
     ) -> anyhow::Result<ProjectRepository> {
+        tracing::info!(project_id = %project_id, path = %req.local_path, "Adding repository to project");
         // Validate project exists
         composer_db::models::project::find_by_id(&self.db.pool, project_id)
             .await?
@@ -70,13 +73,16 @@ impl ProjectService {
         // Validate path is absolute and exists
         let path = Path::new(&req.local_path);
         if !path.is_absolute() {
+            tracing::warn!(project_id = %project_id, path = %req.local_path, "Repository path is not absolute");
             anyhow::bail!("local_path must be an absolute path");
         }
         if !path.exists() {
+            tracing::warn!(project_id = %project_id, path = %req.local_path, "Repository path does not exist");
             anyhow::bail!("local_path does not exist: {}", req.local_path);
         }
         // Validate it's a git repo
         if !path.join(".git").exists() {
+            tracing::warn!(project_id = %project_id, path = %req.local_path, "Path is not a git repository");
             anyhow::bail!("local_path is not a git repository: {}", req.local_path);
         }
 
@@ -122,6 +128,7 @@ impl ProjectService {
     }
 
     pub async fn remove_repository(&self, project_id: &str, repo_id: &str) -> anyhow::Result<()> {
+        tracing::info!(project_id = %project_id, repo_id = %repo_id, "Removing repository from project");
         let pid: uuid::Uuid = project_id.parse()?;
         let rid: uuid::Uuid = repo_id.parse()?;
         composer_db::models::project_repository::delete(&self.db.pool, project_id, repo_id).await?;
@@ -213,6 +220,7 @@ impl ProjectService {
     }
 
     pub async fn remove_instruction(&self, project_id: &str, instruction_id: &str) -> anyhow::Result<()> {
+        tracing::info!(project_id = %project_id, instruction_id = %instruction_id, "Removing instruction from project");
         let pid: uuid::Uuid = project_id.parse()?;
         let iid: uuid::Uuid = instruction_id.parse()?;
         composer_db::models::project_instruction::delete(&self.db.pool, project_id, instruction_id).await?;

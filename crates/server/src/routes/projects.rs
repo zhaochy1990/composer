@@ -25,6 +25,7 @@ async fn list_instructions(State(state): State<Arc<AppState>>, Path(id): Path<St
 }
 
 async fn add_instruction(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<AddProjectInstructionRequest>) -> Result<Json<ProjectInstruction>, ServiceError> {
+    tracing::info!(project_id = %id, "API: add instruction");
     let instruction = state.services.projects.add_instruction(&id, req).await?;
     Ok(Json(instruction))
 }
@@ -42,6 +43,7 @@ async fn remove_instruction(
     State(state): State<Arc<AppState>>,
     Path((id, instr_id)): Path<(String, String)>,
 ) -> Result<(), ServiceError> {
+    tracing::info!(project_id = %id, instruction_id = %instr_id, "API: remove instruction");
     state.services.projects.remove_instruction(&id, &instr_id).await?;
     Ok(())
 }
@@ -52,6 +54,7 @@ async fn list_projects(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Pr
 }
 
 async fn create_project(State(state): State<Arc<AppState>>, Json(req): Json<CreateProjectRequest>) -> Result<Json<Project>, ServiceError> {
+    tracing::info!(name = %req.name, "API: create project");
     let project = state.services.projects.create(req).await?;
     Ok(Json(project))
 }
@@ -68,6 +71,7 @@ async fn update_project(State(state): State<Arc<AppState>>, Path(id): Path<Strin
 }
 
 async fn delete_project(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), ServiceError> {
+    tracing::info!(project_id = %id, "API: delete project");
     state.services.projects.delete(&id).await?;
     Ok(())
 }
@@ -78,6 +82,7 @@ async fn list_repositories(State(state): State<Arc<AppState>>, Path(id): Path<St
 }
 
 async fn add_repository(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<AddProjectRepositoryRequest>) -> Result<Json<ProjectRepository>, ServiceError> {
+    tracing::info!(project_id = %id, "API: add repository");
     let repo = state.services.projects.add_repository(&id, req).await?;
     Ok(Json(repo))
 }
@@ -97,6 +102,7 @@ async fn remove_repository(
     State(state): State<Arc<AppState>>,
     Path((id, repo_id)): Path<(String, String)>,
 ) -> Result<(), ServiceError> {
+    tracing::info!(project_id = %id, repo_id = %repo_id, "API: remove repository");
     state.services.projects.remove_repository(&id, &repo_id).await?;
     Ok(())
 }

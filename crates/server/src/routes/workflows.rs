@@ -25,6 +25,7 @@ async fn create_workflow(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateWorkflowRequest>,
 ) -> Result<Json<Workflow>, ServiceError> {
+    tracing::info!(name = %req.name, "API: create workflow");
     composer_services::workflow_engine::validate_dag(&req.definition)
         .map_err(|errs| ServiceError::BadRequest(errs.join(", ")))?;
     let workflow = composer_db::models::workflow::create(
@@ -61,6 +62,7 @@ async fn update_workflow(
     Path(id): Path<String>,
     Json(req): Json<UpdateWorkflowRequest>,
 ) -> Result<Json<Workflow>, ServiceError> {
+    tracing::debug!(workflow_id = %id, "API: update workflow");
     // Don't allow editing templates
     let existing = composer_db::models::workflow::find_by_id(
         &state.services.workflows.db().pool,
@@ -83,6 +85,7 @@ async fn delete_workflow(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<(), ServiceError> {
+    tracing::info!(workflow_id = %id, "API: delete workflow");
     let existing = composer_db::models::workflow::find_by_id(
         &state.services.workflows.db().pool,
         &id,
@@ -111,6 +114,7 @@ async fn clone_workflow(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<Workflow>, ServiceError> {
+    tracing::info!(workflow_id = %id, "API: clone workflow");
     let source = composer_db::models::workflow::find_by_id(
         &state.services.workflows.db().pool,
         &id,
@@ -140,6 +144,7 @@ async fn start_workflow(
     Path(task_id): Path<String>,
     Json(req): Json<StartWorkflowRequest>,
 ) -> Result<Json<WorkflowRun>, ServiceError> {
+    tracing::info!(task_id = %task_id, workflow_id = %req.workflow_id, "API: start workflow");
     let task = state.services.tasks.get(&task_id).await?
         .ok_or_else(|| ServiceError::NotFound(format!("Task {} not found", task_id)))?;
     if !matches!(task.status, TaskStatus::Backlog) {
@@ -169,6 +174,7 @@ async fn submit_decision(
     Path(id): Path<String>,
     Json(req): Json<WorkflowDecisionRequest>,
 ) -> Result<Json<WorkflowRun>, ServiceError> {
+    tracing::info!(run_id = %id, step_id = %req.step_id, approved = %req.approved, "API: submit workflow decision");
     let run = state.services.workflows.submit_decision(
         &id,
         &req.step_id,
@@ -183,6 +189,7 @@ async fn resume_workflow_run(
     Path(id): Path<String>,
     Json(req): Json<WorkflowResumeRequest>,
 ) -> Result<Json<WorkflowRun>, ServiceError> {
+    tracing::info!(run_id = %id, "API: resume workflow run");
     let run = state.services.workflows.resume_run(&id, &req).await?;
     Ok(Json(run))
 }

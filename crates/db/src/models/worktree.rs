@@ -41,6 +41,7 @@ pub async fn create(
     worktree_path: &str,
     branch_name: &str,
 ) -> anyhow::Result<Worktree> {
+    tracing::debug!(session_id = %session_id, branch = %branch_name, "DB: creating worktree record");
     let id = Uuid::new_v4().to_string();
 
     sqlx::query(
@@ -82,6 +83,7 @@ pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Worktree>> {
 }
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorktreeStatus) -> anyhow::Result<()> {
+    tracing::debug!(worktree_id = %id, status = ?status, "DB: updating worktree status");
     let status_str = serde_json::to_value(status)?
         .as_str().unwrap_or("active").to_string();
     sqlx::query("UPDATE worktrees SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")

@@ -38,6 +38,7 @@ pub async fn create(
     workflow_id: &str,
     task_id: &str,
 ) -> anyhow::Result<WorkflowRun> {
+    tracing::debug!(workflow_id = %workflow_id, task_id = %task_id, "DB: creating workflow run");
     let id = Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO workflow_runs (id, workflow_id, task_id) VALUES (?, ?, ?)"
@@ -86,6 +87,7 @@ pub async fn find_by_step_session(pool: &SqlitePool, session_id: &str) -> anyhow
 }
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorkflowRunStatus) -> anyhow::Result<()> {
+    tracing::debug!(run_id = %id, status = ?status, "DB: updating workflow run status");
     let status_str = serde_json::to_value(status)?
         .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize workflow run status"))?.to_string();
     sqlx::query(

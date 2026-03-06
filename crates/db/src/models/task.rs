@@ -60,6 +60,7 @@ pub async fn create(
     assigned_agent_id: Option<&str>,
     workflow_id: Option<&str>,
 ) -> anyhow::Result<Task> {
+    tracing::debug!(title = %title, "DB: creating task");
     let id = Uuid::new_v4().to_string();
     let priority = priority.unwrap_or(0);
     let status_str = status
@@ -206,6 +207,7 @@ pub async fn update(
 }
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &TaskStatus) -> anyhow::Result<()> {
+    tracing::debug!(task_id = %id, status = ?status, "DB: updating task status");
     let status_str = serde_json::to_value(status)?
         .as_str().unwrap_or("backlog").to_string();
     sqlx::query(
@@ -234,6 +236,7 @@ pub async fn list_by_project(pool: &SqlitePool, project_id: &str) -> anyhow::Res
 }
 
 pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
+    tracing::debug!(task_id = %id, "DB: deleting task");
     sqlx::query("DELETE FROM tasks WHERE id = ?")
         .bind(id).execute(pool).await?;
     Ok(())

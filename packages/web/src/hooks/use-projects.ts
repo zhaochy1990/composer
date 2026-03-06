@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import type { Project, ProjectInstruction, ProjectRepository } from '@/types/generated';
 
 export function useProjects() {
@@ -23,6 +24,7 @@ export function useCreateProject() {
         mutationFn: (data: { name: string; description?: string }) =>
             apiFetch<Project>('/projects', { method: 'POST', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        onError: (error: Error) => logger.error('Failed to create project', { error: error.message }),
     });
 }
 
@@ -32,6 +34,7 @@ export function useUpdateProject() {
         mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string }) =>
             apiFetch<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        onError: (error: Error) => logger.error('Failed to update project', { error: error.message }),
     });
 }
 
@@ -41,6 +44,7 @@ export function useDeleteProject() {
         mutationFn: (id: string) =>
             apiFetch<void>(`/projects/${id}`, { method: 'DELETE' }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        onError: (error: Error) => logger.error('Failed to delete project', { error: error.message }),
     });
 }
 
@@ -59,6 +63,7 @@ export function useAddProjectRepository() {
             apiFetch<ProjectRepository>(`/projects/${projectId}/repositories`, { method: 'POST', body: JSON.stringify(data) }),
         onSuccess: (_data, variables) =>
             queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'repositories'] }),
+        onError: (error: Error) => logger.error('Failed to add repository', { error: error.message }),
     });
 }
 
@@ -69,6 +74,7 @@ export function useRemoveProjectRepository() {
             apiFetch<void>(`/projects/${projectId}/repositories/${repoId}`, { method: 'DELETE' }),
         onSuccess: (_data, variables) =>
             queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'repositories'] }),
+        onError: (error: Error) => logger.error('Failed to remove repository', { error: error.message }),
     });
 }
 
@@ -87,6 +93,7 @@ export function useAddProjectInstruction() {
             apiFetch<ProjectInstruction>(`/projects/${projectId}/instructions`, { method: 'POST', body: JSON.stringify(data) }),
         onSuccess: (_data, variables) =>
             queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'instructions'] }),
+        onError: (error: Error) => logger.error('Failed to add instruction', { error: error.message }),
     });
 }
 
@@ -97,6 +104,7 @@ export function useUpdateProjectInstruction() {
             apiFetch<ProjectInstruction>(`/projects/${projectId}/instructions/${instructionId}`, { method: 'PUT', body: JSON.stringify(data) }),
         onSuccess: (_data, variables) =>
             queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'instructions'] }),
+        onError: (error: Error) => logger.error('Failed to update instruction', { error: error.message }),
     });
 }
 
@@ -107,5 +115,6 @@ export function useRemoveProjectInstruction() {
             apiFetch<void>(`/projects/${projectId}/instructions/${instructionId}`, { method: 'DELETE' }),
         onSuccess: (_data, variables) =>
             queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId, 'instructions'] }),
+        onError: (error: Error) => logger.error('Failed to remove instruction', { error: error.message }),
     });
 }

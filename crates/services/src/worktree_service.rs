@@ -19,6 +19,7 @@ impl WorktreeService {
         agent_id: &str,
         session_id: &str,
     ) -> anyhow::Result<Worktree> {
+        tracing::info!(repo_path = %repo_path, agent_name = %agent_name, session_id = %session_id, "Creating worktree for session");
         let short_id = &session_id[..8.min(session_id.len())];
         // Sanitize agent_name: only keep [a-zA-Z0-9_-]
         let safe_name: String = agent_name
@@ -61,10 +62,12 @@ impl WorktreeService {
             }
         };
 
+        tracing::info!(worktree_id = %worktree.id, path = %info.worktree_path.display(), "Worktree created for session");
         Ok(worktree)
     }
 
     pub async fn cleanup(&self, worktree_id: &str) -> anyhow::Result<()> {
+        tracing::info!(worktree_id = %worktree_id, "Cleaning up worktree");
         let wt = composer_db::models::worktree::find_by_id(&self.db.pool, worktree_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Worktree not found"))?;

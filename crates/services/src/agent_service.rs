@@ -18,6 +18,7 @@ impl AgentService {
     }
 
     pub async fn create(&self, req: CreateAgentRequest) -> anyhow::Result<Agent> {
+        tracing::info!(name = %req.name, "Creating agent");
         let agent_type = req.agent_type.unwrap_or(AgentType::ClaudeCode);
         composer_db::models::agent::create(&self.db.pool, &req.name, &agent_type, None).await
     }
@@ -31,20 +32,25 @@ impl AgentService {
     }
 
     pub async fn delete(&self, id: &str) -> anyhow::Result<()> {
+        tracing::info!(agent_id = %id, "Deleting agent");
         // Interrupt any running sessions for this agent before deletion
         let sessions = composer_db::models::session::list_by_agent(&self.db.pool, id).await?;
         for session in &sessions {
             if matches!(session.status, SessionStatus::Running) {
-                let _ = self.process_manager.interrupt(session.id).await;
+                if let Err(e) = self.process_manager.interrupt(session.id).await {
+                    tracing::warn!(session_id = %session.id, error = %e, "Failed to interrupt session during agent deletion");
+                }
             }
         }
         composer_db::models::agent::delete(&self.db.pool, id).await
     }
 
     pub async fn discover(&self) -> anyhow::Result<Vec<Agent>> {
+        tracing::info!("Starting agent discovery");
         let discovered = discovery::discover_agents().await;
         let mut agents = Vec::new();
         for d in discovered {
+            tracing::debug!(agent_type = ?d.agent_type, name = %d.name, "Discovered agent");
             // Check if an agent of this type already exists — avoid duplicates
             let agent = if let Some(existing) =
                 composer_db::models::agent::find_by_agent_type(&self.db.pool, &d.agent_type).await?
@@ -86,10 +92,12 @@ impl AgentService {
                     .unwrap_or(agent);
             agents.push(updated);
         }
+        tracing::info!(count = agents.len(), "Agent discovery completed");
         Ok(agents)
     }
 
     pub async fn health_check(&self, id: &str) -> anyhow::Result<AgentHealth> {
+        tracing::debug!(agent_id = %id, "Agent health check");
         let agent = composer_db::models::agent::find_by_id(&self.db.pool, id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
@@ -102,6 +110,7 @@ impl AgentService {
     }
 
     pub async fn update_status(&self, id: &str, status: &AgentStatus) -> anyhow::Result<()> {
+        tracing::debug!(agent_id = %id, status = ?status, "Updating agent status");
         composer_db::models::agent::update_status(&self.db.pool, id, status).await?;
         let uuid: uuid::Uuid = id.parse()?;
         self.event_bus.broadcast(WsEvent::AgentStatusChanged {

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import type {
     Workflow,
     WorkflowRun,
@@ -32,6 +33,7 @@ export function useCreateWorkflow() {
         mutationFn: (data: CreateWorkflowRequest) =>
             apiFetch<Workflow>('/workflows', { method: 'POST', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+        onError: (error: Error) => logger.error('Failed to create workflow', { error: error.message }),
     });
 }
 
@@ -41,6 +43,7 @@ export function useUpdateWorkflow() {
         mutationFn: ({ id, ...data }: { id: string } & UpdateWorkflowRequest) =>
             apiFetch<Workflow>(`/workflows/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+        onError: (error: Error) => logger.error('Failed to update workflow', { error: error.message }),
     });
 }
 
@@ -50,6 +53,7 @@ export function useDeleteWorkflow() {
         mutationFn: (id: string) =>
             apiFetch<void>(`/workflows/${id}`, { method: 'DELETE' }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+        onError: (error: Error) => logger.error('Failed to delete workflow', { error: error.message }),
     });
 }
 
@@ -59,6 +63,7 @@ export function useCloneWorkflow() {
         mutationFn: (id: string) =>
             apiFetch<Workflow>(`/workflows/${id}/clone`, { method: 'POST' }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+        onError: (error: Error) => logger.error('Failed to clone workflow', { error: error.message }),
     });
 }
 
@@ -69,6 +74,7 @@ export function useValidateWorkflow() {
                 method: 'POST',
                 body: JSON.stringify(definition),
             }),
+        onError: (error: Error) => logger.error('Failed to validate workflow', { error: error.message }),
     });
 }
 
@@ -85,6 +91,7 @@ export function useStartWorkflow() {
             queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });
             queryClient.invalidateQueries({ queryKey: ['sessions'] });
         },
+        onError: (error: Error) => logger.error('Failed to start workflow', { error: error.message }),
     });
 }
 
@@ -130,6 +137,7 @@ export function useResumeWorkflowRun() {
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
             queryClient.invalidateQueries({ queryKey: ['sessions'] });
         },
+        onError: (error: Error) => logger.error('Failed to resume workflow run', { error: error.message }),
     });
 }
 
@@ -151,5 +159,6 @@ export function useSubmitWorkflowDecision() {
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
             queryClient.invalidateQueries({ queryKey: ['sessions'] });
         },
+        onError: (error: Error) => logger.error('Failed to submit workflow decision', { error: error.message }),
     });
 }

@@ -22,6 +22,7 @@ async fn list_agents(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Agen
 }
 
 async fn create_agent(State(state): State<Arc<AppState>>, Json(req): Json<CreateAgentRequest>) -> Result<Json<Agent>, ServiceError> {
+    tracing::info!(name = %req.name, "API: create agent");
     let agent = state.services.agents.create(req).await?;
     Ok(Json(agent))
 }
@@ -33,6 +34,7 @@ async fn get_agent(State(state): State<Arc<AppState>>, Path(id): Path<String>) -
 }
 
 async fn delete_agent(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), ServiceError> {
+    tracing::info!(agent_id = %id, "API: delete agent");
     state.services.agents.delete(&id).await?;
     Ok(())
 }
@@ -43,6 +45,7 @@ async fn agent_health(State(state): State<Arc<AppState>>, Path(id): Path<String>
 }
 
 async fn discover_agents(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Agent>>, ServiceError> {
+    tracing::info!("API: discover agents");
     let agents = state.services.agents.discover().await?;
     Ok(Json(agents))
 }

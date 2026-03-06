@@ -26,6 +26,7 @@ async fn list_sessions(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Se
 }
 
 async fn create_session(State(state): State<Arc<AppState>>, Json(req): Json<CreateSessionRequest>) -> Result<Json<Session>, ServiceError> {
+    tracing::info!(task_id = %req.task_id, agent_id = %req.agent_id, "API: create session");
     let session = state.services.sessions.create_session(req).await?;
     Ok(Json(session))
 }
@@ -37,11 +38,13 @@ async fn get_session(State(state): State<Arc<AppState>>, Path(id): Path<String>)
 }
 
 async fn interrupt_session(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Session>, ServiceError> {
+    tracing::info!(session_id = %id, "API: interrupt session");
     let session = state.services.sessions.interrupt(&id).await?;
     Ok(Json(session))
 }
 
 async fn resume_session(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<ResumeSessionRequest>) -> Result<Json<Session>, ServiceError> {
+    tracing::info!(session_id = %id, "API: resume session");
     let session = state.services.sessions.resume_session(&id, req).await?;
     Ok(Json(session))
 }
@@ -52,6 +55,7 @@ async fn send_session_input(State(state): State<Arc<AppState>>, Path(id): Path<S
 }
 
 async fn retry_session(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<ResumeSessionRequest>) -> Result<Json<Session>, ServiceError> {
+    tracing::info!(session_id = %id, "API: retry session");
     let session = state.services.sessions.retry_session(&id, req).await?;
     Ok(Json(session))
 }

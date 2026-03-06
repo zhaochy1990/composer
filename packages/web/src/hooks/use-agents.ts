@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import type { Agent, AgentHealth } from '@/types/generated';
 
 export function useAgents() {
@@ -18,6 +19,7 @@ export function useCreateAgent() {
                 body: JSON.stringify(data),
             }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
+        onError: (error: Error) => logger.error('Failed to create agent', { error: error.message }),
     });
 }
 
@@ -27,6 +29,7 @@ export function useDeleteAgent() {
         mutationFn: (id: string) =>
             apiFetch<void>(`/agents/${id}`, { method: 'DELETE' }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
+        onError: (error: Error) => logger.error('Failed to delete agent', { error: error.message }),
     });
 }
 
@@ -35,6 +38,7 @@ export function useDiscoverAgents() {
     return useMutation({
         mutationFn: () => apiFetch<Agent[]>('/agents/discover', { method: 'POST' }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
+        onError: (error: Error) => logger.error('Failed to discover agents', { error: error.message }),
     });
 }
 

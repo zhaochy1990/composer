@@ -45,6 +45,7 @@ pub async fn create(
     name: &str,
     description: Option<&str>,
 ) -> anyhow::Result<Project> {
+    tracing::debug!(name = %name, "DB: creating project");
     let id = Uuid::new_v4().to_string();
     let prefix = derive_task_prefix(name);
     sqlx::query(
@@ -103,6 +104,7 @@ pub async fn update(
 }
 
 pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
+    tracing::debug!(project_id = %id, "DB: deleting project");
     sqlx::query("DELETE FROM projects WHERE id = ?")
         .bind(id).execute(pool).await?;
     Ok(())

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSessionOutputStore } from '@/stores/session-output-store';
 import type { WsEvent } from '@/types/generated';
+import { logger } from '@/lib/logger';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 
@@ -23,6 +24,7 @@ export function useWebSocket() {
             try {
                 parsed = JSON.parse(event.data);
             } catch {
+                logger.warn('Failed to parse WebSocket message');
                 return;
             }
 
@@ -200,6 +202,7 @@ export function useWebSocket() {
                 ws.close();
                 return;
             }
+            logger.info('WebSocket connected');
             setStatus('connected');
             reconnectDelayRef.current = RECONNECT_DELAY_MS;
         };
@@ -215,6 +218,7 @@ export function useWebSocket() {
 
             // Exponential backoff reconnect
             const delay = reconnectDelayRef.current;
+            logger.warn(`WebSocket disconnected, reconnecting in ${delay}ms`);
             reconnectTimerRef.current = setTimeout(() => {
                 // Fix #20: Null the timer ref when it fires
                 reconnectTimerRef.current = null;
@@ -227,6 +231,7 @@ export function useWebSocket() {
         };
 
         ws.onerror = () => {
+            logger.warn('WebSocket error');
             // onclose will fire after onerror, triggering reconnect
         };
     }, [handleMessage]);

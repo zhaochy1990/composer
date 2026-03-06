@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import type { Session, SessionLog, CreateSessionRequest } from '@/types/generated';
 
 export function useSession(id: string | undefined) {
@@ -29,6 +30,7 @@ export function useCreateSession() {
             queryClient.invalidateQueries({ queryKey: ['tasks', variables.task_id, 'sessions'] });
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
         },
+        onError: (error: Error) => logger.error('Failed to create session', { error: error.message }),
     });
 }
 
@@ -41,6 +43,7 @@ export function useInterruptSession() {
             queryClient.invalidateQueries({ queryKey: ['sessions'] });
             queryClient.invalidateQueries({ queryKey: ['sessions', id] });
         },
+        onError: (error: Error) => logger.error('Failed to interrupt session', { error: error.message }),
     });
 }
 
@@ -56,6 +59,7 @@ export function useResumeSession() {
             queryClient.invalidateQueries({ queryKey: ['sessions'] });
             queryClient.invalidateQueries({ queryKey: ['sessions', id] });
         },
+        onError: (error: Error) => logger.error('Failed to resume session', { error: error.message }),
     });
 }
 
@@ -66,6 +70,7 @@ export function useSendSessionInput() {
                 method: 'POST',
                 body: JSON.stringify({ message }),
             }),
+        onError: (error: Error) => logger.error('Failed to send session input', { error: error.message }),
     });
 }
 
@@ -82,6 +87,7 @@ export function useRetrySession() {
             queryClient.invalidateQueries({ queryKey: ['sessions', id] });
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
         },
+        onError: (error: Error) => logger.error('Failed to retry session', { error: error.message }),
     });
 }
 

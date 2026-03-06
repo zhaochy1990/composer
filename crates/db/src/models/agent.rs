@@ -39,6 +39,7 @@ pub async fn create(
     agent_type: &AgentType,
     executable_path: Option<&str>,
 ) -> anyhow::Result<Agent> {
+    tracing::debug!(name = %name, agent_type = ?agent_type, "DB: creating agent");
     let id = Uuid::new_v4().to_string();
     let agent_type_str = serde_json::to_value(agent_type)?
         .as_str().unwrap_or("claude_code").to_string();
@@ -91,6 +92,7 @@ pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Agent>> {
 }
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &AgentStatus) -> anyhow::Result<()> {
+    tracing::debug!(agent_id = %id, status = ?status, "DB: updating agent status");
     let status_str = serde_json::to_value(status)?
         .as_str().unwrap_or("idle").to_string();
     sqlx::query("UPDATE agents SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
@@ -114,6 +116,7 @@ pub async fn update_auth_status(pool: &SqlitePool, id: &str, auth_status: &AuthS
 
 /// Reset all "busy" agents to "idle" (used on server startup to recover from unclean shutdown).
 pub async fn reset_all_busy_to_idle(pool: &SqlitePool) -> anyhow::Result<u64> {
+    tracing::debug!("DB: resetting all busy agents to idle");
     let result = sqlx::query(
         "UPDATE agents SET status = 'idle', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = 'busy'"
     )
@@ -123,6 +126,7 @@ pub async fn reset_all_busy_to_idle(pool: &SqlitePool) -> anyhow::Result<u64> {
 }
 
 pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
+    tracing::debug!(agent_id = %id, "DB: deleting agent");
     sqlx::query("DELETE FROM agents WHERE id = ?")
         .bind(id)
         .execute(pool)

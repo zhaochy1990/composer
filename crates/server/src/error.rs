@@ -13,9 +13,18 @@ pub enum ServiceError {
 impl IntoResponse for ServiceError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
-            ServiceError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            ServiceError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-            ServiceError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            ServiceError::NotFound(msg) => {
+                tracing::warn!("Not found: {}", msg);
+                (StatusCode::NOT_FOUND, msg.clone())
+            }
+            ServiceError::BadRequest(msg) => {
+                tracing::warn!("Bad request: {}", msg);
+                (StatusCode::BAD_REQUEST, msg.clone())
+            }
+            ServiceError::Conflict(msg) => {
+                tracing::warn!("Conflict: {}", msg);
+                (StatusCode::CONFLICT, msg.clone())
+            }
             ServiceError::Internal(err) => {
                 tracing::error!("Internal error: {:?}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())

@@ -24,6 +24,7 @@ async fn list_tasks(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Task>
 }
 
 async fn create_task(State(state): State<Arc<AppState>>, Json(req): Json<CreateTaskRequest>) -> Result<Json<Task>, ServiceError> {
+    tracing::info!(title = %req.title, "API: create task");
     let task = state.services.tasks.create(req).await?;
     Ok(Json(task))
 }
@@ -35,26 +36,31 @@ async fn get_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) ->
 }
 
 async fn update_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<UpdateTaskRequest>) -> Result<Json<Task>, ServiceError> {
+    tracing::debug!(task_id = %id, "API: update task");
     let task = state.services.tasks.update(&id, req).await?;
     Ok(Json(task))
 }
 
 async fn delete_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<(), ServiceError> {
+    tracing::info!(task_id = %id, "API: delete task");
     state.services.tasks.delete(&id).await?;
     Ok(())
 }
 
 async fn assign_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<AssignTaskRequest>) -> Result<Json<Task>, ServiceError> {
+    tracing::info!(task_id = %id, agent_id = %req.agent_id, "API: assign task");
     let task = state.services.tasks.assign_agent(&id, &req.agent_id.to_string()).await?;
     Ok(Json(task))
 }
 
 async fn move_task(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<MoveTaskRequest>) -> Result<Json<Task>, ServiceError> {
+    tracing::info!(task_id = %id, status = ?req.status, "API: move task");
     let task = state.services.tasks.move_task(&id, req).await?;
     Ok(Json(task))
 }
 
 async fn start_task(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<StartTaskResponse>, ServiceError> {
+    tracing::info!(task_id = %id, "API: start task");
     // Validate preconditions with proper HTTP status codes
     let task = state.services.tasks.get(&id).await?
         .ok_or_else(|| ServiceError::NotFound(format!("Task {} not found", id)))?;

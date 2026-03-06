@@ -17,6 +17,7 @@ impl TaskService {
     }
 
     pub async fn create(&self, req: CreateTaskRequest) -> anyhow::Result<Task> {
+        tracing::info!(title = %req.title, "Creating task");
         let project_id_str = req.project_id.map(|id| id.to_string());
         let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
         let workflow_id_str = req.workflow_id.map(|id| id.to_string());
@@ -65,6 +66,7 @@ impl TaskService {
     }
 
     pub async fn delete(&self, id: &str) -> anyhow::Result<()> {
+        tracing::info!(task_id = %id, "Deleting task");
         let uuid: uuid::Uuid = id.parse()?;
         composer_db::models::task::delete(&self.db.pool, id).await?;
         self.event_bus
@@ -73,6 +75,7 @@ impl TaskService {
     }
 
     pub async fn assign_agent(&self, task_id: &str, agent_id: &str) -> anyhow::Result<Task> {
+        tracing::info!(task_id = %task_id, agent_id = %agent_id, "Assigning agent to task");
         composer_db::models::task::update_assigned_agent(&self.db.pool, task_id, Some(agent_id))
             .await?;
         let task = composer_db::models::task::find_by_id(&self.db.pool, task_id)
@@ -83,6 +86,7 @@ impl TaskService {
     }
 
     pub async fn move_task(&self, id: &str, req: MoveTaskRequest) -> anyhow::Result<Task> {
+        tracing::info!(task_id = %id, to_status = ?req.status, "Moving task");
         let old_task = composer_db::models::task::find_by_id(&self.db.pool, id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
@@ -104,6 +108,7 @@ impl TaskService {
     }
 
     pub async fn start_task(&self, task_id: &str) -> anyhow::Result<StartTaskResponse> {
+        tracing::info!(task_id = %task_id, "Starting task");
         let task = composer_db::models::task::find_by_id(&self.db.pool, task_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
@@ -162,6 +167,8 @@ impl TaskService {
         let updated_task = composer_db::models::task::find_by_id(&self.db.pool, task_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+
+        tracing::info!(task_id = %task_id, session_id = %session.id, "Task started successfully");
 
         Ok(StartTaskResponse {
             task: updated_task,

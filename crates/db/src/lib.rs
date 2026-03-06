@@ -8,6 +8,7 @@ pub struct Database {
 
 impl Database {
     pub async fn connect(url: &str) -> anyhow::Result<Self> {
+        tracing::info!(url = %url, "Connecting to database");
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
             .connect(url)
@@ -24,10 +25,12 @@ impl Database {
             .execute(&pool)
             .await?;
 
+        tracing::info!("Database connected, WAL mode enabled");
         Ok(Self { pool })
     }
 
     pub async fn run_migrations(&self) -> anyhow::Result<()> {
+        tracing::info!("Running database migrations");
         // Acquire a single connection and disable FK checks on it so that
         // migrations can drop/recreate tables without FK constraint errors.
         // PRAGMA foreign_keys is per-connection and is a no-op inside
@@ -45,6 +48,7 @@ impl Database {
         sqlx::query("PRAGMA foreign_keys = ON")
             .execute(&mut *conn)
             .await?;
+        tracing::info!("Database migrations completed");
         Ok(())
     }
 }

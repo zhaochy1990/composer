@@ -43,6 +43,7 @@ pub async fn create_with_template(
     definition: &WorkflowDefinition,
     is_template: bool,
 ) -> anyhow::Result<Workflow> {
+    tracing::debug!(name = %name, is_template = %is_template, "DB: creating workflow");
     let id = Uuid::new_v4().to_string();
     let def_json = serde_json::to_string(definition)?;
     sqlx::query(
@@ -109,6 +110,7 @@ pub async fn update(
 }
 
 pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
+    tracing::debug!(workflow_id = %id, "DB: deleting workflow");
     sqlx::query("DELETE FROM workflows WHERE id = ?")
         .bind(id).execute(pool).await?;
     Ok(())

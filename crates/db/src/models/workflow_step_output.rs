@@ -43,6 +43,7 @@ pub async fn create(
     status: &WorkflowStepStatus,
     session_id: Option<&str>,
 ) -> anyhow::Result<WorkflowStepOutput> {
+    tracing::debug!(run_id = %workflow_run_id, step_id = %step_id, step_type = ?step_type, "DB: creating workflow step output");
     let id = Uuid::new_v4().to_string();
     let type_str = serde_json::to_value(step_type)?
         .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize step type"))?.to_string();
@@ -133,6 +134,7 @@ pub async fn find_completed_step_ids(pool: &SqlitePool, workflow_run_id: &str) -
 }
 
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorkflowStepStatus) -> anyhow::Result<()> {
+    tracing::debug!(step_output_id = %id, status = ?status, "DB: updating step output status");
     let status_str = serde_json::to_value(status)?
         .as_str().ok_or_else(|| anyhow::anyhow!("Failed to serialize step status"))?.to_string();
     sqlx::query("UPDATE workflow_step_outputs SET status = ? WHERE id = ?")
