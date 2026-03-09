@@ -108,6 +108,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                 humanGateSteps,
                 steps: workflow.definition.steps,
                 workflowRunId: workflowRun.id,
+                allStepOutputs: stepOutputs ?? [],
             });
         } else {
             onReviewData(null);

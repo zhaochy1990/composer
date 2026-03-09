@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { FileText, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import type { WorkflowStepOutput, WorkflowStepDefinition } from '@/types/generated';
 import { MarkdownContent } from '@/components/sessions/MarkdownContent';
 import { useSubmitWorkflowDecision } from '@/hooks/use-workflows';
+import { parsePrMeta, parseTestResults, buildReviewMarkdown } from '@/lib/parse-step-output';
 
 export interface ReviewPanelData {
     content: string;
     humanGateSteps: WorkflowStepOutput[];
     steps: WorkflowStepDefinition[];
     workflowRunId: string;
+    allStepOutputs: WorkflowStepOutput[];
 }
 
 interface WorkflowReviewSidePanelProps {
@@ -17,9 +19,36 @@ interface WorkflowReviewSidePanelProps {
 }
 
 export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePanelProps) {
-    const { content, humanGateSteps, steps, workflowRunId } = data;
+    const { content, humanGateSteps, steps, workflowRunId, allStepOutputs } = data;
     const submitDecision = useSubmitWorkflowDecision();
     const [comments, setComments] = useState<Record<string, string>>({});
+
+    // Build structured review markdown from step outputs
+    const reviewMarkdown = useMemo(() => {
+        // Find latest completed auto_review output
+        const autoReviewOutput = allStepOutputs
+            .filter(o => o.step_id === 'auto_review' && o.status === 'completed')
+            .sort((a, b) => a.attempt - b.attempt)
+            .pop();
+
+        // Find latest completed implement output
+        const implementOutput = allStepOutputs
+            .filter(o => o.step_id === 'implement' && o.status === 'completed')
+            .sort((a, b) => a.attempt - b.attempt)
+            .pop();
+
+        const autoReviewText = autoReviewOutput?.output ?? '';
+        const implementText = implementOutput?.output ?? '';
+
+        const prMeta = parsePrMeta(autoReviewText);
+        const testResults = parseTestResults(implementText);
+
+        // Use auto_review output as review content if available, otherwise fall back to preceding step content
+        const reviewContent = autoReviewText || content;
+
+        const assembled = buildReviewMarkdown(prMeta, testResults, reviewContent);
+        return assembled || content;
+    }, [allStepOutputs, content]);
 
     // Reset comments when the workflow run changes
     useEffect(() => {
@@ -71,10 +100,10 @@ export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePan
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-8 py-6 min-h-0">
-                {content ? (
+                {reviewMarkdown ? (
                     <div className="max-w-[680px] mx-auto">
                         <div className="prose prose-invert max-w-none leading-relaxed">
-                            <MarkdownContent content={content} />
+                            <MarkdownContent content={reviewMarkdown} />
                         </div>
                     </div>
                 ) : (

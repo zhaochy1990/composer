@@ -86,7 +86,11 @@ pub fn feat_common_definition() -> WorkflowDefinition {
             },
             {
                 let mut s = agentic_step("implement", "Implement & Create PR", SessionMode::Resume,
-                    "The plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\nApproved plan:\n{{step:plan}}{{rejection}}");
+                    "The plan has been approved. Implement it now. After implementation, run build, lint, and tests. Fix any failures. Then create a PR.\n\n\
+                    After running ALL tests, output a test summary using this exact single-line HTML comment format:\n\
+                    <!--COMPOSER:TEST_RESULTS{\"all_passed\":true,\"summary\":\"brief summary of what tests ran and results\"}-->\n\
+                    Set all_passed to false if any test failed. The summary should list each test command you ran and its result.\n\n\
+                    Approved plan:\n{{step:plan}}{{rejection}}");
                 s.depends_on = vec!["review_plan".to_string()];
                 s
             },
@@ -94,8 +98,16 @@ pub fn feat_common_definition() -> WorkflowDefinition {
                 let mut s = agentic_step("auto_review", "Automated PR Review", SessionMode::Resume,
                     "Review the PR on the current branch. Follow these rules in order:\n\n\
                     1. First, check if the PR has any merge conflicts with its target branch. \
-                    If there are conflicts, STOP immediately, report the conflicts, and do NOT proceed to code review.\n\n\
-                    2. Only if there are no merge conflicts, use the /code-review:code-review skill to perform code review of the PR. \
+                    Use whichever tool you have available (gh CLI, git merge --no-commit --no-ff, etc.) to determine the merge status.\n\n\
+                    2. List all files changed in this PR using whichever tool is appropriate \
+                    (e.g., gh pr diff --name-only, git diff --name-status origin/main...HEAD, etc.).\n\n\
+                    3. Output the PR metadata using this exact single-line HTML comment format:\n\
+                    <!--COMPOSER:PR_META{\"merge_conflicts\":false,\"conflict_files\":[],\"changed_files\":[{\"status\":\"M\",\"path\":\"src/example.rs\"}]}-->\n\
+                    Use status codes: M=modified, A=added, D=deleted, R=renamed. \
+                    Set merge_conflicts to true if conflicts exist, and list conflicting file paths in conflict_files.\n\n\
+                    4. If there ARE merge conflicts, STOP immediately after outputting PR_META. \
+                    Report the conflicts in human-readable form and do NOT proceed to code review.\n\n\
+                    5. Only if there are no merge conflicts, use the /code-review:code-review skill to perform code review of the PR. \
                     This is a force re-review — the PR may have been reviewed before, but we need a fresh review of the latest changes.\n\n\
                     IMPORTANT: If you find NO issues at all (no conflicts and no code review findings), you MUST include the exact marker [NO_ISSUES_FOUND] in your response. Only use this marker if there are truly zero issues to report.");
                 s.depends_on = vec!["implement".to_string()];
