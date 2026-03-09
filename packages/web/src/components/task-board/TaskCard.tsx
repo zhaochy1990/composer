@@ -1,4 +1,4 @@
-import { GripVertical, GitPullRequest } from 'lucide-react';
+import { GripVertical, GitPullRequest, Link2 } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { shortId, formatTime } from '@/lib/utils';
 import { priorityConfig } from './priority-config';
@@ -55,6 +55,12 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCa
                             <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700">
                                 <GitPullRequest className="w-3 h-3" />
                                 {task.pr_urls.length === 1 ? 'PR' : `${task.pr_urls.length} PRs`}
+                            </span>
+                        )}
+                        {task.related_task_ids.length > 0 && (
+                            <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300 border border-blue-700">
+                                <Link2 className="w-3 h-3" />
+                                {task.related_task_ids.length} related
                             </span>
                         )}
                         {task.status === 'done' && task.completed_at && (

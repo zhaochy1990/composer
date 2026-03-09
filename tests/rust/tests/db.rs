@@ -249,7 +249,7 @@ mod task_tests {
     #[tokio::test]
     async fn create_task_defaults() {
         let pool = test_pool().await;
-        let t = task::create(&pool, "Test Task", None, None, None, None, None, None).await.unwrap();
+        let t = task::create(&pool, "Test Task", None, None, None, None, None, None, &[]).await.unwrap();
         assert_eq!(t.title, "Test Task");
         assert!(t.description.is_none());
         assert_eq!(t.priority, 0);
@@ -269,6 +269,7 @@ mod task_tests {
             None,
             None,
             None,
+            &[],
         )
         .await
         .unwrap();
@@ -282,7 +283,7 @@ mod task_tests {
     #[tokio::test]
     async fn find_by_id_hit() {
         let pool = test_pool().await;
-        let t = task::create(&pool, "Find Me", None, None, None, None, None, None).await.unwrap();
+        let t = task::create(&pool, "Find Me", None, None, None, None, None, None, &[]).await.unwrap();
         let found = task::find_by_id(&pool, &t.id.to_string()).await.unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().title, "Find Me");
@@ -307,8 +308,8 @@ mod task_tests {
     #[tokio::test]
     async fn list_all_returns_tasks() {
         let pool = test_pool().await;
-        task::create(&pool, "Task 1", None, None, None, None, None, None).await.unwrap();
-        task::create(&pool, "Task 2", None, None, None, None, None, None).await.unwrap();
+        task::create(&pool, "Task 1", None, None, None, None, None, None, &[]).await.unwrap();
+        task::create(&pool, "Task 2", None, None, None, None, None, None, &[]).await.unwrap();
         let tasks = task::list_all(&pool).await.unwrap();
         assert_eq!(tasks.len(), 2);
     }
@@ -316,10 +317,10 @@ mod task_tests {
     #[tokio::test]
     async fn list_by_status_filters() {
         let pool = test_pool().await;
-        task::create(&pool, "Backlog Task", None, None, Some(&TaskStatus::Backlog), None, None, None)
+        task::create(&pool, "Backlog Task", None, None, Some(&TaskStatus::Backlog), None, None, None, &[])
             .await
             .unwrap();
-        task::create(&pool, "Done Task", None, None, Some(&TaskStatus::Done), None, None, None)
+        task::create(&pool, "Done Task", None, None, Some(&TaskStatus::Done), None, None, None, &[])
             .await
             .unwrap();
         let backlog = task::list_by_status(&pool, &TaskStatus::Backlog).await.unwrap();
@@ -330,7 +331,7 @@ mod task_tests {
     #[tokio::test]
     async fn update_partial_fields() {
         let pool = test_pool().await;
-        let t = task::create(&pool, "Original", None, None, None, None, None, None).await.unwrap();
+        let t = task::create(&pool, "Original", None, None, None, None, None, None, &[]).await.unwrap();
         let id = t.id.to_string();
         let updated = task::update(&pool, &id, Some("Updated"), None, None, None, None, None, None, None)
             .await
@@ -342,7 +343,7 @@ mod task_tests {
     #[tokio::test]
     async fn update_status_changes_status() {
         let pool = test_pool().await;
-        let t = task::create(&pool, "Move Me", None, None, None, None, None, None).await.unwrap();
+        let t = task::create(&pool, "Move Me", None, None, None, None, None, None, &[]).await.unwrap();
         let id = t.id.to_string();
         task::update_status(&pool, &id, &TaskStatus::Done).await.unwrap();
         let found = task::find_by_id(&pool, &id).await.unwrap().unwrap();
@@ -362,7 +363,7 @@ mod task_tests {
         .unwrap();
         let agent_id = agent.id.to_string();
 
-        let t = task::create(&pool, "Assign Me", None, None, None, None, None, None).await.unwrap();
+        let t = task::create(&pool, "Assign Me", None, None, None, None, None, None, &[]).await.unwrap();
         let id = t.id.to_string();
 
         task::update_assigned_agent(&pool, &id, Some(&agent_id)).await.unwrap();
@@ -377,7 +378,7 @@ mod task_tests {
     #[tokio::test]
     async fn delete_task() {
         let pool = test_pool().await;
-        let t = task::create(&pool, "Delete Me", None, None, None, None, None, None).await.unwrap();
+        let t = task::create(&pool, "Delete Me", None, None, None, None, None, None, &[]).await.unwrap();
         let id = t.id.to_string();
         task::delete(&pool, &id).await.unwrap();
         let found = task::find_by_id(&pool, &id).await.unwrap();
@@ -387,10 +388,10 @@ mod task_tests {
     #[tokio::test]
     async fn position_auto_increment() {
         let pool = test_pool().await;
-        let t1 = task::create(&pool, "First", None, None, Some(&TaskStatus::Backlog), None, None, None)
+        let t1 = task::create(&pool, "First", None, None, Some(&TaskStatus::Backlog), None, None, None, &[])
             .await
             .unwrap();
-        let t2 = task::create(&pool, "Second", None, None, Some(&TaskStatus::Backlog), None, None, None)
+        let t2 = task::create(&pool, "Second", None, None, Some(&TaskStatus::Backlog), None, None, None, &[])
             .await
             .unwrap();
         assert!(t2.position > t1.position);
@@ -399,10 +400,10 @@ mod task_tests {
     #[tokio::test]
     async fn position_independent_per_status() {
         let pool = test_pool().await;
-        let backlog = task::create(&pool, "Backlog", None, None, Some(&TaskStatus::Backlog), None, None, None)
+        let backlog = task::create(&pool, "Backlog", None, None, Some(&TaskStatus::Backlog), None, None, None, &[])
             .await
             .unwrap();
-        let done = task::create(&pool, "Done", None, None, Some(&TaskStatus::Done), None, None, None)
+        let done = task::create(&pool, "Done", None, None, Some(&TaskStatus::Done), None, None, None, &[])
             .await
             .unwrap();
         // Both should start at position 1.0 since they're in different columns
@@ -473,11 +474,11 @@ mod task_simple_id_tests {
         let p = project::create(&pool, "composer", None).await.unwrap();
         let pid = p.id.to_string();
 
-        let t1 = task::create(&pool, "First task", None, None, None, Some(&pid), None, None).await.unwrap();
+        let t1 = task::create(&pool, "First task", None, None, None, Some(&pid), None, None, &[]).await.unwrap();
         assert_eq!(t1.simple_id, "COM-1");
         assert_eq!(t1.task_number, 1);
 
-        let t2 = task::create(&pool, "Second task", None, None, None, Some(&pid), None, None).await.unwrap();
+        let t2 = task::create(&pool, "Second task", None, None, None, Some(&pid), None, None, &[]).await.unwrap();
         assert_eq!(t2.simple_id, "COM-2");
         assert_eq!(t2.task_number, 2);
     }
@@ -485,7 +486,7 @@ mod task_simple_id_tests {
     #[tokio::test]
     async fn task_without_project_has_empty_simple_id() {
         let pool = test_pool().await;
-        let t = task::create(&pool, "No project task", None, None, None, None, None, None).await.unwrap();
+        let t = task::create(&pool, "No project task", None, None, None, None, None, None, &[]).await.unwrap();
         assert_eq!(t.simple_id, "");
         assert_eq!(t.task_number, 0);
     }
@@ -498,13 +499,13 @@ mod task_simple_id_tests {
         let p1id = p1.id.to_string();
         let p2id = p2.id.to_string();
 
-        let t1 = task::create(&pool, "Alpha task 1", None, None, None, Some(&p1id), None, None).await.unwrap();
+        let t1 = task::create(&pool, "Alpha task 1", None, None, None, Some(&p1id), None, None, &[]).await.unwrap();
         assert_eq!(t1.simple_id, "ALP-1");
 
-        let t2 = task::create(&pool, "Beta task 1", None, None, None, Some(&p2id), None, None).await.unwrap();
+        let t2 = task::create(&pool, "Beta task 1", None, None, None, Some(&p2id), None, None, &[]).await.unwrap();
         assert_eq!(t2.simple_id, "BET-1");
 
-        let t3 = task::create(&pool, "Alpha task 2", None, None, None, Some(&p1id), None, None).await.unwrap();
+        let t3 = task::create(&pool, "Alpha task 2", None, None, None, Some(&p1id), None, None, &[]).await.unwrap();
         assert_eq!(t3.simple_id, "ALP-2");
     }
 
@@ -514,9 +515,9 @@ mod task_simple_id_tests {
         let p = project::create(&pool, "counter", None).await.unwrap();
         let pid = p.id.to_string();
 
-        task::create(&pool, "T1", None, None, None, Some(&pid), None, None).await.unwrap();
-        task::create(&pool, "T2", None, None, None, Some(&pid), None, None).await.unwrap();
-        task::create(&pool, "T3", None, None, None, Some(&pid), None, None).await.unwrap();
+        task::create(&pool, "T1", None, None, None, Some(&pid), None, None, &[]).await.unwrap();
+        task::create(&pool, "T2", None, None, None, Some(&pid), None, None, &[]).await.unwrap();
+        task::create(&pool, "T3", None, None, None, Some(&pid), None, None, &[]).await.unwrap();
 
         let updated = project::find_by_id(&pool, &pid).await.unwrap().unwrap();
         assert_eq!(updated.task_counter, 3);
@@ -615,7 +616,7 @@ mod session_tests {
     async fn list_by_task_filters() {
         let pool = test_pool().await;
         let agent_id = setup_agent(&pool).await;
-        let task = composer_db::models::task::create(&pool, "Task", None, None, None, None, None, None)
+        let task = composer_db::models::task::create(&pool, "Task", None, None, None, None, None, None, &[])
             .await
             .unwrap();
         let task_id = task.id.to_string();

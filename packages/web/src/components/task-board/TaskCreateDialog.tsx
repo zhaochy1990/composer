@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Plus } from 'lucide-react';
 import type { TaskStatus, Workflow } from '@/types/generated';
-import { useCreateTask } from '@/hooks/use-tasks';
+import { useCreateTask, useTasks } from '@/hooks/use-tasks';
 import { useProjects } from '@/hooks/use-projects';
 import { useAgents } from '@/hooks/use-agents';
 import { useWorkflows } from '@/hooks/use-workflows';
@@ -20,11 +20,18 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
     const [projectId, setProjectId] = useState('');
     const [assignedAgentId, setAssignedAgentId] = useState('');
     const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
+    const [relatedTaskIds, setRelatedTaskIds] = useState<string[]>([]);
 
     const createTask = useCreateTask();
     const { data: projects } = useProjects();
     const { data: agents } = useAgents();
     const { data: workflows } = useWorkflows();
+    const { data: allTasks } = useTasks();
+
+    const doneTasks = useMemo(
+        () => (allTasks ?? []).filter(t => t.status === 'done'),
+        [allTasks],
+    );
 
     // Default to first available agent (Claude Code)
     useEffect(() => {
@@ -46,6 +53,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
         setPriority(2);
         setProjectId('');
         setSelectedWorkflowId('');
+        setRelatedTaskIds([]);
         setAssignedAgentId(agents?.[0]?.id ?? '');
         onClose();
     }
@@ -65,6 +73,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                 project_id: projectId || undefined,
                 assigned_agent_id: assignedAgentId || undefined,
                 workflow_id: selectedWorkflowId || undefined,
+                related_task_ids: relatedTaskIds.length > 0 ? relatedTaskIds : undefined,
             },
             {
                 onSuccess: () => resetAndClose(),
@@ -203,6 +212,35 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                                 : 'A project must be assigned to start a workflow'}
                                     </p>
                                 )}
+                            </div>
+                        )}
+
+                        {doneTasks.length > 0 && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-1">
+                                    Related Tasks
+                                </label>
+                                <div className="max-h-32 overflow-y-auto bg-gray-800 border border-gray-600 rounded-md p-2 space-y-1">
+                                    {doneTasks.map(t => (
+                                        <label key={t.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-gray-100">
+                                            <input
+                                                type="checkbox"
+                                                checked={relatedTaskIds.includes(t.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setRelatedTaskIds(prev => [...prev, t.id]);
+                                                    } else {
+                                                        setRelatedTaskIds(prev => prev.filter(id => id !== t.id));
+                                                    }
+                                                }}
+                                                className="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                                            />
+                                            {t.simple_id && <span className="font-mono text-xs text-gray-500">{t.simple_id}</span>}
+                                            <span className="truncate">{t.title}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">Only tasks in Done status can be linked</p>
                             </div>
                         )}
 

@@ -25,7 +25,14 @@ async fn list_tasks(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Task>
 
 async fn create_task(State(state): State<Arc<AppState>>, Json(req): Json<CreateTaskRequest>) -> Result<Json<Task>, ServiceError> {
     tracing::info!(title = %req.title, "API: create task");
-    let task = state.services.tasks.create(req).await?;
+    let task = state.services.tasks.create(req).await.map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("not in done status") || msg.contains("Related task not found") {
+            ServiceError::BadRequest(msg)
+        } else {
+            ServiceError::Internal(e)
+        }
+    })?;
     Ok(Json(task))
 }
 

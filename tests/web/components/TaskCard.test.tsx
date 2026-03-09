@@ -17,6 +17,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         position: 1.0,
         task_number: 0,
         simple_id: '',
+        pr_urls: [],
+        related_task_ids: [],
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
         ...overrides,

@@ -13,7 +13,7 @@ export function useTasks() {
 export function useCreateTask() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (data: { title: string; description?: string; priority?: number; status?: string; project_id?: string; assigned_agent_id?: string; workflow_id?: string }) =>
+        mutationFn: (data: { title: string; description?: string; priority?: number; status?: string; project_id?: string; assigned_agent_id?: string; workflow_id?: string; related_task_ids?: string[] }) =>
             apiFetch<Task>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
         onError: (error: Error) => logger.error('Failed to create task', { error: error.message }),

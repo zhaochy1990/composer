@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon } from 'lucide-react';
+import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon, Link2 } from 'lucide-react';
 import type { Task } from '@/types/generated';
-import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
+import { useUpdateTask, useDeleteTask, useStartTask, useTasks } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession, useSendSessionInput, useRetrySession } from '@/hooks/use-sessions';
 import { useUserQuestionStore } from '@/stores/user-question-store';
@@ -46,6 +46,9 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const updateTask = useUpdateTask();
     const deleteTask = useDeleteTask();
     const startTask = useStartTask();
+
+    // --- All tasks (for resolving related task links) ---
+    const { data: allTasks } = useTasks();
 
     // --- Sessions ---
     const { data: sessions } = useTaskSessions(task.id);
@@ -224,6 +227,32 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                             <ExternalLink className="w-3 h-3" />
                         </a>
                     ))}
+                </div>
+            )}
+
+            {/* Related Tasks */}
+            {task.related_task_ids.length > 0 && (
+                <div className="px-6 py-2 border-b border-gray-800 shrink-0">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                        <Link2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Related Tasks</h3>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                        {task.related_task_ids.map(linkedId => {
+                            const linkedTask = allTasks?.find(t => t.id === linkedId);
+                            return (
+                                <div
+                                    key={linkedId}
+                                    className="flex items-center gap-2 px-2 py-1 text-sm text-gray-300 rounded-md text-left"
+                                >
+                                    {linkedTask?.simple_id && (
+                                        <span className="font-mono text-xs text-gray-500">{linkedTask.simple_id}</span>
+                                    )}
+                                    <span className="truncate">{linkedTask?.title ?? shortId(linkedId)}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 

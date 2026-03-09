@@ -21,6 +21,29 @@ impl TaskService {
         let project_id_str = req.project_id.map(|id| id.to_string());
         let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
         let workflow_id_str = req.workflow_id.map(|id| id.to_string());
+
+        // Validate related_task_ids: each must exist and be in "done" status
+        let related_ids_str: Vec<String> = if let Some(ref ids) = req.related_task_ids {
+            let mut validated = Vec::new();
+            for id in ids {
+                let id_str = id.to_string();
+                let target = composer_db::models::task::find_by_id(&self.db.pool, &id_str)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("Related task not found: {}", id))?;
+                if target.status != TaskStatus::Done {
+                    return Err(anyhow::anyhow!(
+                        "Related task {} is not in done status (current: {:?})",
+                        id,
+                        target.status
+                    ));
+                }
+                validated.push(id_str);
+            }
+            validated
+        } else {
+            vec![]
+        };
+
         let task = composer_db::models::task::create(
             &self.db.pool,
             &req.title,
@@ -30,6 +53,7 @@ impl TaskService {
             project_id_str.as_deref(),
             assigned_agent_id_str.as_deref(),
             workflow_id_str.as_deref(),
+            &related_ids_str,
         )
         .await?;
         self.event_bus.broadcast(WsEvent::TaskCreated(task.clone()));

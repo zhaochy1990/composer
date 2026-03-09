@@ -43,6 +43,7 @@ impl TryFrom<TaskRow> for Task {
             pr_urls,
             workflow_run_id: row.workflow_run_id.map(|s| s.parse()).transpose()?,
             workflow_id: row.workflow_id.map(|s| s.parse()).transpose()?,
+            related_task_ids: vec![],
             completed_at: row.completed_at.map(|s| s.parse()).transpose()?,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,
@@ -59,6 +60,7 @@ pub async fn create(
     project_id: Option<&str>,
     assigned_agent_id: Option<&str>,
     workflow_id: Option<&str>,
+    related_task_ids: &[String],
 ) -> anyhow::Result<Task> {
     tracing::debug!(title = %title, "DB: creating task");
     let id = Uuid::new_v4().to_string();
@@ -117,6 +119,11 @@ pub async fn create(
     .execute(&mut *tx)
     .await?;
 
+    // Insert task links within the same transaction
+    for linked_id in related_task_ids {
+        super::task_link::create_in_tx(&mut tx, &id, linked_id).await?;
+    }
+
     tx.commit().await?;
 
     find_by_id(pool, &id).await?.ok_or_else(|| anyhow::anyhow!("Failed to create task"))
@@ -135,14 +142,37 @@ pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Ta
         .bind(id)
         .fetch_optional(pool)
         .await?;
-    row.map(Task::try_from).transpose()
+    match row {
+        Some(r) => {
+            let mut task = Task::try_from(r)?;
+            let linked = super::task_link::list_linked_task_ids(pool, id).await?;
+            task.related_task_ids = linked
+                .into_iter()
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            Ok(Some(task))
+        }
+        None => Ok(None),
+    }
 }
 
 pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Task>> {
     let rows = sqlx::query_as::<_, TaskRow>(&format!("SELECT {TASK_COLUMNS} FROM tasks ORDER BY position ASC"))
         .fetch_all(pool)
         .await?;
-    rows.into_iter().map(Task::try_from).collect()
+    let links_map = super::task_link::list_all_links_map(pool).await?;
+    rows.into_iter()
+        .map(|r| {
+            let mut task = Task::try_from(r)?;
+            if let Some(linked) = links_map.get(&task.id.to_string()) {
+                task.related_task_ids = linked
+                    .iter()
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+            }
+            Ok(task)
+        })
+        .collect()
 }
 
 pub async fn list_by_status(pool: &SqlitePool, status: &TaskStatus) -> anyhow::Result<Vec<Task>> {
@@ -154,7 +184,19 @@ pub async fn list_by_status(pool: &SqlitePool, status: &TaskStatus) -> anyhow::R
     .bind(&status_str)
     .fetch_all(pool)
     .await?;
-    rows.into_iter().map(Task::try_from).collect()
+    let links_map = super::task_link::list_all_links_map(pool).await?;
+    rows.into_iter()
+        .map(|r| {
+            let mut task = Task::try_from(r)?;
+            if let Some(linked) = links_map.get(&task.id.to_string()) {
+                task.related_task_ids = linked
+                    .iter()
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+            }
+            Ok(task)
+        })
+        .collect()
 }
 
 /// Fix #13: Single UPDATE statement using COALESCE pattern
@@ -232,7 +274,19 @@ pub async fn list_by_project(pool: &SqlitePool, project_id: &str) -> anyhow::Res
     .bind(project_id)
     .fetch_all(pool)
     .await?;
-    rows.into_iter().map(Task::try_from).collect()
+    let links_map = super::task_link::list_all_links_map(pool).await?;
+    rows.into_iter()
+        .map(|r| {
+            let mut task = Task::try_from(r)?;
+            if let Some(linked) = links_map.get(&task.id.to_string()) {
+                task.related_task_ids = linked
+                    .iter()
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+            }
+            Ok(task)
+        })
+        .collect()
 }
 
 /// Reassign a task to a different project (or remove from project).
