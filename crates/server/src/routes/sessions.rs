@@ -14,6 +14,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/sessions", get(list_sessions).post(create_session))
         .route("/sessions/{id}", get(get_session))
         .route("/sessions/{id}/interrupt", post(interrupt_session))
+        .route("/sessions/{id}/complete", post(complete_session))
         .route("/sessions/{id}/resume", post(resume_session))
         .route("/sessions/{id}/input", post(send_session_input))
         .route("/sessions/{id}/retry", post(retry_session))
@@ -40,6 +41,12 @@ async fn get_session(State(state): State<Arc<AppState>>, Path(id): Path<String>)
 async fn interrupt_session(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Session>, ServiceError> {
     tracing::info!(session_id = %id, "API: interrupt session");
     let session = state.services.sessions.interrupt(&id).await?;
+    Ok(Json(session))
+}
+
+async fn complete_session(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Result<Json<Session>, ServiceError> {
+    tracing::info!(session_id = %id, "API: complete session (close stdin)");
+    let session = state.services.sessions.complete_session(&id).await?;
     Ok(Json(session))
 }
 

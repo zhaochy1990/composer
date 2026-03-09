@@ -74,6 +74,19 @@ export function useSendSessionInput() {
     });
 }
 
+export function useCompleteSession() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) =>
+            apiFetch<Session>(`/sessions/${id}/complete`, { method: 'POST' }),
+        onSuccess: (_data, id) => {
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['sessions', id] });
+        },
+        onError: (error: Error) => logger.error('Failed to complete session', { error: error.message }),
+    });
+}
+
 export function useRetrySession() {
     const queryClient = useQueryClient();
     return useMutation({

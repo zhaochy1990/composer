@@ -1,13 +1,16 @@
 import { useEffect } from 'react';
-import { Check, Circle, Clock, AlertTriangle, X, Loader2, RotateCcw, SkipForward, Ban } from 'lucide-react';
+import { Check, Circle, Clock, AlertTriangle, X, Loader2, RotateCcw, SkipForward, Ban, MessageCircle, CheckCircle2 } from 'lucide-react';
 import type { WorkflowRun, WorkflowStepType, WorkflowStepStatus, WorkflowStepOutput, Workflow, WorkflowStepDefinition } from '@/types/generated';
 import { useWorkflowStepOutputs, useResumeWorkflowRun } from '@/hooks/use-workflows';
+import { useCompleteSession } from '@/hooks/use-sessions';
 import type { ReviewPanelData } from './WorkflowReviewSidePanel';
 
 interface WorkflowProgressProps {
     workflowRun: WorkflowRun;
     workflow: Workflow;
     onReviewData?: (data: ReviewPanelData | null) => void;
+    /** Called when an interactive step is running, with its session_id (or null when not). */
+    onInteractiveSession?: (sessionId: string | null) => void;
 }
 
 const STEP_TYPE_LABELS: Record<WorkflowStepType, string> = {
@@ -56,9 +59,10 @@ function getStepName(step: WorkflowStepDefinition): string {
     return step.name || STEP_TYPE_LABELS[step.step_type] || step.id;
 }
 
-export function WorkflowProgress({ workflowRun, workflow, onReviewData }: WorkflowProgressProps) {
+export function WorkflowProgress({ workflowRun, workflow, onReviewData, onInteractiveSession }: WorkflowProgressProps) {
     const { data: stepOutputs } = useWorkflowStepOutputs(workflowRun.id, workflowRun.status);
     const resumeRun = useResumeWorkflowRun();
+    const completeSession = useCompleteSession();
 
     const steps = workflow.definition.steps;
     const isWaitingForHuman = workflowRun.status === 'paused';
@@ -110,6 +114,20 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData }: Workfl
         }
         // No cleanup — avoids flicker from cleanup nulling then effect re-setting
     }, [humanGateSteps.length, stepOutputs, onReviewData, workflow, workflowRun.id]);
+
+    // Detect interactive running step and expose its session_id to parent
+    const interactiveRunningStep = steps.find(step => {
+        if (!step.interactive) return false;
+        const output = stepOutputs?.find(o => o.step_id === step.id && o.status === 'running');
+        return !!output;
+    });
+    const interactiveSessionId = interactiveRunningStep && stepOutputs
+        ? stepOutputs.find(o => o.step_id === interactiveRunningStep.id && o.status === 'running')?.session_id ?? null
+        : null;
+
+    useEffect(() => {
+        onInteractiveSession?.(interactiveSessionId);
+    }, [interactiveSessionId, onInteractiveSession]);
 
     function handleRetryResume(stepId: string, action: 'continue_loop' | 'skip_to_next') {
         resumeRun.mutate({
@@ -184,6 +202,11 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData }: Workfl
                                             (attempt {latestOutput.attempt})
                                         </span>
                                     )}
+                                    {step.interactive && (
+                                        <span className="text-xs text-purple-400 flex items-center gap-0.5" title="Interactive — you can send messages during this step">
+                                            <MessageCircle className="w-3 h-3" />
+                                        </span>
+                                    )}
                                     {step.loop_back_to != null && (
                                         <span className="text-xs text-gray-500 flex items-center gap-0.5" title={`Loops back to ${step.loop_back_to}`}>
                                             <RotateCcw className="w-3 h-3" />
@@ -200,6 +223,17 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData }: Workfl
                                     <p className="text-xs text-gray-500 mt-1 truncate max-w-lg" title={latestOutput.output}>
                                         {latestOutput.output.slice(0, 200)}
                                     </p>
+                                )}
+                                {step.interactive && status === 'running' && latestOutput?.session_id && (
+                                    <button
+                                        type="button"
+                                        onClick={() => completeSession.mutate(latestOutput.session_id!)}
+                                        disabled={completeSession.isPending}
+                                        className="mt-1.5 flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-purple-900/40 text-purple-300 border border-purple-700 hover:bg-purple-900/60 transition-colors disabled:opacity-50"
+                                    >
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        {completeSession.isPending ? 'Completing...' : 'Complete Step'}
+                                    </button>
                                 )}
                             </div>
                         </div>

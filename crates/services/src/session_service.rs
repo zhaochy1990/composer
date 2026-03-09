@@ -691,6 +691,28 @@ impl SessionService {
         composer_db::models::session::find_by_id(&self.db.pool, id).await
     }
 
+    /// Gracefully complete a running session by closing stdin.
+    /// The process exits naturally, emitting `SessionCompleted` which the
+    /// workflow engine handles to advance to the next step.
+    pub async fn complete_session(&self, id: &str) -> anyhow::Result<Session> {
+        let session = composer_db::models::session::find_by_id(&self.db.pool, id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
+        if !matches!(session.status, SessionStatus::Running) {
+            anyhow::bail!("Session is not running (status: {:?})", session.status);
+        }
+        tracing::info!(session_id = %id, "Completing session by closing stdin");
+        self.process_manager
+            .close_stdin(session.id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to close stdin: {}", e))?;
+        // Don't update status here — the monitor task will emit SessionCompleted
+        // when the process exits, and the event listener will handle the status update.
+        composer_db::models::session::find_by_id(&self.db.pool, id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Session not found"))
+    }
+
     pub async fn interrupt(&self, id: &str) -> anyhow::Result<Session> {
         let session = composer_db::models::session::find_by_id(&self.db.pool, id)
             .await?

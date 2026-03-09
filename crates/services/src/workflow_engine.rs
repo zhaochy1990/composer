@@ -38,6 +38,7 @@ fn agentic_step(
         max_retries: None,
         loop_back_to: None,
         session_mode: Some(mode),
+        interactive: None,
     }
 }
 
@@ -53,6 +54,7 @@ fn human_gate_step(id: &str, name: &str) -> WorkflowStepDefinition {
         max_retries: None,
         loop_back_to: None,
         session_mode: None,
+        interactive: None,
     }
 }
 
@@ -66,8 +68,13 @@ pub fn feat_common_definition() -> WorkflowDefinition {
                 Acknowledge that you understand the task and instructions, then wait for further directions."),
             {
                 let mut s = agentic_step("plan", "Plan", SessionMode::Resume,
-                    "Investigate the existing codebase and create a detailed implementation plan. Do NOT implement yet. Only output the plan.{{rejection}}");
+                    "Investigate the existing codebase and create a detailed implementation plan. \
+                     Do NOT implement yet. Only output the plan.\n\n\
+                     If there are multiple viable approaches, present them with pros and cons \
+                     and ask the user which approach they prefer. Wait for the user's response \
+                     before finalizing the plan.{{rejection}}");
                 s.depends_on = vec!["start".to_string()];
+                s.interactive = Some(true);
                 s
             },
             {
@@ -156,6 +163,11 @@ pub fn validate_dag(def: &WorkflowDefinition) -> Result<(), Vec<String>> {
         // HumanGate steps must have on_approve
         if step.step_type == WorkflowStepType::HumanGate && step.on_approve.is_none() {
             errors.push(format!("HumanGate step '{}' is missing on_approve", step.id));
+        }
+
+        // interactive is only valid for agentic steps
+        if step.interactive == Some(true) && step.step_type != WorkflowStepType::Agentic {
+            errors.push(format!("Step '{}' is interactive but not agentic", step.id));
         }
 
         // Check depends_on references
@@ -1239,6 +1251,10 @@ impl WorkflowEngine {
             None,
         ).await?;
 
+        // Interactive steps keep the session alive so the user can send follow-up
+        // messages (e.g. answer clarifying questions) before completing the step.
+        let exit_on_result = !step_def.interactive.unwrap_or(false);
+
         let session = if is_new_session {
             let repo_path = self.get_repo_path(task).await?;
             let session = self
@@ -1250,7 +1266,7 @@ impl WorkflowEngine {
                     repo_path,
                     name: Some(format!("Workflow: {}", step_def.name)),
                     auto_approve: Some(task.auto_approve),
-                    exit_on_result: true,
+                    exit_on_result,
                 })
                 .await?;
             session
@@ -1264,7 +1280,7 @@ impl WorkflowEngine {
                             &sid,
                             ResumeSessionRequest {
                                 prompt: Some(prompt),
-                                exit_on_result: true,
+                                exit_on_result,
                                 continue_chat: false,
                             },
                         )
@@ -1281,7 +1297,7 @@ impl WorkflowEngine {
                             repo_path,
                             name: Some(format!("Workflow: {}", step_def.name)),
                             auto_approve: Some(task.auto_approve),
-                            exit_on_result: true,
+                            exit_on_result,
                         })
                         .await?
                 }

@@ -280,6 +280,10 @@ pub struct WorkflowStepDefinition {
     pub loop_back_to: Option<String>,
     #[serde(default)]
     pub session_mode: Option<SessionMode>,
+    /// When true, the session stays alive after producing a result so the user
+    /// can send follow-up messages (e.g. answer questions) before completing the step.
+    #[serde(default)]
+    pub interactive: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

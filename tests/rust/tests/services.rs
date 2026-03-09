@@ -715,6 +715,7 @@ mod workflow_tests {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
+                interactive: None,
             }],
         };
 
@@ -1050,6 +1051,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
+                    interactive: None,
                 },
             ],
         };
@@ -1073,6 +1075,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
+                    interactive: None,
                 },
                 WorkflowStepDefinition {
                     id: "plan".to_string(),
@@ -1085,6 +1088,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::Resume),
+                    interactive: None,
                 },
             ],
         };
@@ -1108,6 +1112,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
+                    interactive: None,
                 },
                 WorkflowStepDefinition {
                     id: "b".to_string(),
@@ -1120,6 +1125,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::Resume),
+                    interactive: None,
                 },
             ],
         };
@@ -1149,6 +1155,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
+                    interactive: None,
                 },
                 WorkflowStepDefinition {
                     id: "review".to_string(),
@@ -1161,6 +1168,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: None,
+                    interactive: None,
                 },
                 WorkflowStepDefinition {
                     id: "implement".to_string(),
@@ -1173,6 +1181,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::Resume),
+                    interactive: None,
                 },
             ],
         };
@@ -1196,6 +1205,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
+                    interactive: None,
                 },
                 WorkflowStepDefinition {
                     id: "review".to_string(),
@@ -1208,6 +1218,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: None,
+                    interactive: None,
                 },
             ],
         };
@@ -1272,6 +1283,7 @@ mod workflow_tests {
                     max_retries: None,
                     loop_back_to: None,
                     session_mode: Some(SessionMode::New),
+                    interactive: None,
                 },
             ],
         };

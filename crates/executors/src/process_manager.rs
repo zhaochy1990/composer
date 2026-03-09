@@ -406,6 +406,16 @@ impl AgentProcessManager {
         entry.peer.send_message(&UserMessage::new(message)).await
     }
 
+    /// Close stdin on a running process, causing it to exit naturally.
+    /// Unlike `interrupt()`, this produces a `SessionCompleted` event
+    /// because the monitor task sees a natural exit (not a cancellation).
+    pub async fn close_stdin(&self, session_id: Uuid) -> Result<(), ExecutorError> {
+        let entry = self.processes.get(&session_id)
+            .ok_or_else(|| ExecutorError::NotRunning(session_id.to_string()))?;
+        entry.peer.close_stdin().await;
+        Ok(())
+    }
+
     /// Queue a message to be sent on the next session resume.
     /// Replaces any previously queued message for this session.
     pub fn queue_message(&self, session_id: Uuid, message: String) {

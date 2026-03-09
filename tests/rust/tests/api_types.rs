@@ -359,6 +359,7 @@ fn workflow_definition_roundtrip() {
                 max_retries: Some(3),
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
+                interactive: None,
             },
             WorkflowStepDefinition {
                 id: "review".to_string(),
@@ -371,6 +372,7 @@ fn workflow_definition_roundtrip() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
+                interactive: None,
             },
         ],
     };

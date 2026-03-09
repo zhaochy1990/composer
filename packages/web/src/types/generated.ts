@@ -138,6 +138,8 @@ export interface WorkflowStepDefinition {
     max_retries?: number;
     loop_back_to?: string;
     session_mode?: SessionMode;
+    /** When true, the session stays alive so the user can chat during this step. */
+    interactive?: boolean;
 }
 
 export interface WorkflowRun {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
@@ -63,6 +63,16 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const { data: workflowRun } = useWorkflowRun(task.workflow_run_id ?? undefined);
     const { data: workflow } = useWorkflow(workflowRun?.workflow_id ?? undefined);
     const [reviewPanelData, setReviewPanelData] = useState<ReviewPanelData | null>(null);
+    const [interactiveSessionId, setInteractiveSessionId] = useState<string | null>(null);
+
+    // Auto-select session when an interactive workflow step starts running
+    const handleInteractiveSession = useCallback((sessionId: string | null) => {
+        setInteractiveSessionId(sessionId);
+        if (sessionId) {
+            setSelectedSessionId(sessionId);
+            setFormCollapsed(true);
+        }
+    }, []);
 
     // Default to first available agent if not set
     useEffect(() => {
@@ -187,7 +197,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
             {/* Workflow Progress */}
             {workflowRun && workflow && (
                 <div className="px-6 py-3 border-b border-gray-800 shrink-0">
-                    <WorkflowProgress workflowRun={workflowRun} workflow={workflow} onReviewData={setReviewPanelData} />
+                    <WorkflowProgress workflowRun={workflowRun} workflow={workflow} onReviewData={setReviewPanelData} onInteractiveSession={handleInteractiveSession} />
                 </div>
             )}
 
@@ -533,38 +543,50 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                     </div>
 
                     {/* Message input pinned at bottom */}
-                    {isRunning && (
-                        <div className="px-6 py-3 border-t border-gray-800 shrink-0">
-                            <form
-                                onSubmit={(e) => {
-                                    e.preventDefault();
-                                    const msg = messageInput.trim();
-                                    if (!msg) return;
-                                    sendInputMutation.mutate(
-                                        { id: selectedSession.id, message: msg },
-                                        { onSuccess: () => setMessageInput('') },
-                                    );
-                                }}
-                                className="flex items-center gap-2"
-                            >
-                                <input
-                                    type="text"
-                                    value={messageInput}
-                                    onChange={(e) => setMessageInput(e.target.value)}
-                                    placeholder="Send a message to the session..."
-                                    className="flex-1 bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                                />
-                                <button
-                                    type="submit"
-                                    disabled={!messageInput.trim() || sendInputMutation.isPending}
-                                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium bg-green-700 text-white hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    {isRunning && (() => {
+                        const isInteractive = interactiveSessionId === selectedSession.id;
+                        return (
+                            <div className={`px-6 py-3 border-t shrink-0 ${isInteractive ? 'border-purple-700 bg-purple-900/10' : 'border-gray-800'}`}>
+                                {isInteractive && (
+                                    <p className="text-xs text-purple-400 mb-2">
+                                        The agent may ask you questions. Type your answer below.
+                                    </p>
+                                )}
+                                <form
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const msg = messageInput.trim();
+                                        if (!msg) return;
+                                        sendInputMutation.mutate(
+                                            { id: selectedSession.id, message: msg },
+                                            { onSuccess: () => setMessageInput('') },
+                                        );
+                                    }}
+                                    className="flex items-center gap-2"
                                 >
-                                    <Send className="w-3.5 h-3.5" />
-                                    Send
-                                </button>
-                            </form>
-                        </div>
-                    )}
+                                    <input
+                                        type="text"
+                                        value={messageInput}
+                                        onChange={(e) => setMessageInput(e.target.value)}
+                                        placeholder={isInteractive ? "Answer the agent's question..." : "Send a message to the session..."}
+                                        className={`flex-1 bg-gray-800 border rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 ${
+                                            isInteractive
+                                                ? 'border-purple-600 focus:border-purple-500 focus:ring-purple-500'
+                                                : 'border-gray-600 focus:border-green-500 focus:ring-green-500'
+                                        }`}
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!messageInput.trim() || sendInputMutation.isPending}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium bg-green-700 text-white hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Send className="w-3.5 h-3.5" />
+                                        Send
+                                    </button>
+                                </form>
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
             {!selectedSessionId && sortedSessions.length > 0 && (

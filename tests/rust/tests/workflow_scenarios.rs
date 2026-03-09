@@ -201,6 +201,7 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
+                interactive: None,
             },
             WorkflowStepDefinition {
                 id: "review".to_string(),
@@ -213,6 +214,7 @@ async fn scenario_plan_step_completes_and_pauses_at_human_gate() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
+                interactive: None,
             },
         ],
     };
@@ -300,6 +302,7 @@ async fn scenario_plan_approve_implement() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
+                interactive: None,
             },
             WorkflowStepDefinition {
                 id: "review".to_string(),
@@ -312,6 +315,7 @@ async fn scenario_plan_approve_implement() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
+                interactive: None,
             },
             WorkflowStepDefinition {
                 id: "implement".to_string(),
@@ -324,6 +328,7 @@ async fn scenario_plan_approve_implement() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::Resume),
+                interactive: None,
             },
         ],
     };
@@ -407,6 +412,7 @@ async fn scenario_plan_rejection_loops_back() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: Some(SessionMode::New),
+                interactive: None,
             },
             WorkflowStepDefinition {
                 id: "review".to_string(),
@@ -419,6 +425,7 @@ async fn scenario_plan_rejection_loops_back() {
                 max_retries: None,
                 loop_back_to: None,
                 session_mode: None,
+                interactive: None,
             },
         ],
     };

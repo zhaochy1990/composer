@@ -64,6 +64,9 @@ function validateDag(steps: WorkflowStepDefinition[]): string[] {
         if (step.step_type === 'human_gate' && !step.on_approve) {
             errors.push(`Step "${step.id}": missing on_approve target`);
         }
+        if (step.interactive && step.step_type !== 'agentic') {
+            errors.push(`Step "${step.id}": interactive is only valid for agentic steps`);
+        }
         for (const dep of step.depends_on) {
             if (!ids.has(dep)) errors.push(`Step "${step.id}" depends on unknown "${dep}"`);
         }
@@ -125,6 +128,11 @@ function StepNode({ data, selected }: NodeProps) {
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${colors.text} bg-black/20`}>
                         {step.step_type === 'human_gate' ? 'Gate' : modeLabel || 'Agent'}
                     </span>
+                    {step.interactive && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded text-purple-300 bg-black/20">
+                            interactive
+                        </span>
+                    )}
                     {step.loop_back_to && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded text-orange-300 bg-black/20">
                             loop→{step.loop_back_to}
@@ -394,6 +402,19 @@ function PropertyPanel({
                         >
                             {SESSION_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                         </select>
+                    </div>
+                    <div>
+                        <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={step.interactive ?? false}
+                                onChange={e => onUpdate({ interactive: e.target.checked || undefined })}
+                                disabled={readOnly}
+                                className="rounded border-gray-600"
+                            />
+                            Interactive
+                            <span className="text-gray-600">— user can chat during this step</span>
+                        </label>
                     </div>
                     <div>
                         <label className="block text-xs text-gray-400 mb-1">
