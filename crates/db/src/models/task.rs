@@ -44,6 +44,8 @@ impl TryFrom<TaskRow> for Task {
             workflow_run_id: row.workflow_run_id.map(|s| s.parse()).transpose()?,
             workflow_id: row.workflow_id.map(|s| s.parse()).transpose()?,
             related_task_ids: vec![],
+            current_step_name: None,
+            current_step_status: None,
             completed_at: row.completed_at.map(|s| s.parse()).transpose()?,
             created_at: row.created_at.parse()?,
             updated_at: row.updated_at.parse()?,

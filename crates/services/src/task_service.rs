@@ -63,11 +63,20 @@ impl TaskService {
     }
 
     pub async fn list_all(&self) -> anyhow::Result<Vec<Task>> {
-        composer_db::models::task::list_all(&self.db.pool).await
+        let mut tasks = composer_db::models::task::list_all(&self.db.pool).await?;
+        self.enrich_tasks_with_workflow_step(&mut tasks).await;
+        Ok(tasks)
     }
 
     pub async fn get(&self, id: &str) -> anyhow::Result<Option<Task>> {
-        composer_db::models::task::find_by_id(&self.db.pool, id).await
+        let task = composer_db::models::task::find_by_id(&self.db.pool, id).await?;
+        match task {
+            Some(mut t) => {
+                self.enrich_tasks_with_workflow_step(std::slice::from_mut(&mut t)).await;
+                Ok(Some(t))
+            }
+            None => Ok(None),
+        }
     }
 
     pub async fn update(&self, id: &str, req: UpdateTaskRequest) -> anyhow::Result<Task> {
@@ -92,7 +101,7 @@ impl TaskService {
             }
         }
 
-        let task = composer_db::models::task::update(
+        let mut task = composer_db::models::task::update(
             &self.db.pool,
             id,
             req.title.as_deref(),
@@ -105,6 +114,7 @@ impl TaskService {
             workflow_id_str.as_deref(),
         )
         .await?;
+        self.enrich_tasks_with_workflow_step(std::slice::from_mut(&mut task)).await;
         self.event_bus.broadcast(WsEvent::TaskUpdated(task.clone()));
         Ok(task)
     }
@@ -122,9 +132,10 @@ impl TaskService {
         tracing::info!(task_id = %task_id, agent_id = %agent_id, "Assigning agent to task");
         composer_db::models::task::update_assigned_agent(&self.db.pool, task_id, Some(agent_id))
             .await?;
-        let task = composer_db::models::task::find_by_id(&self.db.pool, task_id)
+        let mut task = composer_db::models::task::find_by_id(&self.db.pool, task_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+        self.enrich_tasks_with_workflow_step(std::slice::from_mut(&mut task)).await;
         self.event_bus.broadcast(WsEvent::TaskUpdated(task.clone()));
         Ok(task)
     }
@@ -152,9 +163,10 @@ impl TaskService {
             composer_db::models::task::update(&self.db.pool, id, None, None, None, None, Some(pos), None, None, None)
                 .await?;
         }
-        let task = composer_db::models::task::find_by_id(&self.db.pool, id)
+        let mut task = composer_db::models::task::find_by_id(&self.db.pool, id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+        self.enrich_tasks_with_workflow_step(std::slice::from_mut(&mut task)).await;
         self.event_bus.broadcast(WsEvent::TaskMoved {
             task_id: task.id,
             from_status,
@@ -210,6 +222,52 @@ impl TaskService {
         composer_db::models::task::clear_workflow_run_id(&self.db.pool, task_id).await?;
 
         Ok(())
+    }
+
+    /// Populate `current_step_name` and `current_step_status` for tasks that have active workflow runs.
+    async fn enrich_tasks_with_workflow_step(&self, tasks: &mut [Task]) {
+        for task in tasks.iter_mut() {
+            let (run_id, wf_id) = match (&task.workflow_run_id, &task.workflow_id) {
+                (Some(r), Some(w)) => (r.to_string(), w.to_string()),
+                _ => continue,
+            };
+
+            let workflow = match composer_db::models::workflow::find_by_id(&self.db.pool, &wf_id).await {
+                Ok(Some(w)) => w,
+                _ => continue,
+            };
+
+            let step_outputs = match composer_db::models::workflow_step_output::list_by_run(&self.db.pool, &run_id).await {
+                Ok(outputs) => outputs,
+                _ => continue,
+            };
+
+            // Find current step: Running > WaitingForHuman > last non-Pending (by workflow order)
+            // Note: step_outputs are ordered alphabetically by step_id from the DB,
+            // so for the fallback we use the workflow definition's step order instead.
+            let current = step_outputs.iter()
+                .find(|o| o.status == WorkflowStepStatus::Running)
+                .or_else(|| step_outputs.iter().find(|o| o.status == WorkflowStepStatus::WaitingForHuman))
+                .or_else(|| {
+                    // Walk workflow steps in reverse definition order to find the last non-Pending step
+                    workflow.definition.steps.iter().rev()
+                        .filter_map(|step_def| {
+                            step_outputs.iter()
+                                .filter(|o| o.step_id == step_def.id && o.status != WorkflowStepStatus::Pending)
+                                .last() // latest attempt for this step
+                        })
+                        .next()
+                });
+
+            if let Some(output) = current {
+                let step_name = workflow.definition.steps.iter()
+                    .find(|s| s.id == output.step_id)
+                    .map(|s| s.name.clone())
+                    .unwrap_or_else(|| output.step_id.clone());
+                task.current_step_name = Some(step_name);
+                task.current_step_status = Some(output.status.clone());
+            }
+        }
     }
 
     pub async fn start_task(&self, task_id: &str) -> anyhow::Result<StartTaskResponse> {

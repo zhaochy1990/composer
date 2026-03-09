@@ -175,6 +175,8 @@ pub struct Task {
     pub workflow_run_id: Option<Uuid>,
     pub workflow_id: Option<Uuid>,
     pub related_task_ids: Vec<Uuid>,
+    pub current_step_name: Option<String>,
+    pub current_step_status: Option<WorkflowStepStatus>,
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

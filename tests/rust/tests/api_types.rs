@@ -201,6 +201,8 @@ fn ws_event_tagged_serialization_task_created() {
         workflow_run_id: None,
         workflow_id: None,
         related_task_ids: vec![],
+        current_step_name: None,
+        current_step_status: None,
         completed_at: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),

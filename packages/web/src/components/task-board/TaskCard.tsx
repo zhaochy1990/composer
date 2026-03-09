@@ -1,4 +1,4 @@
-import { GripVertical, GitPullRequest, Link2 } from 'lucide-react';
+import { GripVertical, GitPullRequest, Link2, Workflow } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { shortId, formatTime, extractPrId } from '@/lib/utils';
 import { priorityConfig } from './priority-config';
@@ -68,6 +68,20 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCa
                             <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700">
                                 <Link2 className="w-3 h-3" />
                                 {task.related_task_ids.length} related
+                            </span>
+                        )}
+                        {task.current_step_name && (
+                            <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${
+                                task.current_step_status === 'running'
+                                    ? 'bg-indigo-900/50 text-indigo-300 border-indigo-700'
+                                    : task.current_step_status === 'waiting_for_human'
+                                    ? 'bg-amber-900/50 text-amber-300 border-amber-700'
+                                    : task.current_step_status === 'failed'
+                                    ? 'bg-red-900/50 text-red-300 border-red-700'
+                                    : 'bg-cyan-900/50 text-cyan-300 border-cyan-700'
+                            }`}>
+                                <Workflow className="w-3 h-3" />
+                                {task.current_step_name}
                             </span>
                         )}
                         {task.status === 'done' && task.completed_at && (

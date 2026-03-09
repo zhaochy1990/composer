@@ -5,6 +5,7 @@ use composer_services::agent_service::AgentService;
 use composer_services::event_bus::EventBus;
 use composer_services::session_service::SessionService;
 use composer_services::task_service::TaskService;
+use composer_services::workflow_engine::WorkflowEngine;
 use composer_services::worktree_service::WorktreeService;
 use std::sync::Arc;
 
@@ -32,6 +33,8 @@ mod event_bus_tests {
             workflow_run_id: None,
             workflow_id: None,
             related_task_ids: vec![],
+            current_step_name: None,
+            current_step_status: None,
             completed_at: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -82,7 +85,8 @@ mod task_service_tests {
         let db = Arc::new(db);
         let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
         let session_service = SessionService::new(db.clone(), event_bus.clone(), process_manager, persist_rx);
-        let svc = TaskService::new(db, event_bus, session_service);
+        let workflow_engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service.clone());
+        let svc = TaskService::new(db, event_bus, session_service, workflow_engine);
         (svc, rx)
     }
 

@@ -112,6 +112,7 @@ export function useWebSocket() {
                     queryClient.invalidateQueries({
                         queryKey: ['workflow-runs', parsed.payload.workflow_run_id, 'steps'],
                     });
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
                     break;
                 }
                 case 'PlanCompleted': {

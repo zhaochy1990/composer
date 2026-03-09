@@ -51,6 +51,8 @@ export interface Task {
     workflow_run_id?: string;
     workflow_id?: string;
     related_task_ids: string[];
+    current_step_name?: string;
+    current_step_status?: WorkflowStepStatus;
     completed_at?: string;
     created_at: string;
     updated_at: string;

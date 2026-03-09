@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronDown, GitPullRequest } from 'lucide-react';
+import { ChevronRight, ChevronDown, GitPullRequest, Workflow } from 'lucide-react';
 import type { Task } from '@/types/generated';
 import { shortId, formatTime, extractPrId } from '@/lib/utils';
 import { priorityConfig } from './priority-config';
@@ -119,6 +119,20 @@ export function TaskListSection({
                                                 {extractPrId(url)}
                                             </a>
                                         ))}
+                                        {task.current_step_name && (
+                                            <span className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border ${
+                                                task.current_step_status === 'running'
+                                                    ? 'bg-indigo-900/50 text-indigo-300 border-indigo-700'
+                                                    : task.current_step_status === 'waiting_for_human'
+                                                    ? 'bg-amber-900/50 text-amber-300 border-amber-700'
+                                                    : task.current_step_status === 'failed'
+                                                    ? 'bg-red-900/50 text-red-300 border-red-700'
+                                                    : 'bg-cyan-900/50 text-cyan-300 border-cyan-700'
+                                            }`}>
+                                                <Workflow className="w-2.5 h-2.5" />
+                                                {task.current_step_name}
+                                            </span>
+                                        )}
                                         {task.status === 'done' && task.completed_at && (
                                             <span className="text-[10px] text-text-muted">
                                                 Completed {formatTime(task.completed_at)}
