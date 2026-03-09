@@ -44,6 +44,8 @@ pub struct AgentProcess {
     pub plan_file_path: Arc<std::sync::Mutex<Option<String>>>,
     /// Content of the plan file, captured from the Write tool_use input.
     pub plan_content: Arc<std::sync::Mutex<Option<String>>>,
+    /// Working directory of the session (for globbing plan files).
+    pub working_dir: String,
 }
 
 /// Sends events to both the broadcast channel (WebSocket fan-out) and the
@@ -285,10 +287,9 @@ impl AgentProcessManager {
                                     session_id,
                                     input.as_object().map(|o| o.keys().collect::<Vec<_>>())
                                 );
-                                // ExitPlanMode input contains plan under "plan" key
+                                // ExitPlanMode input may contain plan_content directly
                                 let plan_from_input = input
-                                    .get("plan")
-                                    .or_else(|| input.get("plan_content"))
+                                    .get("plan_content")
                                     .and_then(|c| c.as_str())
                                     .map(|s| s.to_string());
                                 let plan = plan_from_input
@@ -358,10 +359,21 @@ impl AgentProcessManager {
                                                             .get("content")
                                                             .and_then(|c| c.as_str())
                                                         {
+                                                            tracing::info!(
+                                                                "Session {} captured plan content ({} bytes)",
+                                                                session_id,
+                                                                content.len()
+                                                            );
                                                             *plan_content_capture
                                                                 .lock()
                                                                 .unwrap() =
                                                                 Some(content.to_string());
+                                                        } else {
+                                                            tracing::warn!(
+                                                                "Session {} Write to plan file has no content field. Input keys: {:?}",
+                                                                session_id,
+                                                                input.as_object().map(|o| o.keys().collect::<Vec<_>>())
+                                                            );
                                                         }
                                                     }
                                                 }
@@ -372,6 +384,14 @@ impl AgentProcessManager {
                                         // Use captured content from Write input (available even
                                         // before the tool executes), with disk read as fallback.
                                         if tool_name == Some("ExitPlanMode") {
+                                            let exit_input = block.get("input");
+                                            tracing::info!(
+                                                "Session {} ExitPlanMode detected. Has captured content: {}, Has captured path: {}, ExitPlanMode input: {:?}",
+                                                session_id,
+                                                plan_content_capture.lock().unwrap().is_some(),
+                                                plan_file_capture.lock().unwrap().is_some(),
+                                                exit_input
+                                            );
                                             let plan = plan_content_capture
                                                 .lock()
                                                 .unwrap()
@@ -499,6 +519,7 @@ impl AgentProcessManager {
         let claude_sid_monitor = claude_session_id.clone();
         let plan_file_monitor = plan_file_path.clone();
         let plan_content_monitor = plan_content.clone();
+        let working_dir_monitor = opts.working_dir.clone();
 
         // If exit_on_result is set, spawn a task that waits for the Result signal
         // and then drops stdin to make the process exit. Uses the cancel token
@@ -557,7 +578,7 @@ impl AgentProcessManager {
             let captured_plan_file = plan_file_monitor.lock().unwrap().clone();
 
             // Use plan content captured from Write tool_use input if available,
-            // otherwise read from disk (file should exist by now since process has exited).
+            // otherwise read from disk, otherwise glob for newest plan file.
             let plan_content = plan_content_monitor
                 .lock()
                 .unwrap()
@@ -566,6 +587,37 @@ impl AgentProcessManager {
                     captured_plan_file
                         .as_ref()
                         .and_then(|path| std::fs::read_to_string(path).ok())
+                })
+                .or_else(|| {
+                    let plans_dir = std::path::Path::new(&working_dir_monitor)
+                        .join(".claude")
+                        .join("plans");
+                    if !plans_dir.is_dir() {
+                        return None;
+                    }
+                    let mut newest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+                    if let Ok(entries) = std::fs::read_dir(&plans_dir) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                                if let Ok(meta) = path.metadata() {
+                                    if let Ok(modified) = meta.modified() {
+                                        if newest.as_ref().map_or(true, |(t, _)| modified > *t) {
+                                            newest = Some((modified, path));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some((_, ref path)) = newest {
+                        tracing::info!(
+                            "Session {} found plan file via glob: {:?}",
+                            session_id,
+                            path
+                        );
+                    }
+                    newest.and_then(|(_, path)| std::fs::read_to_string(path).ok())
                 });
 
             // Emit completion/failure now that the process has actually exited.
@@ -615,6 +667,7 @@ impl AgentProcessManager {
                 last_message_id,
                 plan_file_path,
                 plan_content,
+                working_dir: opts.working_dir.clone(),
             },
         );
 
