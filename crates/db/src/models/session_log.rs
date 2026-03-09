@@ -53,9 +53,11 @@ pub async fn list_by_session(
     let limit = limit.unwrap_or(5000).min(5000);
     let offset = offset.unwrap_or(0);
 
+    // Use a subquery to get the most recent `limit` rows, then re-sort ASC for display order.
+    // Without this, ORDER BY id ASC LIMIT N returns the *oldest* N rows, missing recent messages.
     let rows = if let Some(since) = since {
         sqlx::query_as::<_, SessionLogRow>(
-            "SELECT * FROM session_logs WHERE session_id = ? AND timestamp > ? ORDER BY id ASC LIMIT ? OFFSET ?"
+            "SELECT * FROM (SELECT * FROM session_logs WHERE session_id = ? AND timestamp > ? ORDER BY id DESC LIMIT ? OFFSET ?) sub ORDER BY id ASC"
         )
         .bind(session_id)
         .bind(since)
@@ -65,7 +67,7 @@ pub async fn list_by_session(
         .await?
     } else {
         sqlx::query_as::<_, SessionLogRow>(
-            "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC LIMIT ? OFFSET ?",
+            "SELECT * FROM (SELECT * FROM session_logs WHERE session_id = ? ORDER BY id DESC LIMIT ? OFFSET ?) sub ORDER BY id ASC",
         )
         .bind(session_id)
         .bind(limit)
@@ -74,4 +76,59 @@ pub async fn list_by_session(
         .await?
     };
     rows.into_iter().map(SessionLog::try_from).collect()
+}
+
+/// Count total logs for a session.
+pub async fn count_by_session(pool: &SqlitePool, session_id: &str) -> anyhow::Result<i64> {
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM session_logs WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(pool)
+            .await?;
+    Ok(row.0)
+}
+
+/// Cursor-based pagination: fetch `limit` rows ordered by id DESC (newest first),
+/// optionally before a given id. Returns results re-sorted in ASC order for display.
+pub async fn list_by_session_cursor(
+    pool: &SqlitePool,
+    session_id: &str,
+    before: Option<i64>,
+    limit: i64,
+) -> anyhow::Result<Vec<SessionLog>> {
+    let rows = if let Some(before_id) = before {
+        sqlx::query_as::<_, SessionLogRow>(
+            "SELECT * FROM (SELECT * FROM session_logs WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT ?) sub ORDER BY id ASC",
+        )
+        .bind(session_id)
+        .bind(before_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, SessionLogRow>(
+            "SELECT * FROM (SELECT * FROM session_logs WHERE session_id = ? ORDER BY id DESC LIMIT ?) sub ORDER BY id ASC",
+        )
+        .bind(session_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+    };
+    rows.into_iter().map(SessionLog::try_from).collect()
+}
+
+/// Check if there are logs with id < before_id for a session.
+pub async fn has_logs_before(
+    pool: &SqlitePool,
+    session_id: &str,
+    before_id: i64,
+) -> anyhow::Result<bool> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM session_logs WHERE session_id = ? AND id < ?)",
+    )
+    .bind(session_id)
+    .bind(before_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0 == 1)
 }

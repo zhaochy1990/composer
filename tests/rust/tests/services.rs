@@ -39,7 +39,7 @@ mod event_bus_tests {
 
     #[tokio::test]
     async fn broadcast_and_subscribe() {
-        let bus = EventBus::new();
+        let (bus, _persist_rx) = EventBus::new();
         let mut rx = bus.subscribe();
         bus.broadcast(make_task_created_event());
         let event = rx.recv().await.unwrap();
@@ -48,7 +48,7 @@ mod event_bus_tests {
 
     #[tokio::test]
     async fn multiple_subscribers() {
-        let bus = EventBus::new();
+        let (bus, _persist_rx) = EventBus::new();
         let mut rx1 = bus.subscribe();
         let mut rx2 = bus.subscribe();
         bus.broadcast(WsEvent::TaskDeleted {
@@ -60,7 +60,7 @@ mod event_bus_tests {
 
     #[test]
     fn no_subscribers_no_panic() {
-        let bus = EventBus::new();
+        let (bus, _persist_rx) = EventBus::new();
         // Should not panic even with no subscribers
         bus.broadcast(make_task_created_event());
     }
@@ -76,11 +76,11 @@ mod task_service_tests {
     async fn setup() -> (TaskService, tokio::sync::broadcast::Receiver<WsEvent>) {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.run_migrations().await.unwrap();
-        let event_bus = EventBus::new();
+        let (event_bus, persist_rx) = EventBus::new();
         let rx = event_bus.subscribe();
         let db = Arc::new(db);
         let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender()));
-        let session_service = SessionService::new(db.clone(), event_bus.clone(), process_manager);
+        let session_service = SessionService::new(db.clone(), event_bus.clone(), process_manager, persist_rx);
         let svc = TaskService::new(db, event_bus, session_service);
         (svc, rx)
     }
@@ -244,7 +244,7 @@ mod agent_service_tests {
     async fn setup() -> (AgentService, tokio::sync::broadcast::Receiver<WsEvent>) {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.run_migrations().await.unwrap();
-        let event_bus = EventBus::new();
+        let (event_bus, _persist_rx) = EventBus::new();
         let rx = event_bus.subscribe();
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
         let svc = AgentService::new(Arc::new(db), event_bus, pm);
@@ -309,9 +309,9 @@ mod session_service_tests {
     async fn setup() -> SessionService {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.run_migrations().await.unwrap();
-        let event_bus = EventBus::new();
+        let (event_bus, persist_rx) = EventBus::new();
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
-        SessionService::new(Arc::new(db), event_bus, pm)
+        SessionService::new(Arc::new(db), event_bus, pm, persist_rx)
     }
 
     /// Setup that returns the DB and event bus for event-driven tests.
@@ -319,9 +319,9 @@ mod session_service_tests {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.run_migrations().await.unwrap();
         let db = Arc::new(db);
-        let event_bus = EventBus::new();
+        let (event_bus, persist_rx) = EventBus::new();
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
-        let svc = SessionService::new(db.clone(), event_bus.clone(), pm);
+        let svc = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
         (svc, db, event_bus)
     }
 
@@ -630,9 +630,9 @@ mod workflow_tests {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.run_migrations().await.unwrap();
         let db = Arc::new(db);
-        let event_bus = EventBus::new();
+        let (event_bus, persist_rx) = EventBus::new();
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
-        let session_service = SessionService::new(db.clone(), event_bus.clone(), pm);
+        let session_service = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
         let engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service);
         (engine, db, event_bus)
     }
@@ -880,7 +880,7 @@ mod workflow_tests {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.run_migrations().await.unwrap();
         let db = Arc::new(db);
-        let event_bus = EventBus::new();
+        let (event_bus, persist_rx) = EventBus::new();
 
         let project_id = create_project(&db.pool).await;
         let wf_id = create_workflow_in_db(&db.pool).await;
@@ -900,7 +900,7 @@ mod workflow_tests {
 
         // Create the WorkflowEngine — triggers startup recovery
         let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
-        let session_service = SessionService::new(db.clone(), event_bus.clone(), pm);
+        let session_service = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
         let _engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service);
 
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;

@@ -16,28 +16,88 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
         (state) => state.outputs[sessionId] ?? EMPTY_OUTPUT,
     );
     const hydrate = useSessionOutputStore((state) => state.hydrate);
+    const prepend = useSessionOutputStore((state) => state.prepend);
     const isHydrated = useSessionOutputStore((state) => state.isHydrated(sessionId));
 
-    // Fetch historical logs from DB when store is empty (e.g., after page reload)
-    const { data: historicalLogs } = useSessionLogs(
-        output.length === 0 && !isHydrated ? sessionId : undefined,
-    );
+    // Fetch paginated historical logs from DB
+    const {
+        data: logPages,
+        hasNextPage,
+        fetchNextPage,
+        isFetchingNextPage,
+    } = useSessionLogs(!isHydrated ? sessionId : undefined);
 
-    // Hydrate store with historical logs once fetched
+    // Hydrate store with first page of historical logs once fetched
     useEffect(() => {
-        if (historicalLogs && historicalLogs.length > 0 && !isHydrated) {
-            hydrate(
-                sessionId,
-                historicalLogs.map((log) => ({
-                    session_id: log.session_id,
-                    log_type: log.log_type,
-                    content: log.content,
-                    seq: log.id,
-                })),
-            );
+        if (logPages && logPages.pages.length > 0 && !isHydrated) {
+            const firstPage = logPages.pages[0];
+            if (firstPage.logs.length > 0) {
+                hydrate(
+                    sessionId,
+                    firstPage.logs.map((log) => ({
+                        id: log.id,
+                        session_id: log.session_id,
+                        log_type: log.log_type,
+                        content: log.content,
+                        seq: log.id,
+                    })),
+                );
+            }
         }
-    }, [historicalLogs, sessionId, hydrate, isHydrated]);
+    }, [logPages, sessionId, hydrate, isHydrated]);
+
+    // Auto-fetch all remaining pages after initial hydration
+    const fetchingAllRef = useRef(false);
+    useEffect(() => {
+        if (!isHydrated || !hasNextPage || isFetchingNextPage || fetchingAllRef.current) return;
+        fetchingAllRef.current = true;
+        fetchNextPage();
+    }, [isHydrated, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    // Reset the fetching flag when a fetch completes so the next page can be triggered
+    useEffect(() => {
+        if (!isFetchingNextPage) {
+            fetchingAllRef.current = false;
+        }
+    }, [isFetchingNextPage]);
+
+    // Prepend older pages into the store as they arrive
+    const prependedPagesRef = useRef(1); // page 0 was hydrated
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!logPages || !isHydrated) return;
+        const pages = logPages.pages;
+        while (prependedPagesRef.current < pages.length) {
+            const page = pages[prependedPagesRef.current];
+            if (page.logs.length > 0) {
+                // Preserve scroll position when prepending
+                const el = scrollRef.current;
+                const prevScrollHeight = el?.scrollHeight ?? 0;
+
+                prepend(
+                    sessionId,
+                    page.logs.map((log) => ({
+                        id: log.id,
+                        session_id: log.session_id,
+                        log_type: log.log_type,
+                        content: log.content,
+                        seq: log.id,
+                    })),
+                );
+
+                // Restore scroll position after DOM update
+                if (el) {
+                    requestAnimationFrame(() => {
+                        const newScrollHeight = el.scrollHeight;
+                        el.scrollTop += newScrollHeight - prevScrollHeight;
+                    });
+                }
+            }
+            prependedPagesRef.current++;
+        }
+    }, [logPages, isHydrated, sessionId, prepend]);
+
     const shouldAutoScroll = useRef(true);
 
     // Track whether user has scrolled up (disable auto-scroll if so)
@@ -78,7 +138,12 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
             ref={scrollRef}
             className="h-full overflow-y-auto bg-gray-950 rounded-lg p-4 font-mono text-sm border border-gray-800"
         >
-            {parsedEntries.length === 0 && (
+            {hasNextPage && (
+                <div className="text-center text-gray-500 text-xs py-2">
+                    Loading older messages...
+                </div>
+            )}
+            {parsedEntries.length === 0 && !hasNextPage && (
                 <p className="text-gray-600 italic">
                     Waiting for output...
                 </p>

@@ -10,8 +10,8 @@ async fn setup_app() -> axum::Router {
         .await
         .unwrap();
     db.run_migrations().await.unwrap();
-    let event_bus = composer_services::event_bus::EventBus::new();
-    let services = composer_services::ServiceContainer::new(Arc::new(db), event_bus.clone());
+    let (event_bus, persist_rx) = composer_services::event_bus::EventBus::new();
+    let services = composer_services::ServiceContainer::new(Arc::new(db), event_bus.clone(), persist_rx);
     let state = Arc::new(AppState {
         services,
         event_bus,
@@ -488,8 +488,8 @@ async fn setup_app_with_db() -> (axum::Router, Arc<composer_db::Database>) {
             .unwrap(),
     );
     db.run_migrations().await.unwrap();
-    let event_bus = composer_services::event_bus::EventBus::new();
-    let services = composer_services::ServiceContainer::new(db.clone(), event_bus.clone());
+    let (event_bus, persist_rx) = composer_services::event_bus::EventBus::new();
+    let services = composer_services::ServiceContainer::new(db.clone(), event_bus.clone(), persist_rx);
     let state = Arc::new(AppState {
         services,
         event_bus,
@@ -525,10 +525,12 @@ async fn session_logs_not_found() {
         )
         .await
         .unwrap();
-    // Logs endpoint returns 200 with an empty list for nonexistent session
+    // Logs endpoint returns 200 with a PaginatedSessionLogs containing an empty list
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp.into_body()).await;
-    assert!(json.as_array().unwrap().is_empty());
+    assert!(json["logs"].as_array().unwrap().is_empty());
+    assert_eq!(json["has_more"], false);
+    assert_eq!(json["total_count"], 0);
 }
 
 // --- Session input ---

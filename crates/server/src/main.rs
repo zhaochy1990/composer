@@ -64,8 +64,8 @@ async fn run_server<G: Send + 'static>(
     let db = Arc::new(composer_db::Database::connect(&config.database.url_pattern).await?);
     db.run_migrations().await?;
 
-    let event_bus = composer_services::event_bus::EventBus::new();
-    let services = composer_services::ServiceContainer::new(db, event_bus.clone());
+    let (event_bus, persist_rx) = composer_services::event_bus::EventBus::new();
+    let services = composer_services::ServiceContainer::new(db, event_bus.clone(), persist_rx);
 
     let state = Arc::new(AppState { services, event_bus });
     let app = build_app(state, &config.cors.origins);

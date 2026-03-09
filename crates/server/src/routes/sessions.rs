@@ -69,12 +69,23 @@ async fn retry_session(State(state): State<Arc<AppState>>, Path(id): Path<String
 
 #[derive(Deserialize)]
 struct LogsQuery {
-    since: Option<String>,
+    before: Option<i64>,
     limit: Option<i64>,
-    offset: Option<i64>,
 }
 
-async fn get_session_logs(State(state): State<Arc<AppState>>, Path(id): Path<String>, Query(query): Query<LogsQuery>) -> Result<Json<Vec<SessionLog>>, ServiceError> {
-    let logs = state.services.sessions.get_logs(&id, query.since.as_deref(), query.limit, query.offset).await?;
-    Ok(Json(logs))
+async fn get_session_logs(State(state): State<Arc<AppState>>, Path(id): Path<String>, Query(query): Query<LogsQuery>) -> Result<Json<PaginatedSessionLogs>, ServiceError> {
+    let limit = query.limit.unwrap_or(500).min(2000);
+    let logs = state.services.sessions.get_logs_cursor(&id, query.before, limit).await?;
+    let total_count = state.services.sessions.get_log_count(&id).await?;
+    let oldest_id = logs.first().map(|l| l.id);
+    let has_more = match oldest_id {
+        Some(oid) => state.services.sessions.has_logs_before(&id, oid).await?,
+        None => false,
+    };
+    Ok(Json(PaginatedSessionLogs {
+        logs,
+        has_more,
+        oldest_id,
+        total_count,
+    }))
 }

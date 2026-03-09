@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 
-const MAX_OUTPUT_LINES = 5000;
-
 export interface SessionLogEntry {
+    id?: number;
     session_id: string;
     log_type: string;
     content: string;
@@ -14,6 +13,7 @@ interface SessionOutputStore {
     _seqCounters: Record<string, number>;
     _hydrated: Record<string, boolean>;
     append: (sessionId: string, log: { session_id: string; log_type: string; content: string }) => void;
+    prepend: (sessionId: string, logs: SessionLogEntry[]) => void;
     hydrate: (sessionId: string, logs: SessionLogEntry[]) => void;
     isHydrated: (sessionId: string) => boolean;
     clear: (sessionId: string) => void;
@@ -28,32 +28,37 @@ export const useSessionOutputStore = create<SessionOutputStore>((set, get) => ({
             const nextSeq = (state._seqCounters[sessionId] ?? 0) + 1;
             const entry: SessionLogEntry = { ...log, seq: nextSeq };
             const existing = state.outputs[sessionId] ?? [];
-            const updated = [...existing, entry];
-            // Rolling window cap
-            const trimmed = updated.length > MAX_OUTPUT_LINES
-                ? updated.slice(updated.length - MAX_OUTPUT_LINES)
-                : updated;
             return {
-                outputs: { ...state.outputs, [sessionId]: trimmed },
+                outputs: { ...state.outputs, [sessionId]: [...existing, entry] },
                 _seqCounters: { ...state._seqCounters, [sessionId]: nextSeq },
+            };
+        }),
+    prepend: (sessionId, logs) =>
+        set((state) => {
+            const existing = state.outputs[sessionId] ?? [];
+            // Renumber: prepended logs get seq 1..N, existing get N+1..
+            const prepended = logs.map((log, i) => ({ ...log, seq: i + 1 }));
+            const shifted = existing.map((e, i) => ({ ...e, seq: logs.length + i + 1 }));
+            const merged = [...prepended, ...shifted];
+            return {
+                outputs: { ...state.outputs, [sessionId]: merged },
+                _seqCounters: { ...state._seqCounters, [sessionId]: merged.length },
             };
         }),
     hydrate: (sessionId, logs) =>
         set((state) => {
-            // Don't overwrite if we already have live data from WebSocket
-            if ((state.outputs[sessionId]?.length ?? 0) > 0) {
-                return { _hydrated: { ...state._hydrated, [sessionId]: true } };
-            }
-            const entries: SessionLogEntry[] = logs.map((log, i) => ({
+            const historical: SessionLogEntry[] = logs.map((log, i) => ({
                 ...log,
                 seq: i + 1,
             }));
-            const trimmed = entries.length > MAX_OUTPUT_LINES
-                ? entries.slice(entries.length - MAX_OUTPUT_LINES)
-                : entries;
+            // Merge: prepend historical logs before any live WS data that arrived early
+            const existing = state.outputs[sessionId] ?? [];
+            const merged = existing.length > 0
+                ? [...historical, ...existing.map((e, i) => ({ ...e, seq: historical.length + i + 1 }))]
+                : historical;
             return {
-                outputs: { ...state.outputs, [sessionId]: trimmed },
-                _seqCounters: { ...state._seqCounters, [sessionId]: entries.length },
+                outputs: { ...state.outputs, [sessionId]: merged },
+                _seqCounters: { ...state._seqCounters, [sessionId]: merged.length },
                 _hydrated: { ...state._hydrated, [sessionId]: true },
             };
         }),

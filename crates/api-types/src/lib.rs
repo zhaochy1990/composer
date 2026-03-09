@@ -323,6 +323,15 @@ pub struct SessionLog {
     pub timestamp: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PaginatedSessionLogs {
+    pub logs: Vec<SessionLog>,
+    pub has_more: bool,
+    pub oldest_id: Option<i64>,
+    pub total_count: i64,
+}
+
 // ---------------------------------------------------------------------------
 // Request types
 // ---------------------------------------------------------------------------

@@ -41,10 +41,10 @@ async fn setup() -> TestHarness {
     let db = Database::connect("sqlite::memory:").await.unwrap();
     db.run_migrations().await.unwrap();
     let db = Arc::new(db);
-    let event_bus = EventBus::new();
+    let (event_bus, persist_rx) = EventBus::new();
     let rx = event_bus.subscribe();
     let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
-    let session_service = SessionService::new(db.clone(), event_bus.clone(), pm);
+    let session_service = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
     let engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service.clone());
     session_service.set_workflow_engine(engine.clone());
 
@@ -503,7 +503,7 @@ async fn scenario_plan_rejection_loops_back() {
 #[tokio::test]
 #[ignore] // Requires real Claude Code + API key (~1-2 min)
 async fn scenario_exit_on_result_completes_session() {
-    let event_bus = EventBus::new();
+    let (event_bus, _persist_rx) = EventBus::new();
     let mut rx = event_bus.subscribe();
     let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
 

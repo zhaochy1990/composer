@@ -173,6 +173,13 @@ export interface SessionLog {
     timestamp: string;
 }
 
+export interface PaginatedSessionLogs {
+    logs: SessionLog[];
+    has_more: boolean;
+    oldest_id: number | null;
+    total_count: number;
+}
+
 // ---------------------------------------------------------------------------
 // Request types
 // ---------------------------------------------------------------------------

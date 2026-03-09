@@ -21,9 +21,9 @@ pub struct ServiceContainer {
 }
 
 impl ServiceContainer {
-    pub fn new(db: Arc<Database>, event_bus: EventBus) -> Self {
+    pub fn new(db: Arc<Database>, event_bus: EventBus, persist_rx: tokio::sync::mpsc::UnboundedReceiver<composer_api_types::WsEvent>) -> Self {
         let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender()));
-        let sessions = session_service::SessionService::new(db.clone(), event_bus.clone(), process_manager.clone());
+        let sessions = session_service::SessionService::new(db.clone(), event_bus.clone(), process_manager.clone(), persist_rx);
         let workflows = workflow_engine::WorkflowEngine::new(db.clone(), event_bus.clone(), sessions.clone());
 
         // Wire workflow engine into session service (breaks circular dependency)

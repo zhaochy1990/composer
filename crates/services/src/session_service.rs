@@ -7,6 +7,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use tokio::sync::mpsc;
 
 /// Matches PR URLs from GitHub, Azure DevOps, GitLab, and self-hosted instances.
 static PR_URL_RE: Lazy<Regex> = Lazy::new(|| {
@@ -27,6 +28,7 @@ impl SessionService {
         db: Arc<Database>,
         event_bus: EventBus,
         process_manager: Arc<AgentProcessManager>,
+        persist_rx: mpsc::UnboundedReceiver<WsEvent>,
     ) -> Self {
         let worktree_service = WorktreeService::new(db.clone());
 
@@ -42,7 +44,7 @@ impl SessionService {
         service.spawn_startup_recovery();
 
         // Spawn background task to persist session events to DB
-        service.spawn_event_listener();
+        service.spawn_event_listener(persist_rx);
 
         service
     }
@@ -67,22 +69,15 @@ impl SessionService {
         });
     }
 
-    /// Listens for WsEvents and persists session output/completion/failure to the database.
-    fn spawn_event_listener(&self) {
-        let mut rx = self.event_bus.subscribe();
+    /// Listens for WsEvents via a dedicated mpsc channel and persists session
+    /// output/completion/failure to the database. The mpsc channel cannot lag or
+    /// drop messages, unlike the broadcast channel used for WebSocket fan-out.
+    fn spawn_event_listener(&self, mut rx: mpsc::UnboundedReceiver<WsEvent>) {
         let db = self.db.clone();
         let workflow_engine = self.workflow_engine.clone();
 
         tokio::spawn(async move {
-            loop {
-                let event = match rx.recv().await {
-                    Ok(event) => event,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!("Event listener lagged, dropped {} events", n);
-                        continue;
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                };
+            while let Some(event) = rx.recv().await {
                 match event {
                     WsEvent::SessionOutput {
                         session_id,
@@ -752,6 +747,34 @@ impl SessionService {
             offset,
         )
         .await
+    }
+
+    pub async fn get_logs_cursor(
+        &self,
+        session_id: &str,
+        before: Option<i64>,
+        limit: i64,
+    ) -> anyhow::Result<Vec<SessionLog>> {
+        composer_db::models::session_log::list_by_session_cursor(
+            &self.db.pool,
+            session_id,
+            before,
+            limit,
+        )
+        .await
+    }
+
+    pub async fn get_log_count(&self, session_id: &str) -> anyhow::Result<i64> {
+        composer_db::models::session_log::count_by_session(&self.db.pool, session_id).await
+    }
+
+    pub async fn has_logs_before(
+        &self,
+        session_id: &str,
+        before_id: i64,
+    ) -> anyhow::Result<bool> {
+        composer_db::models::session_log::has_logs_before(&self.db.pool, session_id, before_id)
+            .await
     }
 
     pub async fn send_input(&self, id: &str, message: String) -> anyhow::Result<()> {
