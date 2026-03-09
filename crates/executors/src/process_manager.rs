@@ -287,9 +287,10 @@ impl AgentProcessManager {
                                     session_id,
                                     input.as_object().map(|o| o.keys().collect::<Vec<_>>())
                                 );
-                                // ExitPlanMode input may contain plan_content directly
+                                // ExitPlanMode input contains plan under "plan" key
                                 let plan_from_input = input
-                                    .get("plan_content")
+                                    .get("plan")
+                                    .or_else(|| input.get("plan_content"))
                                     .and_then(|c| c.as_str())
                                     .map(|s| s.to_string());
                                 let plan = plan_from_input
@@ -384,18 +385,30 @@ impl AgentProcessManager {
                                         // Use captured content from Write input (available even
                                         // before the tool executes), with disk read as fallback.
                                         if tool_name == Some("ExitPlanMode") {
+                                            // Extract plan from ExitPlanMode input ("plan" key),
+                                            // then try captured Write content, then disk read.
                                             let exit_input = block.get("input");
+                                            let plan_from_input = exit_input
+                                                .and_then(|i| {
+                                                    i.get("plan")
+                                                        .or_else(|| i.get("plan_content"))
+                                                })
+                                                .and_then(|c| c.as_str())
+                                                .map(|s| s.to_string());
                                             tracing::info!(
-                                                "Session {} ExitPlanMode detected. Has captured content: {}, Has captured path: {}, ExitPlanMode input: {:?}",
+                                                "Session {} ExitPlanMode detected. plan_from_input len: {}, captured_content: {}, captured_path: {}",
                                                 session_id,
+                                                plan_from_input.as_ref().map(|s| s.len()).unwrap_or(0),
                                                 plan_content_capture.lock().unwrap().is_some(),
                                                 plan_file_capture.lock().unwrap().is_some(),
-                                                exit_input
                                             );
-                                            let plan = plan_content_capture
-                                                .lock()
-                                                .unwrap()
-                                                .clone()
+                                            let plan = plan_from_input
+                                                .or_else(|| {
+                                                    plan_content_capture
+                                                        .lock()
+                                                        .unwrap()
+                                                        .clone()
+                                                })
                                                 .or_else(|| {
                                                     plan_file_capture
                                                         .lock()
