@@ -4,6 +4,7 @@ import type { Task } from '@/types/generated';
 import { useUpdateTask, useDeleteTask, useStartTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession, useSendSessionInput, useRetrySession } from '@/hooks/use-sessions';
+import { useUserQuestionStore } from '@/stores/user-question-store';
 import { useAgents } from '@/hooks/use-agents';
 import { useProjects } from '@/hooks/use-projects';
 import { useWorkflows as useAllWorkflows, useWorkflowRun, useWorkflow, useStartWorkflow } from '@/hooks/use-workflows';
@@ -66,6 +67,36 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const { data: workflow } = useWorkflow(workflowRun?.workflow_id ?? undefined);
     const [reviewPanelData, setReviewPanelData] = useState<ReviewPanelData | null>(null);
     const [interactiveSessionId, setInteractiveSessionId] = useState<string | null>(null);
+
+    // --- Pending user questions (from AskUserQuestion during plan step) ---
+    const allPendingQuestions = useUserQuestionStore((s) => s.pending);
+    // Find if any session for this task has a pending question
+    const pendingQuestion = useMemo(() => {
+        if (!sessions) return null;
+        for (const session of sessions) {
+            const q = allPendingQuestions[session.id];
+            if (q) return q;
+        }
+        return null;
+    }, [sessions, allPendingQuestions]);
+
+    // Auto-open the side panel when a question arrives
+    useEffect(() => {
+        if (pendingQuestion) {
+            // Create a synthetic review panel data to show the plan content
+            setReviewPanelData((prev) => prev ?? {
+                content: pendingQuestion.planContent ?? '',
+                humanGateSteps: [],
+                steps: workflow?.definition.steps ?? [],
+                workflowRunId: workflowRun?.id ?? '',
+                allStepOutputs: [],
+            });
+            if (pendingQuestion.sessionId) {
+                setSelectedSessionId(pendingQuestion.sessionId);
+                setFormCollapsed(true);
+            }
+        }
+    }, [pendingQuestion, workflow, workflowRun]);
 
     // Auto-select session when an interactive workflow step starts running
     const handleInteractiveSession = useCallback((sessionId: string | null) => {
@@ -605,6 +636,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                 {reviewPanelData && (
                     <WorkflowReviewSidePanel
                         data={reviewPanelData}
+                        pendingQuestion={pendingQuestion}
                         onClose={() => setReviewPanelData(null)}
                     />
                 )}
@@ -628,6 +660,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                 {reviewPanelData && (
                     <WorkflowReviewSidePanel
                         data={reviewPanelData}
+                        pendingQuestion={pendingQuestion}
                         onClose={() => setReviewPanelData(null)}
                     />
                 )}

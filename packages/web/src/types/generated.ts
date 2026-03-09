@@ -370,10 +370,13 @@ export type WsEvent =
     | { type: "WorkflowRunUpdated"; payload: WorkflowRun }
     | { type: "WorkflowStepChanged"; payload: { workflow_run_id: string; step: WorkflowStepOutput } }
     | { type: "WorkflowRunCompleted"; payload: { workflow_run_id: string; task_id: string } }
-    | { type: "WorkflowWaitingForHuman"; payload: { workflow_run_id: string; task_id: string; step_id: string } };
+    | { type: "WorkflowWaitingForHuman"; payload: { workflow_run_id: string; task_id: string; step_id: string } }
+    | { type: "UserQuestionRequested"; payload: { session_id: string; request_id: string; questions: unknown; plan_content?: string } }
+    | { type: "UserQuestionAnswered"; payload: { session_id: string } };
 
 export type WsCommand =
     | { type: "SubscribeSession"; payload: { session_id: string } }
     | { type: "UnsubscribeSession"; payload: { session_id: string } }
     | { type: "SendInput"; payload: { session_id: string; message: string } }
+    | { type: "AnswerUserQuestion"; payload: { session_id: string; request_id: string; answers: unknown } }
     | { type: "Ping" };

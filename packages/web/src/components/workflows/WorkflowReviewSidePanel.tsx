@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { FileText, X, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { FileText, X, ThumbsUp, ThumbsDown, MessageCircle } from 'lucide-react';
 import type { WorkflowStepOutput, WorkflowStepDefinition } from '@/types/generated';
 import { MarkdownContent } from '@/components/sessions/MarkdownContent';
 import { useSubmitWorkflowDecision } from '@/hooks/use-workflows';
 import { parsePrMeta, parseTestResults, buildReviewMarkdown } from '@/lib/parse-step-output';
+import { UserQuestionPanel } from '@/components/sessions/UserQuestionPanel';
+import type { PendingQuestion } from '@/stores/user-question-store';
 
 export interface ReviewPanelData {
     content: string;
@@ -15,10 +17,11 @@ export interface ReviewPanelData {
 
 interface WorkflowReviewSidePanelProps {
     data: ReviewPanelData;
+    pendingQuestion?: PendingQuestion | null;
     onClose: () => void;
 }
 
-export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePanelProps) {
+export function WorkflowReviewSidePanel({ data, pendingQuestion, onClose }: WorkflowReviewSidePanelProps) {
     const { content, humanGateSteps, steps, workflowRunId, allStepOutputs } = data;
     const submitDecision = useSubmitWorkflowDecision();
     const [comments, setComments] = useState<Record<string, string>>({});
@@ -76,16 +79,28 @@ export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePan
         return steps.find(s => s.id === stepId);
     }
 
-    const activeGateName = humanGateSteps.length > 0
-        ? getGateName(humanGateSteps[0].step_id)
-        : 'Review';
+    const isPlanQuestion = !!pendingQuestion;
+    const activeGateName = isPlanQuestion
+        ? 'Plan'
+        : humanGateSteps.length > 0
+            ? getGateName(humanGateSteps[0].step_id)
+            : 'Review';
+
+    // Use plan_content from the question event when in plan question mode;
+    // for human gates, use structured review markdown
+    const displayContent = isPlanQuestion
+        ? (pendingQuestion.planContent ?? content)
+        : reviewMarkdown;
 
     return (
         <div className="w-[800px] shrink-0 h-full bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 shrink-0">
                 <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-400" />
+                    {isPlanQuestion
+                        ? <MessageCircle className="w-4 h-4 text-purple-400" />
+                        : <FileText className="w-4 h-4 text-blue-400" />
+                    }
                     <h3 className="text-sm font-semibold text-gray-200">{activeGateName}</h3>
                 </div>
                 <button
@@ -100,10 +115,10 @@ export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePan
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-8 py-6 min-h-0">
-                {reviewMarkdown ? (
+                {displayContent ? (
                     <div className="max-w-[680px] mx-auto">
                         <div className="prose prose-invert max-w-none leading-relaxed">
-                            <MarkdownContent content={reviewMarkdown} />
+                            <MarkdownContent content={displayContent} />
                         </div>
                     </div>
                 ) : (
@@ -111,8 +126,15 @@ export function WorkflowReviewSidePanel({ data, onClose }: WorkflowReviewSidePan
                 )}
             </div>
 
+            {/* Question footer — shown during plan step when agent asks a question */}
+            {isPlanQuestion && (
+                <div className="shrink-0 border-t border-purple-800 px-6 py-4 bg-purple-900/10">
+                    <UserQuestionPanel pendingQuestion={pendingQuestion} />
+                </div>
+            )}
+
             {/* Decision footer — one section per waiting gate */}
-            {humanGateSteps.map(gateOutput => {
+            {!isPlanQuestion && humanGateSteps.map(gateOutput => {
                 const gateDef = getGateDef(gateOutput.step_id);
                 const stepComments = comments[gateOutput.step_id] ?? '';
 

@@ -1,4 +1,4 @@
-use crate::types::{CliMessage, UserMessage};
+use crate::types::{CliMessage, SDKControlResponse, UserMessage};
 use crate::protocol::{read_stdout_lines, ProtocolPeer};
 use crate::error::ExecutorError;
 use composer_api_types::{WsEvent, LogType};
@@ -40,6 +40,8 @@ pub struct AgentProcess {
     pub claude_session_id: Arc<std::sync::Mutex<Option<String>>>,
     /// Last confirmed message UUID (committed on Result).
     pub last_message_id: Arc<std::sync::Mutex<Option<String>>>,
+    /// Path to the plan file written during plan mode (`.claude/plans/*.md`).
+    pub plan_file_path: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 pub struct AgentProcessManager {
@@ -119,6 +121,8 @@ impl AgentProcessManager {
             Arc::new(std::sync::Mutex::new(None));
         let last_message_id: Arc<std::sync::Mutex<Option<String>>> =
             Arc::new(std::sync::Mutex::new(None));
+        let plan_file_path: Arc<std::sync::Mutex<Option<String>>> =
+            Arc::new(std::sync::Mutex::new(None));
 
         let cancel_token = CancellationToken::new();
         let cancel_clone = cancel_token.clone();
@@ -142,6 +146,7 @@ impl AgentProcessManager {
         let session_id_capture = claude_session_id.clone();
         let last_result_capture = last_result.clone();
         let last_msg_id_capture = last_message_id.clone();
+        let plan_file_capture = plan_file_path.clone();
         let exit_on_result = opts.exit_on_result;
         let result_received = Arc::new(tokio::sync::Notify::new());
         let result_received_signal = result_received.clone();
@@ -176,6 +181,41 @@ impl AgentProcessManager {
                         log_type,
                         content: raw_line.to_string(),
                     });
+
+                    // Detect AskUserQuestion control requests
+                    if let CliMessage::ControlRequest { ref request_id, ref request } = msg {
+                        if let crate::types::ControlRequestPayload::CanUseTool { ref tool_name, ref input, .. } = request {
+                            if tool_name == "AskUserQuestion" {
+                                let _ = event_tx.send(WsEvent::UserQuestionRequested {
+                                    session_id,
+                                    request_id: request_id.clone(),
+                                    questions: input.clone(),
+                                    plan_content: None, // populated by session service
+                                });
+                            }
+                        }
+                    }
+
+                    // Detect Write tool_use to .claude/plans/*.md for plan file tracking
+                    if let CliMessage::Assistant(ref a) = msg {
+                        if let Some(content) = a.message.get("content") {
+                            if let Some(blocks) = content.as_array() {
+                                for block in blocks {
+                                    if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                                        if block.get("name").and_then(|n| n.as_str()) == Some("Write") {
+                                            if let Some(input) = block.get("input") {
+                                                if let Some(file_path) = input.get("file_path").and_then(|p| p.as_str()) {
+                                                    if file_path.contains(".claude/plans/") && file_path.ends_with(".md") {
+                                                        *plan_file_capture.lock().unwrap() = Some(file_path.to_string());
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Extract Claude Code session_id synchronously
                     let maybe_sid = match &msg {
@@ -273,6 +313,7 @@ impl AgentProcessManager {
         let event_tx5 = self.event_tx.clone();
         let last_result_monitor = last_result.clone();
         let claude_sid_monitor = claude_session_id.clone();
+        let plan_file_monitor = plan_file_path.clone();
 
         // If exit_on_result is set, spawn a task that waits for the Result signal
         // and then drops stdin to make the process exit. Uses the cancel token
@@ -324,19 +365,28 @@ impl AgentProcessManager {
             let _ = child.wait().await;
             let _ = stderr_handle.await;
 
-            // Extract claude_session_id BEFORE removing from the DashMap.
+            // Extract claude_session_id and plan_file_path BEFORE removing from the DashMap.
             // This avoids the race where the event listener tries to look it up
             // after the process entry is already removed.
             let captured_claude_sid = claude_sid_monitor.lock().unwrap().clone();
+            let captured_plan_file = plan_file_monitor.lock().unwrap().clone();
+
+            // If a plan file was written, read its content and use it as the result summary
+            // so that the workflow step output contains the full plan (not a truncated summary).
+            let plan_content = captured_plan_file.as_ref().and_then(|path| {
+                std::fs::read_to_string(path).ok()
+            });
 
             // Emit completion/failure now that the process has actually exited.
             // If cancelled (interrupted), the session_service handles the Paused state.
             if !was_cancelled {
                 match last_result_monitor.lock().unwrap().take() {
                     Some((summary, false)) => {
+                        // Prefer plan file content over result summary for plan steps
+                        let effective_summary = plan_content.or(summary);
                         let _ = event_tx5.send(WsEvent::SessionCompleted {
                             session_id,
-                            result_summary: summary,
+                            result_summary: effective_summary,
                             claude_session_id: captured_claude_sid,
                         });
                     }
@@ -370,6 +420,7 @@ impl AgentProcessManager {
             peer,
             claude_session_id,
             last_message_id,
+            plan_file_path,
         });
 
         Ok(())
@@ -443,6 +494,22 @@ impl AgentProcessManager {
         } else {
             None
         }
+    }
+
+    /// Get the plan file path captured from a Write tool_use to .claude/plans/*.md.
+    pub fn get_plan_file_path(&self, session_id: &Uuid) -> Option<String> {
+        if let Some(entry) = self.processes.get(session_id) {
+            entry.plan_file_path.lock().unwrap().clone()
+        } else {
+            None
+        }
+    }
+
+    /// Send a control response back to Claude Code's stdin (e.g., AskUserQuestion answers).
+    pub async fn send_control_response(&self, session_id: Uuid, response: SDKControlResponse) -> Result<(), ExecutorError> {
+        let entry = self.processes.get(&session_id)
+            .ok_or_else(|| ExecutorError::NotRunning(session_id.to_string()))?;
+        entry.peer.send_message(&response).await
     }
 }
 

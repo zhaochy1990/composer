@@ -75,6 +75,8 @@ impl SessionService {
     fn spawn_event_listener(&self, mut rx: mpsc::UnboundedReceiver<WsEvent>) {
         let db = self.db.clone();
         let workflow_engine = self.workflow_engine.clone();
+        let process_manager = self.process_manager.clone();
+        let event_bus = self.event_bus.clone();
 
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
@@ -209,6 +211,82 @@ impl SessionService {
 
                         // Only reset agent to idle — preserve worktree so retry/resume is possible
                         Self::reset_agent_only(&db, &id_str).await;
+                    }
+                    WsEvent::UserQuestionRequested {
+                        session_id,
+                        ref request_id,
+                        ref questions,
+                        ref plan_content,
+                    } => {
+                        // Skip already-enriched events (plan_content is Some) to avoid infinite loop
+                        if plan_content.is_some() {
+                            continue;
+                        }
+
+                        // Read plan file and re-emit enriched event.
+                        // Always wrap in Some to prevent infinite loop — if the file
+                        // doesn't exist, use empty string so the event is still marked
+                        // as enriched and skipped on re-receipt.
+                        let plan = process_manager.get_plan_file_path(&session_id)
+                            .and_then(|path| std::fs::read_to_string(&path).ok())
+                            .unwrap_or_default();
+                        event_bus.broadcast(WsEvent::UserQuestionRequested {
+                            session_id,
+                            request_id: request_id.clone(),
+                            questions: questions.clone(),
+                            plan_content: Some(plan),
+                        });
+
+                        // Move task to Waiting while blocked on user answer
+                        let id_str = session_id.to_string();
+                        if let Ok(Some(session)) = composer_db::models::session::find_by_id(&db.pool, &id_str).await {
+                            if let Some(task_id) = session.task_id {
+                                let task_id_str = task_id.to_string();
+                                if let Err(e) = composer_db::models::task::update_status(
+                                    &db.pool,
+                                    &task_id_str,
+                                    &TaskStatus::Waiting,
+                                ).await {
+                                    tracing::warn!("Failed to set task to Waiting on user question: {}", e);
+                                }
+                                // Pause the workflow run if applicable
+                                if let Ok(Some(run)) = composer_db::models::workflow_run::find_by_step_session(&db.pool, &id_str).await {
+                                    let run_id_str = run.id.to_string();
+                                    let _ = composer_db::models::workflow_run::update_status(
+                                        &db.pool,
+                                        &run_id_str,
+                                        &WorkflowRunStatus::Paused,
+                                    ).await;
+                                }
+                            }
+                        }
+                    }
+                    WsEvent::UserQuestionAnswered {
+                        session_id,
+                    } => {
+                        // Move task back to InProgress after user answers
+                        let id_str = session_id.to_string();
+                        if let Ok(Some(session)) = composer_db::models::session::find_by_id(&db.pool, &id_str).await {
+                            if let Some(task_id) = session.task_id {
+                                let task_id_str = task_id.to_string();
+                                if let Err(e) = composer_db::models::task::update_status(
+                                    &db.pool,
+                                    &task_id_str,
+                                    &TaskStatus::InProgress,
+                                ).await {
+                                    tracing::warn!("Failed to set task to InProgress after answer: {}", e);
+                                }
+                                // Resume the workflow run if applicable
+                                if let Ok(Some(run)) = composer_db::models::workflow_run::find_by_step_session(&db.pool, &id_str).await {
+                                    let run_id_str = run.id.to_string();
+                                    let _ = composer_db::models::workflow_run::update_status(
+                                        &db.pool,
+                                        &run_id_str,
+                                        &WorkflowRunStatus::Running,
+                                    ).await;
+                                }
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -684,6 +762,61 @@ impl SessionService {
 
     pub async fn get(&self, id: &str) -> anyhow::Result<Option<Session>> {
         composer_db::models::session::find_by_id(&self.db.pool, id).await
+    }
+
+    /// Answer a pending AskUserQuestion by sending a control response back to Claude Code.
+    /// Also reads the plan file from disk (if available) and enriches the event with plan content.
+    pub async fn answer_question(
+        &self,
+        session_id: &str,
+        request_id: String,
+        answers: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        let session = composer_db::models::session::find_by_id(&self.db.pool, session_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
+        if !matches!(session.status, SessionStatus::Running) {
+            anyhow::bail!("Session is not running (status: {:?})", session.status);
+        }
+
+        tracing::info!(session_id = %session_id, request_id = %request_id, "Answering user question");
+
+        // Build the control response with the user's answers
+        let response = composer_executors::types::SDKControlResponse::new(
+            composer_executors::types::ControlResponsePayload::Success {
+                request_id: request_id.clone(),
+                response: Some(serde_json::json!({
+                    "behavior": "allow",
+                    "updatedInput": answers,
+                })),
+            },
+        );
+
+        self.process_manager
+            .send_control_response(session.id, response)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send control response: {}", e))?;
+
+        // Log the answer as user input
+        self.event_bus.broadcast(WsEvent::SessionOutput {
+            session_id: session.id,
+            log_type: LogType::UserInput,
+            content: format!("User answered question: {}", serde_json::to_string(&answers).unwrap_or_default()),
+        });
+
+        // Notify that the question was answered (triggers task status transition)
+        self.event_bus.broadcast(WsEvent::UserQuestionAnswered {
+            session_id: session.id,
+        });
+
+        Ok(())
+    }
+
+    /// Read the plan file content for a running session, if available.
+    pub fn get_plan_content(&self, session_id: &str) -> Option<String> {
+        let uuid = session_id.parse::<uuid::Uuid>().ok()?;
+        let path = self.process_manager.get_plan_file_path(&uuid)?;
+        std::fs::read_to_string(&path).ok()
     }
 
     /// Gracefully complete a running session by closing stdin.

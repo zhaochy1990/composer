@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSessionOutputStore } from '@/stores/session-output-store';
+import { useUserQuestionStore } from '@/stores/user-question-store';
 import type { WsEvent } from '@/types/generated';
 import { logger } from '@/lib/logger';
 
@@ -131,6 +132,25 @@ export function useWebSocket() {
                         queryKey: ['workflow-runs', parsed.payload.workflow_run_id, 'steps'],
                     });
                     queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                    break;
+                }
+
+                case 'UserQuestionRequested': {
+                    const { session_id, request_id, questions, plan_content } = parsed.payload;
+                    useUserQuestionStore.getState().set(session_id, {
+                        sessionId: session_id,
+                        requestId: request_id,
+                        questions,
+                        planContent: plan_content ?? null,
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                    queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });
+                    break;
+                }
+                case 'UserQuestionAnswered': {
+                    useUserQuestionStore.getState().clear(parsed.payload.session_id);
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                    queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });
                     break;
                 }
 

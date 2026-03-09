@@ -18,6 +18,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/sessions/{id}/resume", post(resume_session))
         .route("/sessions/{id}/input", post(send_session_input))
         .route("/sessions/{id}/retry", post(retry_session))
+        .route("/sessions/{id}/answer-question", post(answer_question))
         .route("/sessions/{id}/logs", get(get_session_logs))
 }
 
@@ -65,6 +66,18 @@ async fn retry_session(State(state): State<Arc<AppState>>, Path(id): Path<String
     tracing::info!(session_id = %id, "API: retry session");
     let session = state.services.sessions.retry_session(&id, req).await?;
     Ok(Json(session))
+}
+
+#[derive(Deserialize)]
+struct AnswerQuestionRequest {
+    request_id: String,
+    answers: serde_json::Value,
+}
+
+async fn answer_question(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(req): Json<AnswerQuestionRequest>) -> Result<(), ServiceError> {
+    tracing::info!(session_id = %id, request_id = %req.request_id, "API: answer user question");
+    state.services.sessions.answer_question(&id, req.request_id, req.answers).await?;
+    Ok(())
 }
 
 #[derive(Deserialize)]

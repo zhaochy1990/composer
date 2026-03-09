@@ -104,6 +104,26 @@ export function useRetrySession() {
     });
 }
 
+export function useAnswerQuestion() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, requestId, answers }: {
+            id: string;
+            requestId: string;
+            answers: Record<string, string>;
+        }) =>
+            apiFetch<void>(`/sessions/${id}/answer-question`, {
+                method: 'POST',
+                body: JSON.stringify({ request_id: requestId, answers }),
+            }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        },
+        onError: (error: Error) => logger.error('Failed to answer question', { error: error.message }),
+    });
+}
+
 export function useSessionLogs(id: string | undefined) {
     return useInfiniteQuery({
         queryKey: ['sessions', id, 'logs'],

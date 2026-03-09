@@ -30,7 +30,9 @@ fn extract_session_id(event: &WsEvent) -> Option<Uuid> {
         | WsEvent::SessionFailed { session_id, .. }
         | WsEvent::SessionPaused { session_id }
         | WsEvent::SessionOutput { session_id, .. }
-        | WsEvent::SessionResumeIdCaptured { session_id, .. } => Some(*session_id),
+        | WsEvent::SessionResumeIdCaptured { session_id, .. }
+        | WsEvent::UserQuestionRequested { session_id, .. }
+        | WsEvent::UserQuestionAnswered { session_id } => Some(*session_id),
         _ => None,
     }
 }
@@ -55,9 +57,17 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             };
 
-            // Skip internal-only events that clients don't need
+            // Skip internal-only events that clients don't need.
+            // UserQuestionRequested with plan_content=None is the raw event from the
+            // process manager; the session service re-emits an enriched version with
+            // plan_content populated.
             if matches!(event, WsEvent::SessionResumeIdCaptured { .. }) {
                 continue;
+            }
+            if let WsEvent::UserQuestionRequested { ref plan_content, .. } = event {
+                if plan_content.is_none() {
+                    continue;
+                }
             }
 
             // Filter session events by subscription set
@@ -97,6 +107,12 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                             let id_str = session_id.to_string();
                             if let Err(e) = state_clone.services.sessions.send_input(&id_str, message).await {
                                 tracing::warn!("Failed to send input to session {}: {}", id_str, e);
+                            }
+                        }
+                        Ok(WsCommand::AnswerUserQuestion { session_id, request_id, answers }) => {
+                            let id_str = session_id.to_string();
+                            if let Err(e) = state_clone.services.sessions.answer_question(&id_str, request_id, answers).await {
+                                tracing::warn!("Failed to answer question for session {}: {}", id_str, e);
                             }
                         }
                         Ok(WsCommand::Ping) => {

@@ -70,11 +70,11 @@ pub fn feat_common_definition() -> WorkflowDefinition {
                 let mut s = agentic_step("plan", "Plan", SessionMode::Resume,
                     "Investigate the existing codebase and create a detailed implementation plan. \
                      Do NOT implement yet. Only output the plan.\n\n\
-                     If there are multiple viable approaches, present them with pros and cons \
-                     and ask the user which approach they prefer. Wait for the user's response \
-                     before finalizing the plan.{{rejection}}");
+                     IMPORTANT: You MUST use plan mode (EnterPlanMode) to write your plan.\n\
+                     If there are multiple viable approaches or you need clarification from the user, \
+                     use the AskUserQuestion tool to ask. If the task is clear, proceed directly \
+                     with your best plan — do not ask unnecessary questions.{{rejection}}");
                 s.depends_on = vec!["start".to_string()];
-                s.interactive = Some(true);
                 s
             },
             {

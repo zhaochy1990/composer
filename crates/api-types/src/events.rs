@@ -37,6 +37,15 @@ pub enum WsEvent {
     WorkflowStepChanged { workflow_run_id: Uuid, step: WorkflowStepOutput },
     WorkflowRunCompleted { workflow_run_id: Uuid, task_id: Uuid },
     WorkflowWaitingForHuman { workflow_run_id: Uuid, task_id: Uuid, step_id: String },
+    UserQuestionRequested {
+        session_id: Uuid,
+        request_id: String,
+        questions: serde_json::Value,
+        plan_content: Option<String>,
+    },
+    UserQuestionAnswered {
+        session_id: Uuid,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -46,5 +55,6 @@ pub enum WsCommand {
     SubscribeSession { session_id: Uuid },
     UnsubscribeSession { session_id: Uuid },
     SendInput { session_id: Uuid, message: String },
+    AnswerUserQuestion { session_id: Uuid, request_id: String, answers: serde_json::Value },
     Ping,
 }
