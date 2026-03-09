@@ -48,6 +48,24 @@ impl TaskService {
         let project_id_str = req.project_id.map(|id| id.to_string());
         let assigned_agent_id_str = req.assigned_agent_id.map(|id| id.to_string());
         let workflow_id_str = req.workflow_id.map(|id| id.to_string());
+
+        // If project_id is being changed, reassign task_number and simple_id
+        if let Some(ref new_pid) = project_id_str {
+            let current = composer_db::models::task::find_by_id(&self.db.pool, id)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+            let current_pid = current.project_id.map(|id| id.to_string());
+
+            if current_pid.as_deref() != Some(new_pid.as_str()) {
+                composer_db::models::task::reassign_project(
+                    &self.db.pool,
+                    id,
+                    Some(new_pid),
+                )
+                .await?;
+            }
+        }
+
         let task = composer_db::models::task::update(
             &self.db.pool,
             id,
@@ -56,7 +74,7 @@ impl TaskService {
             req.priority,
             req.status.as_ref(),
             req.position,
-            project_id_str.as_deref(),
+            None, // project_id handled by reassign_project above
             assigned_agent_id_str.as_deref(),
             workflow_id_str.as_deref(),
         )

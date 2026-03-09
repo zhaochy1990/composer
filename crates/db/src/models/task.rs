@@ -235,6 +235,51 @@ pub async fn list_by_project(pool: &SqlitePool, project_id: &str) -> anyhow::Res
     rows.into_iter().map(Task::try_from).collect()
 }
 
+/// Reassign a task to a different project (or remove from project).
+/// Atomically increments the new project's task_counter and updates
+/// task_number + simple_id. If new_project_id is None, resets to 0/"".
+pub async fn reassign_project(
+    pool: &SqlitePool,
+    task_id: &str,
+    new_project_id: Option<&str>,
+) -> anyhow::Result<()> {
+    let mut tx = pool.begin().await?;
+
+    let (task_number, simple_id) = if let Some(pid) = new_project_id {
+        let row: Option<(i32, String)> = sqlx::query_as(
+            "UPDATE projects SET task_counter = task_counter + 1, \
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+             WHERE id = ? \
+             RETURNING task_counter, task_prefix",
+        )
+        .bind(pid)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        match row {
+            Some((counter, prefix)) => (counter, format!("{}-{}", prefix, counter)),
+            None => return Err(anyhow::anyhow!("Project not found: {}", pid)),
+        }
+    } else {
+        (0, String::new())
+    };
+
+    sqlx::query(
+        "UPDATE tasks SET project_id = ?, task_number = ?, simple_id = ?, \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+         WHERE id = ?",
+    )
+    .bind(new_project_id)
+    .bind(task_number)
+    .bind(&simple_id)
+    .bind(task_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn delete(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
     tracing::debug!(task_id = %id, "DB: deleting task");
     sqlx::query("DELETE FROM tasks WHERE id = ?")
