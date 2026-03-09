@@ -372,7 +372,8 @@ export type WsEvent =
     | { type: "WorkflowRunCompleted"; payload: { workflow_run_id: string; task_id: string } }
     | { type: "WorkflowWaitingForHuman"; payload: { workflow_run_id: string; task_id: string; step_id: string } }
     | { type: "UserQuestionRequested"; payload: { session_id: string; request_id: string; questions: unknown; plan_content?: string } }
-    | { type: "UserQuestionAnswered"; payload: { session_id: string } };
+    | { type: "UserQuestionAnswered"; payload: { session_id: string } }
+    | { type: "PlanCompleted"; payload: { session_id: string; plan_content?: string } };
 
 export type WsCommand =
     | { type: "SubscribeSession"; payload: { session_id: string } }

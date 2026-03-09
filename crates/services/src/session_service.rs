@@ -227,7 +227,8 @@ impl SessionService {
                         // Always wrap in Some to prevent infinite loop — if the file
                         // doesn't exist, use empty string so the event is still marked
                         // as enriched and skipped on re-receipt.
-                        let plan = process_manager.get_plan_file_path(&session_id)
+                        let plan = process_manager
+                            .get_plan_file_path(&session_id)
                             .and_then(|path| std::fs::read_to_string(&path).ok())
                             .unwrap_or_default();
                         event_bus.broadcast(WsEvent::UserQuestionRequested {
@@ -239,54 +240,139 @@ impl SessionService {
 
                         // Move task to Waiting while blocked on user answer
                         let id_str = session_id.to_string();
-                        if let Ok(Some(session)) = composer_db::models::session::find_by_id(&db.pool, &id_str).await {
+                        if let Ok(Some(session)) =
+                            composer_db::models::session::find_by_id(&db.pool, &id_str).await
+                        {
                             if let Some(task_id) = session.task_id {
                                 let task_id_str = task_id.to_string();
                                 if let Err(e) = composer_db::models::task::update_status(
                                     &db.pool,
                                     &task_id_str,
                                     &TaskStatus::Waiting,
-                                ).await {
-                                    tracing::warn!("Failed to set task to Waiting on user question: {}", e);
+                                )
+                                .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to set task to Waiting on user question: {}",
+                                        e
+                                    );
                                 }
                                 // Pause the workflow run if applicable
-                                if let Ok(Some(run)) = composer_db::models::workflow_run::find_by_step_session(&db.pool, &id_str).await {
+                                if let Ok(Some(run)) =
+                                    composer_db::models::workflow_run::find_by_step_session(
+                                        &db.pool, &id_str,
+                                    )
+                                    .await
+                                {
                                     let run_id_str = run.id.to_string();
                                     let _ = composer_db::models::workflow_run::update_status(
                                         &db.pool,
                                         &run_id_str,
                                         &WorkflowRunStatus::Paused,
-                                    ).await;
+                                    )
+                                    .await;
                                 }
                             }
                         }
                     }
-                    WsEvent::UserQuestionAnswered {
-                        session_id,
-                    } => {
+                    WsEvent::UserQuestionAnswered { session_id } => {
                         // Move task back to InProgress after user answers
                         let id_str = session_id.to_string();
-                        if let Ok(Some(session)) = composer_db::models::session::find_by_id(&db.pool, &id_str).await {
+                        if let Ok(Some(session)) =
+                            composer_db::models::session::find_by_id(&db.pool, &id_str).await
+                        {
                             if let Some(task_id) = session.task_id {
                                 let task_id_str = task_id.to_string();
                                 if let Err(e) = composer_db::models::task::update_status(
                                     &db.pool,
                                     &task_id_str,
                                     &TaskStatus::InProgress,
-                                ).await {
-                                    tracing::warn!("Failed to set task to InProgress after answer: {}", e);
+                                )
+                                .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to set task to InProgress after answer: {}",
+                                        e
+                                    );
                                 }
                                 // Resume the workflow run if applicable
-                                if let Ok(Some(run)) = composer_db::models::workflow_run::find_by_step_session(&db.pool, &id_str).await {
+                                if let Ok(Some(run)) =
+                                    composer_db::models::workflow_run::find_by_step_session(
+                                        &db.pool, &id_str,
+                                    )
+                                    .await
+                                {
                                     let run_id_str = run.id.to_string();
                                     let _ = composer_db::models::workflow_run::update_status(
                                         &db.pool,
                                         &run_id_str,
                                         &WorkflowRunStatus::Running,
-                                    ).await;
+                                    )
+                                    .await;
                                 }
                             }
                         }
+                    }
+                    WsEvent::PlanCompleted {
+                        session_id,
+                        ref plan_content,
+                    } => {
+                        // Skip already-enriched events to avoid infinite loop
+                        if plan_content.is_some() {
+                            continue;
+                        }
+
+                        // Read plan file content (same pattern as UserQuestionRequested)
+                        let plan = process_manager
+                            .get_plan_file_path(&session_id)
+                            .and_then(|path| std::fs::read_to_string(&path).ok());
+
+                        if let Some(ref content) = plan {
+                            // Eagerly store plan content in the workflow step output
+                            let id_str = session_id.to_string();
+                            if let Ok(Some(step_output)) =
+                                composer_db::models::workflow_step_output::find_by_session(
+                                    &db.pool, &id_str,
+                                )
+                                .await
+                            {
+                                if matches!(step_output.status, WorkflowStepStatus::Running) {
+                                    if let Err(e) =
+                                        composer_db::models::workflow_step_output::update_output(
+                                            &db.pool,
+                                            &step_output.id.to_string(),
+                                            content,
+                                        )
+                                        .await
+                                    {
+                                        tracing::warn!(
+                                            "Failed to eagerly store plan content: {}",
+                                            e
+                                        );
+                                    } else {
+                                        // Broadcast step change so frontend picks up the update
+                                        if let Ok(Some(refreshed)) =
+                                            composer_db::models::workflow_step_output::find_by_id(
+                                                &db.pool,
+                                                &step_output.id.to_string(),
+                                            )
+                                            .await
+                                        {
+                                            event_bus.broadcast(WsEvent::WorkflowStepChanged {
+                                                workflow_run_id: step_output.workflow_run_id,
+                                                step: refreshed,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Re-broadcast enriched event (always Some to prevent infinite loop)
+                        event_bus.broadcast(WsEvent::PlanCompleted {
+                            session_id,
+                            plan_content: Some(plan.unwrap_or_default()),
+                        });
                     }
                     _ => {}
                 }
@@ -587,7 +673,11 @@ impl SessionService {
         // from the original session.
         let resume_id = match &session.resume_session_id {
             Some(id) => {
-                tracing::info!("Resuming session {} with Claude Code session {}", session.id, id);
+                tracing::info!(
+                    "Resuming session {} with Claude Code session {}",
+                    session.id,
+                    id
+                );
                 id.clone()
             }
             None => {
@@ -801,7 +891,10 @@ impl SessionService {
         self.event_bus.broadcast(WsEvent::SessionOutput {
             session_id: session.id,
             log_type: LogType::UserInput,
-            content: format!("User answered question: {}", serde_json::to_string(&answers).unwrap_or_default()),
+            content: format!(
+                "User answered question: {}",
+                serde_json::to_string(&answers).unwrap_or_default()
+            ),
         });
 
         // Notify that the question was answered (triggers task status transition)
@@ -901,11 +994,7 @@ impl SessionService {
         composer_db::models::session_log::count_by_session(&self.db.pool, session_id).await
     }
 
-    pub async fn has_logs_before(
-        &self,
-        session_id: &str,
-        before_id: i64,
-    ) -> anyhow::Result<bool> {
+    pub async fn has_logs_before(&self, session_id: &str, before_id: i64) -> anyhow::Result<bool> {
         composer_db::models::session_log::has_logs_before(&self.db.pool, session_id, before_id)
             .await
     }

@@ -1,24 +1,24 @@
+use crate::AppState;
 use axum::{
-    extract::{State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{
+        ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
+    },
     response::IntoResponse,
     routing::get,
     Router,
 };
+use composer_api_types::{WsCommand, WsEvent};
+use futures_util::{SinkExt, StreamExt};
 use std::collections::HashSet;
 use std::sync::Arc;
-use futures_util::{SinkExt, StreamExt};
-use composer_api_types::{WsCommand, WsEvent};
 use uuid::Uuid;
-use crate::AppState;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/ws", get(ws_handler))
 }
 
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
@@ -32,7 +32,8 @@ fn extract_session_id(event: &WsEvent) -> Option<Uuid> {
         | WsEvent::SessionOutput { session_id, .. }
         | WsEvent::SessionResumeIdCaptured { session_id, .. }
         | WsEvent::UserQuestionRequested { session_id, .. }
-        | WsEvent::UserQuestionAnswered { session_id } => Some(*session_id),
+        | WsEvent::UserQuestionAnswered { session_id }
+        | WsEvent::PlanCompleted { session_id, .. } => Some(*session_id),
         _ => None,
     }
 }
@@ -64,7 +65,18 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             if matches!(event, WsEvent::SessionResumeIdCaptured { .. }) {
                 continue;
             }
-            if let WsEvent::UserQuestionRequested { ref plan_content, .. } = event {
+            if let WsEvent::UserQuestionRequested {
+                ref plan_content, ..
+            } = event
+            {
+                if plan_content.is_none() {
+                    continue;
+                }
+            }
+            if let WsEvent::PlanCompleted {
+                ref plan_content, ..
+            } = event
+            {
                 if plan_content.is_none() {
                     continue;
                 }
@@ -103,16 +115,37 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         Ok(WsCommand::UnsubscribeSession { session_id }) => {
                             sub_clone2.lock().await.remove(&session_id);
                         }
-                        Ok(WsCommand::SendInput { session_id, message }) => {
+                        Ok(WsCommand::SendInput {
+                            session_id,
+                            message,
+                        }) => {
                             let id_str = session_id.to_string();
-                            if let Err(e) = state_clone.services.sessions.send_input(&id_str, message).await {
+                            if let Err(e) = state_clone
+                                .services
+                                .sessions
+                                .send_input(&id_str, message)
+                                .await
+                            {
                                 tracing::warn!("Failed to send input to session {}: {}", id_str, e);
                             }
                         }
-                        Ok(WsCommand::AnswerUserQuestion { session_id, request_id, answers }) => {
+                        Ok(WsCommand::AnswerUserQuestion {
+                            session_id,
+                            request_id,
+                            answers,
+                        }) => {
                             let id_str = session_id.to_string();
-                            if let Err(e) = state_clone.services.sessions.answer_question(&id_str, request_id, answers).await {
-                                tracing::warn!("Failed to answer question for session {}: {}", id_str, e);
+                            if let Err(e) = state_clone
+                                .services
+                                .sessions
+                                .answer_question(&id_str, request_id, answers)
+                                .await
+                            {
+                                tracing::warn!(
+                                    "Failed to answer question for session {}: {}",
+                                    id_str,
+                                    e
+                                );
                             }
                         }
                         Ok(WsCommand::Ping) => {

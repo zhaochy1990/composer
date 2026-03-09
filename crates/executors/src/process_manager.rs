@@ -1,16 +1,16 @@
-use crate::types::{CliMessage, SDKControlResponse, UserMessage};
-use crate::protocol::{read_stdout_lines, ProtocolPeer};
 use crate::error::ExecutorError;
-use composer_api_types::{WsEvent, LogType};
+use crate::protocol::{read_stdout_lines, ProtocolPeer};
+use crate::types::{CliMessage, SDKControlResponse, UserMessage};
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
+use composer_api_types::{LogType, WsEvent};
 use dashmap::DashMap;
+use std::process::Stdio;
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
-use std::process::Stdio;
 
 /// Pinned Claude Code CLI version. Bump deliberately after testing.
 pub const CLAUDE_CODE_VERSION: &str = "2.1.66";
@@ -68,10 +68,16 @@ pub struct AgentProcessManager {
 }
 
 impl AgentProcessManager {
-    pub fn new(event_tx: broadcast::Sender<WsEvent>, persist_tx: mpsc::UnboundedSender<WsEvent>) -> Self {
+    pub fn new(
+        event_tx: broadcast::Sender<WsEvent>,
+        persist_tx: mpsc::UnboundedSender<WsEvent>,
+    ) -> Self {
         Self {
             processes: Arc::new(DashMap::new()),
-            event_tx: DualSender { broadcast: event_tx, persist: persist_tx },
+            event_tx: DualSender {
+                broadcast: event_tx,
+                persist: persist_tx,
+            },
             pending_messages: Arc::new(DashMap::new()),
         }
     }
@@ -81,7 +87,11 @@ impl AgentProcessManager {
         let agent_id = opts.agent_id;
         let task_id = opts.task_id;
 
-        let npx_cmd = if cfg!(target_os = "windows") { "npx.cmd" } else { "npx" };
+        let npx_cmd = if cfg!(target_os = "windows") {
+            "npx.cmd"
+        } else {
+            "npx"
+        };
 
         let mut args = vec![
             "-y".to_string(),
@@ -122,11 +132,20 @@ impl AgentProcessManager {
             .group_spawn()
             .map_err(|e| ExecutorError::SpawnFailed(e.to_string()))?;
 
-        let stdin = child.inner().stdin.take()
+        let stdin = child
+            .inner()
+            .stdin
+            .take()
             .ok_or_else(|| ExecutorError::SpawnFailed("Failed to capture stdin".into()))?;
-        let stdout = child.inner().stdout.take()
+        let stdout = child
+            .inner()
+            .stdout
+            .take()
             .ok_or_else(|| ExecutorError::SpawnFailed("Failed to capture stdout".into()))?;
-        let stderr = child.inner().stderr.take()
+        let stderr = child
+            .inner()
+            .stderr
+            .take()
             .ok_or_else(|| ExecutorError::SpawnFailed("Failed to capture stderr".into()))?;
 
         let peer = Arc::new(ProtocolPeer::new(stdin));
@@ -198,8 +217,17 @@ impl AgentProcessManager {
                     });
 
                     // Detect AskUserQuestion control requests
-                    if let CliMessage::ControlRequest { ref request_id, ref request } = msg {
-                        if let crate::types::ControlRequestPayload::CanUseTool { ref tool_name, ref input, .. } = request {
+                    if let CliMessage::ControlRequest {
+                        ref request_id,
+                        ref request,
+                    } = msg
+                    {
+                        if let crate::types::ControlRequestPayload::CanUseTool {
+                            ref tool_name,
+                            ref input,
+                            ..
+                        } = request
+                        {
                             if tool_name == "AskUserQuestion" {
                                 let _ = event_tx.send(WsEvent::UserQuestionRequested {
                                     session_id,
@@ -211,20 +239,39 @@ impl AgentProcessManager {
                         }
                     }
 
-                    // Detect Write tool_use to .claude/plans/*.md for plan file tracking
+                    // Detect tool_use blocks in Assistant messages for plan file tracking
+                    // and ExitPlanMode detection
                     if let CliMessage::Assistant(ref a) = msg {
                         if let Some(content) = a.message.get("content") {
                             if let Some(blocks) = content.as_array() {
                                 for block in blocks {
-                                    if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                                        if block.get("name").and_then(|n| n.as_str()) == Some("Write") {
+                                    if block.get("type").and_then(|t| t.as_str())
+                                        == Some("tool_use")
+                                    {
+                                        let tool_name = block.get("name").and_then(|n| n.as_str());
+
+                                        // Track Write to .claude/plans/*.md for plan file path
+                                        if tool_name == Some("Write") {
                                             if let Some(input) = block.get("input") {
-                                                if let Some(file_path) = input.get("file_path").and_then(|p| p.as_str()) {
-                                                    if file_path.contains(".claude/plans/") && file_path.ends_with(".md") {
-                                                        *plan_file_capture.lock().unwrap() = Some(file_path.to_string());
+                                                if let Some(file_path) =
+                                                    input.get("file_path").and_then(|p| p.as_str())
+                                                {
+                                                    if file_path.contains(".claude/plans/")
+                                                        && file_path.ends_with(".md")
+                                                    {
+                                                        *plan_file_capture.lock().unwrap() =
+                                                            Some(file_path.to_string());
                                                     }
                                                 }
                                             }
+                                        }
+
+                                        // Detect ExitPlanMode — signals plan is finalized
+                                        if tool_name == Some("ExitPlanMode") {
+                                            let _ = event_tx.send(WsEvent::PlanCompleted {
+                                                session_id,
+                                                plan_content: None, // enriched by session service
+                                            });
                                         }
                                     }
                                 }
@@ -292,7 +339,8 @@ impl AgentProcessManager {
                         content: raw_line.to_string(),
                     });
                 },
-            ).await;
+            )
+            .await;
         });
 
         // Stderr reader
@@ -314,7 +362,11 @@ impl AgentProcessManager {
         let event_tx4 = self.event_tx.clone();
         tokio::spawn(async move {
             if let Err(e) = init_peer.send_message(&UserMessage::new(init_prompt)).await {
-                tracing::error!("Session {} failed to send initial prompt: {}", session_id, e);
+                tracing::error!(
+                    "Session {} failed to send initial prompt: {}",
+                    session_id,
+                    e
+                );
                 let _ = event_tx4.send(WsEvent::SessionFailed {
                     session_id,
                     error: format!("Failed to send initial prompt: {}", e),
@@ -388,9 +440,9 @@ impl AgentProcessManager {
 
             // If a plan file was written, read its content and use it as the result summary
             // so that the workflow step output contains the full plan (not a truncated summary).
-            let plan_content = captured_plan_file.as_ref().and_then(|path| {
-                std::fs::read_to_string(path).ok()
-            });
+            let plan_content = captured_plan_file
+                .as_ref()
+                .and_then(|path| std::fs::read_to_string(path).ok());
 
             // Emit completion/failure now that the process has actually exited.
             // If cancelled (interrupted), the session_service handles the Paused state.
@@ -427,16 +479,19 @@ impl AgentProcessManager {
             processes.remove(&session_id);
         });
 
-        self.processes.insert(session_id, AgentProcess {
+        self.processes.insert(
             session_id,
-            agent_id,
-            cancel_token,
-            join_handle: monitor_handle,
-            peer,
-            claude_session_id,
-            last_message_id,
-            plan_file_path,
-        });
+            AgentProcess {
+                session_id,
+                agent_id,
+                cancel_token,
+                join_handle: monitor_handle,
+                peer,
+                claude_session_id,
+                last_message_id,
+                plan_file_path,
+            },
+        );
 
         Ok(())
     }
@@ -449,11 +504,8 @@ impl AgentProcessManager {
         }
         // Wait for the monitor task to finish (with timeout) then remove the entry
         if let Some((_, process)) = self.processes.remove(&session_id) {
-            let _ = tokio::time::timeout(
-                tokio::time::Duration::from_secs(10),
-                process.join_handle,
-            )
-            .await;
+            let _ = tokio::time::timeout(tokio::time::Duration::from_secs(10), process.join_handle)
+                .await;
         }
         Ok(())
     }
@@ -467,7 +519,9 @@ impl AgentProcessManager {
     }
 
     pub async fn send_input(&self, session_id: Uuid, message: String) -> Result<(), ExecutorError> {
-        let entry = self.processes.get(&session_id)
+        let entry = self
+            .processes
+            .get(&session_id)
             .ok_or_else(|| ExecutorError::NotRunning(session_id.to_string()))?;
         entry.peer.send_message(&UserMessage::new(message)).await
     }
@@ -476,7 +530,9 @@ impl AgentProcessManager {
     /// Unlike `interrupt()`, this produces a `SessionCompleted` event
     /// because the monitor task sees a natural exit (not a cancellation).
     pub async fn close_stdin(&self, session_id: Uuid) -> Result<(), ExecutorError> {
-        let entry = self.processes.get(&session_id)
+        let entry = self
+            .processes
+            .get(&session_id)
             .ok_or_else(|| ExecutorError::NotRunning(session_id.to_string()))?;
         entry.peer.close_stdin().await;
         Ok(())
@@ -521,8 +577,14 @@ impl AgentProcessManager {
     }
 
     /// Send a control response back to Claude Code's stdin (e.g., AskUserQuestion answers).
-    pub async fn send_control_response(&self, session_id: Uuid, response: SDKControlResponse) -> Result<(), ExecutorError> {
-        let entry = self.processes.get(&session_id)
+    pub async fn send_control_response(
+        &self,
+        session_id: Uuid,
+        response: SDKControlResponse,
+    ) -> Result<(), ExecutorError> {
+        let entry = self
+            .processes
+            .get(&session_id)
             .ok_or_else(|| ExecutorError::NotRunning(session_id.to_string()))?;
         entry.peer.send_message(&response).await
     }
@@ -533,8 +595,8 @@ impl AgentProcessManager {
 async fn kill_process_group(child: &mut AsyncGroupChild) {
     #[cfg(unix)]
     {
-        use nix::sys::signal::{Signal, killpg};
-        use nix::unistd::{Pid, getpgid};
+        use nix::sys::signal::{killpg, Signal};
+        use nix::unistd::{getpgid, Pid};
 
         if let Some(pid) = child.inner().id() {
             if let Ok(pgid) = getpgid(Some(Pid::from_raw(pid as i32))) {

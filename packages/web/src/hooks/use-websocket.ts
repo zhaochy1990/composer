@@ -114,6 +114,14 @@ export function useWebSocket() {
                     });
                     break;
                 }
+                case 'PlanCompleted': {
+                    // ExitPlanMode detected — step output already updated by backend,
+                    // invalidate all step queries to pick up the eagerly-stored plan content
+                    queryClient.invalidateQueries({
+                        predicate: (q) => q.queryKey[0] === 'workflow-runs' && q.queryKey[2] === 'steps',
+                    });
+                    break;
+                }
                 case 'WorkflowWaitingForHuman': {
                     queryClient.invalidateQueries({
                         queryKey: ['workflow-runs', parsed.payload.workflow_run_id],

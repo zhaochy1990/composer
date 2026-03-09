@@ -11,32 +11,94 @@ use crate::{
 #[ts(export)]
 #[serde(tag = "type", content = "payload")]
 pub enum WsEvent {
-    AgentStatusChanged { agent_id: Uuid, status: AgentStatus },
-    AgentHealthUpdated { agent_id: Uuid, health: AgentHealth },
+    AgentStatusChanged {
+        agent_id: Uuid,
+        status: AgentStatus,
+    },
+    AgentHealthUpdated {
+        agent_id: Uuid,
+        health: AgentHealth,
+    },
     TaskCreated(Task),
     TaskUpdated(Task),
-    TaskDeleted { task_id: Uuid },
-    TaskMoved { task_id: Uuid, from_status: TaskStatus, to_status: TaskStatus },
-    SessionStarted { session_id: Uuid, agent_id: Uuid, task_id: Option<Uuid> },
-    SessionCompleted { session_id: Uuid, result_summary: Option<String>, claude_session_id: Option<String> },
-    SessionFailed { session_id: Uuid, error: String, claude_session_id: Option<String> },
-    SessionPaused { session_id: Uuid },
-    SessionOutput { session_id: Uuid, log_type: LogType, content: String },
-    SessionResumeIdCaptured { session_id: Uuid, claude_session_id: String },
+    TaskDeleted {
+        task_id: Uuid,
+    },
+    TaskMoved {
+        task_id: Uuid,
+        from_status: TaskStatus,
+        to_status: TaskStatus,
+    },
+    SessionStarted {
+        session_id: Uuid,
+        agent_id: Uuid,
+        task_id: Option<Uuid>,
+    },
+    SessionCompleted {
+        session_id: Uuid,
+        result_summary: Option<String>,
+        claude_session_id: Option<String>,
+    },
+    SessionFailed {
+        session_id: Uuid,
+        error: String,
+        claude_session_id: Option<String>,
+    },
+    SessionPaused {
+        session_id: Uuid,
+    },
+    SessionOutput {
+        session_id: Uuid,
+        log_type: LogType,
+        content: String,
+    },
+    SessionResumeIdCaptured {
+        session_id: Uuid,
+        claude_session_id: String,
+    },
     WorktreeCreated(Worktree),
-    WorktreeDeleted { worktree_id: Uuid },
+    WorktreeDeleted {
+        worktree_id: Uuid,
+    },
     ProjectCreated(Project),
     ProjectUpdated(Project),
-    ProjectDeleted { project_id: Uuid },
-    ProjectRepositoryAdded { project_id: Uuid, repository: ProjectRepository },
-    ProjectRepositoryRemoved { project_id: Uuid, repository_id: Uuid },
-    ProjectInstructionAdded { project_id: Uuid, instruction: ProjectInstruction },
-    ProjectInstructionUpdated { project_id: Uuid, instruction: ProjectInstruction },
-    ProjectInstructionRemoved { project_id: Uuid, instruction_id: Uuid },
+    ProjectDeleted {
+        project_id: Uuid,
+    },
+    ProjectRepositoryAdded {
+        project_id: Uuid,
+        repository: ProjectRepository,
+    },
+    ProjectRepositoryRemoved {
+        project_id: Uuid,
+        repository_id: Uuid,
+    },
+    ProjectInstructionAdded {
+        project_id: Uuid,
+        instruction: ProjectInstruction,
+    },
+    ProjectInstructionUpdated {
+        project_id: Uuid,
+        instruction: ProjectInstruction,
+    },
+    ProjectInstructionRemoved {
+        project_id: Uuid,
+        instruction_id: Uuid,
+    },
     WorkflowRunUpdated(WorkflowRun),
-    WorkflowStepChanged { workflow_run_id: Uuid, step: WorkflowStepOutput },
-    WorkflowRunCompleted { workflow_run_id: Uuid, task_id: Uuid },
-    WorkflowWaitingForHuman { workflow_run_id: Uuid, task_id: Uuid, step_id: String },
+    WorkflowStepChanged {
+        workflow_run_id: Uuid,
+        step: WorkflowStepOutput,
+    },
+    WorkflowRunCompleted {
+        workflow_run_id: Uuid,
+        task_id: Uuid,
+    },
+    WorkflowWaitingForHuman {
+        workflow_run_id: Uuid,
+        task_id: Uuid,
+        step_id: String,
+    },
     UserQuestionRequested {
         session_id: Uuid,
         request_id: String,
@@ -46,15 +108,30 @@ pub enum WsEvent {
     UserQuestionAnswered {
         session_id: Uuid,
     },
+    PlanCompleted {
+        session_id: Uuid,
+        plan_content: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(tag = "type", content = "payload")]
 pub enum WsCommand {
-    SubscribeSession { session_id: Uuid },
-    UnsubscribeSession { session_id: Uuid },
-    SendInput { session_id: Uuid, message: String },
-    AnswerUserQuestion { session_id: Uuid, request_id: String, answers: serde_json::Value },
+    SubscribeSession {
+        session_id: Uuid,
+    },
+    UnsubscribeSession {
+        session_id: Uuid,
+    },
+    SendInput {
+        session_id: Uuid,
+        message: String,
+    },
+    AnswerUserQuestion {
+        session_id: Uuid,
+        request_id: String,
+        answers: serde_json::Value,
+    },
     Ping,
 }
