@@ -268,9 +268,18 @@ impl AgentProcessManager {
 
                                         // Detect ExitPlanMode — signals plan is finalized
                                         if tool_name == Some("ExitPlanMode") {
+                                            // Read plan file content eagerly to avoid race with
+                                            // DashMap entry removal on process exit.
+                                            let plan = plan_file_capture
+                                                .lock()
+                                                .unwrap()
+                                                .as_ref()
+                                                .and_then(|path| {
+                                                    std::fs::read_to_string(path).ok()
+                                                });
                                             let _ = event_tx.send(WsEvent::PlanCompleted {
                                                 session_id,
-                                                plan_content: None, // enriched by session service
+                                                plan_content: plan,
                                             });
                                         }
                                     }

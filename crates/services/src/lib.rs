@@ -30,7 +30,7 @@ impl ServiceContainer {
         sessions.set_workflow_engine(workflows.clone());
 
         Self {
-            tasks: task_service::TaskService::new(db.clone(), event_bus.clone(), sessions.clone()),
+            tasks: task_service::TaskService::new(db.clone(), event_bus.clone(), sessions.clone(), workflows.clone()),
             agents: agent_service::AgentService::new(db.clone(), event_bus.clone(), process_manager),
             sessions,
             worktrees: worktree_service::WorktreeService::new(db.clone()),

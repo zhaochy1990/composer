@@ -912,7 +912,7 @@ impl WorkflowEngine {
 
         if matches!(
             run.status,
-            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed
+            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Cancelled
         ) {
             return Ok(true);
         }
@@ -920,6 +920,17 @@ impl WorkflowEngine {
         let run_id = run.id.to_string();
         let lock = self.run_lock(&run_id);
         let _guard = lock.lock().await;
+
+        // Re-check terminal state after acquiring lock (cancel_run may have changed it)
+        let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
+        if matches!(
+            run.status,
+            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Cancelled
+        ) {
+            return Ok(true);
+        }
 
         let workflow =
             composer_db::models::workflow::find_by_id(&self.db.pool, &run.workflow_id.to_string())
@@ -1105,9 +1116,27 @@ impl WorkflowEngine {
             None => return Ok(false),
         };
 
+        if matches!(
+            run.status,
+            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Cancelled
+        ) {
+            return Ok(true);
+        }
+
         let run_id = run.id.to_string();
         let lock = self.run_lock(&run_id);
         let _guard = lock.lock().await;
+
+        // Re-check terminal state after acquiring lock (cancel_run may have changed it)
+        let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, &run_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
+        if matches!(
+            run.status,
+            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Cancelled
+        ) {
+            return Ok(true);
+        }
 
         if let Some(step_output) =
             composer_db::models::workflow_step_output::find_by_session(&self.db.pool, session_id)
@@ -1151,6 +1180,83 @@ impl WorkflowEngine {
         let steps =
             composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
         Ok((run, steps))
+    }
+
+    /// Cancel a workflow run: interrupt running sessions, clean up worktrees,
+    /// mark the run as Cancelled. Used when moving a task back to backlog.
+    pub async fn cancel_run(&self, run_id: &str) -> anyhow::Result<()> {
+        let lock = self.run_lock(run_id);
+        let _guard = lock.lock().await;
+
+        let run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Workflow run not found"))?;
+
+        // Already terminal — nothing to do
+        if matches!(
+            run.status,
+            WorkflowRunStatus::Completed | WorkflowRunStatus::Failed | WorkflowRunStatus::Cancelled
+        ) {
+            return Ok(());
+        }
+
+        tracing::info!(run_id = %run_id, "Cancelling workflow run");
+
+        // Mark all running step outputs as Failed
+        let running_steps =
+            composer_db::models::workflow_step_output::find_running_steps(&self.db.pool, run_id)
+                .await?;
+        for step_output in &running_steps {
+            composer_db::models::workflow_step_output::update_status_and_output(
+                &self.db.pool,
+                &step_output.id.to_string(),
+                &WorkflowStepStatus::Failed,
+                Some("Workflow run cancelled"),
+            )
+            .await?;
+        }
+
+        // Interrupt only running sessions (completed/failed sessions are left unchanged)
+        for step_output in &running_steps {
+            if let Some(ref session_id) = step_output.session_id {
+                let sid = session_id.to_string();
+                if let Err(e) = self.session_service.interrupt(&sid).await {
+                    tracing::debug!(
+                        session_id = %sid,
+                        "Could not interrupt session during cancel (may already be stopped): {}",
+                        e
+                    );
+                }
+            }
+        }
+
+        // Clean up all worktrees (including from completed steps)
+        let all_step_outputs =
+            composer_db::models::workflow_step_output::list_by_run(&self.db.pool, run_id).await?;
+        for step_output in &all_step_outputs {
+            if let Some(ref session_id) = step_output.session_id {
+                self.cleanup_worktree(&session_id.to_string()).await;
+            }
+        }
+
+        // Mark workflow run as Cancelled
+        composer_db::models::workflow_run::update_status(
+            &self.db.pool,
+            run_id,
+            &WorkflowRunStatus::Cancelled,
+        )
+        .await?;
+
+        let updated_run = composer_db::models::workflow_run::find_by_id(&self.db.pool, run_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Workflow run not found after cancel"))?;
+        self.event_bus
+            .broadcast(WsEvent::WorkflowRunUpdated(updated_run));
+
+        drop(_guard);
+        self.cleanup_run_lock(run_id);
+
+        Ok(())
     }
 
     // -----------------------------------------------------------------------

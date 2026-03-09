@@ -3,17 +3,19 @@ use composer_api_types::*;
 use composer_db::Database;
 use crate::event_bus::EventBus;
 use crate::session_service::SessionService;
+use crate::workflow_engine::WorkflowEngine;
 
 #[derive(Clone)]
 pub struct TaskService {
     db: Arc<Database>,
     event_bus: EventBus,
     session_service: SessionService,
+    workflow_engine: WorkflowEngine,
 }
 
 impl TaskService {
-    pub fn new(db: Arc<Database>, event_bus: EventBus, session_service: SessionService) -> Self {
-        Self { db, event_bus, session_service }
+    pub fn new(db: Arc<Database>, event_bus: EventBus, session_service: SessionService, workflow_engine: WorkflowEngine) -> Self {
+        Self { db, event_bus, session_service, workflow_engine }
     }
 
     pub async fn create(&self, req: CreateTaskRequest) -> anyhow::Result<Task> {
@@ -133,6 +135,18 @@ impl TaskService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
         let from_status = old_task.status.clone();
+
+        if from_status == req.status {
+            return Ok(old_task);
+        }
+
+        // If moving to Backlog from InProgress/Waiting, cancel runtime artifacts
+        if matches!(req.status, TaskStatus::Backlog)
+            && matches!(from_status, TaskStatus::InProgress | TaskStatus::Waiting)
+        {
+            self.cancel_task_runtime(id, &old_task).await?;
+        }
+
         composer_db::models::task::update_status(&self.db.pool, id, &req.status).await?;
         if let Some(pos) = req.position {
             composer_db::models::task::update(&self.db.pool, id, None, None, None, None, Some(pos), None, None, None)
@@ -147,6 +161,55 @@ impl TaskService {
             to_status: req.status,
         });
         Ok(task)
+    }
+
+    /// Cancel all runtime artifacts for a task (workflow run, sessions, worktrees).
+    /// Called when moving an active task back to backlog.
+    async fn cancel_task_runtime(&self, task_id: &str, task: &Task) -> anyhow::Result<()> {
+        tracing::info!(task_id = %task_id, "Cancelling task runtime artifacts");
+
+        if let Some(workflow_run_id) = &task.workflow_run_id {
+            // Workflow task: cancel_run handles session interrupts + worktree cleanup
+            self.workflow_engine.cancel_run(&workflow_run_id.to_string()).await?;
+        } else {
+            // Non-workflow task: interrupt running sessions and clean up worktrees directly
+            let sessions = composer_db::models::session::list_by_task(&self.db.pool, task_id).await?;
+            for session in &sessions {
+                if matches!(session.status, SessionStatus::Running) {
+                    if let Err(e) = self.session_service.interrupt(&session.id.to_string()).await {
+                        tracing::debug!(
+                            session_id = %session.id,
+                            "Could not interrupt session during task cancel: {}", e
+                        );
+                    }
+                }
+                // Clean up worktree if present
+                if let Some(ref wt_id) = session.worktree_id {
+                    let wt_id_str = wt_id.to_string();
+                    if let Ok(Some(wt)) = composer_db::models::worktree::find_by_id(
+                        &self.db.pool, &wt_id_str,
+                    ).await {
+                        if wt.status != WorktreeStatus::Deleted {
+                            let _ = composer_git::worktree::remove_worktree(
+                                std::path::Path::new(&wt.repo_path),
+                                std::path::Path::new(&wt.worktree_path),
+                                &wt.branch_name,
+                            ).await;
+                            let _ = composer_db::models::worktree::update_status(
+                                &self.db.pool,
+                                &wt_id_str,
+                                &WorktreeStatus::Deleted,
+                            ).await;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Clear workflow_run_id so task can be restarted
+        composer_db::models::task::clear_workflow_run_id(&self.db.pool, task_id).await?;
+
+        Ok(())
     }
 
     pub async fn start_task(&self, task_id: &str) -> anyhow::Result<StartTaskResponse> {

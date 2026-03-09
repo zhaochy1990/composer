@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon, Link2 } from 'lucide-react';
+import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon, Link2, Undo2 } from 'lucide-react';
 import type { Task } from '@/types/generated';
-import { useUpdateTask, useDeleteTask, useStartTask, useTasks } from '@/hooks/use-tasks';
+import { useUpdateTask, useDeleteTask, useStartTask, useTasks, useMoveTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession, useSendSessionInput, useRetrySession } from '@/hooks/use-sessions';
 import { useUserQuestionStore } from '@/stores/user-question-store';
@@ -46,6 +46,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const updateTask = useUpdateTask();
     const deleteTask = useDeleteTask();
     const startTask = useStartTask();
+    const moveTask = useMoveTask();
 
     // --- All tasks (for resolving related task links) ---
     const { data: allTasks } = useTasks();
@@ -200,15 +201,35 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                     )}
                     <h2 className="text-lg font-semibold text-gray-100">{task.title}</h2>
                 </div>
-                {!inline && (
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {(task.status === 'in_progress' || task.status === 'waiting') && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (confirm('Move task back to backlog? This will cancel the running workflow, stop active sessions, and remove worktrees.')) {
+                                    moveTask.mutate({ id: task.id, status: 'backlog' });
+                                }
+                            }}
+                            disabled={moveTask.isPending}
+                            className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-orange-900/40 text-orange-300 border border-orange-700 hover:bg-orange-900/60 transition-colors disabled:opacity-50"
+                        >
+                            <Undo2 className="w-3 h-3" />
+                            {moveTask.isPending ? 'Cancelling...' : 'Move to Backlog'}
+                        </button>
+                    )}
+                    {moveTask.isError && (
+                        <span className="text-xs text-red-400">{(moveTask.error as Error).message}</span>
+                    )}
+                    {!inline && (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* PR Links */}

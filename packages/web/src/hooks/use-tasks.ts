@@ -68,7 +68,13 @@ export function useMoveTask() {
     return useMutation({
         mutationFn: ({ id, status, position }: { id: string; status: string; position?: number }) =>
             apiFetch<Task>(`/tasks/${id}/move`, { method: 'POST', body: JSON.stringify({ status, position }) }),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
+            queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });
+            queryClient.invalidateQueries({ queryKey: ['worktrees'] });
+        },
         onError: (error: Error) => logger.error('Failed to move task', { error: error.message }),
     });
 }

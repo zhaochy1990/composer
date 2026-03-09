@@ -317,15 +317,15 @@ impl SessionService {
                         session_id,
                         ref plan_content,
                     } => {
-                        // Skip already-enriched events to avoid infinite loop
-                        if plan_content.is_some() {
-                            continue;
-                        }
-
-                        // Read plan file content (same pattern as UserQuestionRequested)
-                        let plan = process_manager
-                            .get_plan_file_path(&session_id)
-                            .and_then(|path| std::fs::read_to_string(&path).ok());
+                        // Plan content is included directly from the executor (read
+                        // eagerly when ExitPlanMode is detected). Fallback to disk
+                        // read via process manager if not present.
+                        let plan = match plan_content {
+                            Some(content) if !content.is_empty() => Some(content.clone()),
+                            _ => process_manager
+                                .get_plan_file_path(&session_id)
+                                .and_then(|path| std::fs::read_to_string(&path).ok()),
+                        };
 
                         if let Some(ref content) = plan {
                             // Eagerly store plan content in the workflow step output
@@ -367,12 +367,6 @@ impl SessionService {
                                 }
                             }
                         }
-
-                        // Re-broadcast enriched event (always Some to prevent infinite loop)
-                        event_bus.broadcast(WsEvent::PlanCompleted {
-                            session_id,
-                            plan_content: Some(plan.unwrap_or_default()),
-                        });
                     }
                     _ => {}
                 }

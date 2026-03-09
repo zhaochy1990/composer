@@ -73,14 +73,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                     continue;
                 }
             }
-            if let WsEvent::PlanCompleted {
-                ref plan_content, ..
-            } = event
-            {
-                if plan_content.is_none() {
-                    continue;
-                }
-            }
+            // PlanCompleted: executor now includes plan content directly,
+            // no filtering needed (content is read eagerly at ExitPlanMode detection).
 
             // Filter session events by subscription set
             let subs = sub_clone.lock().await;

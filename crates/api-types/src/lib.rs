@@ -94,6 +94,7 @@ pub enum WorkflowRunStatus {
     Paused,
     Completed,
     Failed,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]

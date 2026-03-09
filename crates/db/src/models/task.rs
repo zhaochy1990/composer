@@ -137,6 +137,12 @@ pub async fn update_workflow_run_id(pool: &SqlitePool, id: &str, workflow_run_id
     Ok(())
 }
 
+pub async fn clear_workflow_run_id(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
+    sqlx::query("UPDATE tasks SET workflow_run_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(id).execute(pool).await?;
+    Ok(())
+}
+
 pub async fn find_by_id(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Task>> {
     let row = sqlx::query_as::<_, TaskRow>(&format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id = ?"))
         .bind(id)
