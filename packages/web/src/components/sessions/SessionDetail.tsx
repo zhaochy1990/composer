@@ -17,7 +17,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full">
-                <p className="text-gray-500">Loading session...</p>
+                <p className="text-text-muted">Loading session...</p>
             </div>
         );
     }
@@ -31,7 +31,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
                 <button
                     type="button"
                     onClick={onBack}
-                    className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+                    className="text-sm text-text-muted hover:text-text-primary transition-colors"
                 >
                     Back to sessions
                 </button>
@@ -46,19 +46,19 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
     return (
         <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="border-b border-gray-800 px-6 py-4">
+            <div className="border-b border-border-primary px-6 py-4">
                 <div className="flex items-center gap-3 mb-3">
                     <button
                         type="button"
                         onClick={onBack}
-                        className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800"
+                        className="text-text-muted hover:text-text-primary transition-colors p-1 rounded hover:bg-bg-elevated"
                         title="Back to sessions"
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </button>
                     <div className="flex items-center gap-2">
-                        <Terminal className="w-4 h-4 text-gray-500" />
-                        <span className="font-mono text-sm text-gray-400">
+                        <Terminal className="w-4 h-4 text-text-muted" />
+                        <span className="font-mono text-sm text-text-muted">
                             {shortId(session.id)}
                         </span>
                     </div>
@@ -67,7 +67,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
 
                 <div className="flex items-center justify-between">
                     {/* Metadata row */}
-                    <div className="flex items-center gap-4 text-sm text-gray-400">
+                    <div className="flex items-center gap-4 text-sm text-text-muted">
                         <span className="flex items-center gap-1.5">
                             <Bot className="w-3.5 h-3.5" />
                             {shortId(session.agent_id)}
@@ -76,7 +76,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
                             <Clock className="w-3.5 h-3.5" />
                             {duration}
                         </span>
-                        <span className="text-gray-600">
+                        <span className="text-text-muted">
                             Started {formatTime(session.started_at ?? session.created_at)}
                         </span>
                         {session.task_id && (
@@ -131,11 +131,11 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
 
             {/* Prompt section */}
             {session.prompt && (
-                <div className="px-6 py-3 border-b border-gray-800">
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                <div className="px-6 py-3 border-b border-border-primary">
+                    <p className="text-xs font-semibold text-text-muted uppercase mb-1">
                         Prompt
                     </p>
-                    <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                    <p className="text-sm text-text-secondary whitespace-pre-wrap">
                         {session.prompt}
                     </p>
                 </div>
@@ -143,11 +143,11 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
 
             {/* Result summary */}
             {session.result_summary && (
-                <div className="px-6 py-3 border-b border-gray-800">
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                <div className="px-6 py-3 border-b border-border-primary">
+                    <p className="text-xs font-semibold text-text-muted uppercase mb-1">
                         Result
                     </p>
-                    <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                    <p className="text-sm text-text-secondary whitespace-pre-wrap">
                         {session.result_summary}
                     </p>
                 </div>
@@ -155,7 +155,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
 
             {/* Live output */}
             <div className="flex-1 overflow-hidden px-6 py-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                <p className="text-xs font-semibold text-text-muted uppercase mb-2">
                     Output
                 </p>
                 <SessionOutput sessionId={session.id} />

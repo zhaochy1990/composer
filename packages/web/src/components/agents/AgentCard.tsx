@@ -19,11 +19,11 @@ const statusLabels: Record<AgentStatus, string> = {
 function authBadgeClass(authStatus: AuthStatus): string {
     switch (authStatus) {
         case 'authenticated':
-            return 'bg-green-900 text-green-300';
+            return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
         case 'unauthenticated':
-            return 'bg-red-900 text-red-300';
+            return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
         default:
-            return 'bg-yellow-900 text-yellow-300';
+            return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
     }
 }
 
@@ -52,11 +52,11 @@ export function AgentCard({ agent }: AgentCardProps) {
         : agent.auth_status;
 
     return (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 relative group">
+        <div className="bg-bg-surface border border-border-primary rounded-lg p-4 relative group">
             <button
                 onClick={() => deleteAgent.mutate(agent.id)}
                 disabled={deleteAgent.isPending}
-                className="absolute top-3 right-3 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-3 right-3 text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Delete agent"
             >
                 <X className="w-4 h-4" />
@@ -67,11 +67,11 @@ export function AgentCard({ agent }: AgentCardProps) {
                     className={`w-2 h-2 rounded-full inline-block ${statusColors[agent.status]}`}
                     title={statusLabels[agent.status]}
                 />
-                <h3 className="font-bold text-gray-100 truncate">{agent.name}</h3>
+                <h3 className="font-bold text-text-primary truncate">{agent.name}</h3>
             </div>
 
             <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300">
+                <span className="text-xs px-2 py-0.5 rounded bg-bg-elevated text-text-secondary">
                     {agent.agent_type}
                 </span>
                 <span className={`text-xs px-2 py-0.5 rounded ${authBadgeClass(currentAuth)}`}>
@@ -84,7 +84,7 @@ export function AgentCard({ agent }: AgentCardProps) {
                 )}
             </div>
 
-            <div className="flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center justify-between text-xs text-text-muted">
                 <span>{statusLabels[agent.status]}</span>
                 {agent.last_heartbeat && (
                     <span title={agent.last_heartbeat}>
@@ -94,7 +94,7 @@ export function AgentCard({ agent }: AgentCardProps) {
             </div>
 
             {agent.executable_path && (
-                <p className="text-xs text-gray-600 mt-2 truncate" title={agent.executable_path}>
+                <p className="text-xs text-text-muted mt-2 truncate" title={agent.executable_path}>
                     {agent.executable_path}
                 </p>
             )}

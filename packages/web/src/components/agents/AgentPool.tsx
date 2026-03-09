@@ -12,12 +12,12 @@ export function AgentPool() {
     return (
         <div className="h-full overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
-                <h1 className="text-xl font-bold text-gray-100">Agent Pool</h1>
+                <h1 className="text-xl font-bold text-text-primary">Agent Pool</h1>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => discoverAgents.mutate()}
                         disabled={discoverAgents.isPending}
-                        className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-2 px-3 py-2 text-sm bg-bg-elevated text-text-secondary rounded-md hover:bg-bg-interactive disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <RefreshCw
                             className={`w-4 h-4 ${discoverAgents.isPending ? 'animate-spin' : ''}`}
@@ -36,7 +36,7 @@ export function AgentPool() {
 
             {isLoading && (
                 <div className="flex items-center justify-center h-64">
-                    <p className="text-sm text-gray-500">Loading agents...</p>
+                    <p className="text-sm text-text-muted">Loading agents...</p>
                 </div>
             )}
 
@@ -48,8 +48,8 @@ export function AgentPool() {
 
             {!isLoading && !isError && agents && agents.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-64 text-center">
-                    <Bot className="w-12 h-12 text-gray-700 mb-4" />
-                    <p className="text-sm text-gray-500">
+                    <Bot className="w-12 h-12 text-text-muted mb-4" />
+                    <p className="text-sm text-text-muted">
                         No agents registered. Click Discover to find installed agents.
                     </p>
                 </div>

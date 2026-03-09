@@ -87,16 +87,16 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
         <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open && !isPending) resetAndClose(); }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[640px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6" onEscapeKeyDown={(e) => { if (isPending) e.preventDefault(); }} onPointerDownOutside={(e) => { if (isPending) e.preventDefault(); }}>
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[640px] bg-bg-surface border border-border-primary rounded-xl shadow-2xl p-6" onEscapeKeyDown={(e) => { if (isPending) e.preventDefault(); }} onPointerDownOutside={(e) => { if (isPending) e.preventDefault(); }}>
                     <div className="flex items-center justify-between mb-4">
-                        <Dialog.Title className="text-lg font-semibold text-gray-100">
+                        <Dialog.Title className="text-lg font-semibold text-text-primary">
                             New Task
                         </Dialog.Title>
                         <Dialog.Close asChild>
                             <button
                                 type="button"
                                 disabled={isPending}
-                                className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="text-text-muted hover:text-text-secondary transition-colors p-1 rounded hover:bg-bg-elevated disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -105,7 +105,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label htmlFor="create-title" className="block text-sm font-medium text-gray-300 mb-1">
+                            <label htmlFor="create-title" className="block text-sm font-medium text-text-secondary mb-1">
                                 Title <span className="text-red-400">*</span>
                             </label>
                             <input
@@ -115,12 +115,12 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                 onChange={e => setTitle(e.target.value)}
                                 placeholder="Task title"
                                 required
-                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="create-description" className="block text-sm font-medium text-gray-300 mb-1">
+                            <label htmlFor="create-description" className="block text-sm font-medium text-text-secondary mb-1">
                                 Description
                             </label>
                             <textarea
@@ -129,19 +129,19 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                 onChange={e => setDescription(e.target.value)}
                                 placeholder="Optional description"
                                 rows={6}
-                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
+                                className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="create-priority" className="block text-sm font-medium text-gray-300 mb-1">
+                            <label htmlFor="create-priority" className="block text-sm font-medium text-text-secondary mb-1">
                                 Priority
                             </label>
                             <select
                                 id="create-priority"
                                 value={priority}
                                 onChange={e => setPriority(Number(e.target.value))}
-                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             >
                                 <option value={0}>None</option>
                                 <option value={1}>Low</option>
@@ -152,14 +152,14 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
 
                         {projects && projects.length > 0 && (
                             <div>
-                                <label htmlFor="create-project" className="block text-sm font-medium text-gray-300 mb-1">
+                                <label htmlFor="create-project" className="block text-sm font-medium text-text-secondary mb-1">
                                     Project
                                 </label>
                                 <select
                                     id="create-project"
                                     value={projectId}
                                     onChange={e => setProjectId(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 >
                                     <option value="">No project</option>
                                     {projects.map(p => (
@@ -170,14 +170,14 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                         )}
 
                         <div>
-                            <label htmlFor="create-agent" className="block text-sm font-medium text-gray-300 mb-1">
+                            <label htmlFor="create-agent" className="block text-sm font-medium text-text-secondary mb-1">
                                 Agent
                             </label>
                             <select
                                 id="create-agent"
                                 value={assignedAgentId}
                                 onChange={e => setAssignedAgentId(e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             >
                                 <option value="">None</option>
                                 {agents?.map(agent => (
@@ -188,7 +188,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
 
                         {workflows && workflows.length > 0 && (
                             <div>
-                                <label htmlFor="create-workflow" className="block text-sm font-medium text-gray-300 mb-1">
+                                <label htmlFor="create-workflow" className="block text-sm font-medium text-text-secondary mb-1">
                                     Workflow
                                 </label>
                                 <select
@@ -196,7 +196,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                     value={selectedWorkflowId}
                                     onChange={e => setSelectedWorkflowId(e.target.value)}
                                     disabled={!assignedAgentId || !projectId}
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <option value="">No workflow</option>
                                     {workflows.map((w: Workflow) => (
@@ -217,12 +217,12 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
 
                         {doneTasks.length > 0 && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">
+                                <label className="block text-sm font-medium text-text-secondary mb-1">
                                     Related Tasks
                                 </label>
-                                <div className="max-h-32 overflow-y-auto bg-gray-800 border border-gray-600 rounded-md p-2 space-y-1">
+                                <div className="max-h-32 overflow-y-auto bg-bg-elevated border border-border-secondary rounded-md p-2 space-y-1">
                                     {doneTasks.map(t => (
-                                        <label key={t.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-gray-100">
+                                        <label key={t.id} className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-text-primary">
                                             <input
                                                 type="checkbox"
                                                 checked={relatedTaskIds.includes(t.id)}
@@ -233,21 +233,21 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                                         setRelatedTaskIds(prev => prev.filter(id => id !== t.id));
                                                     }
                                                 }}
-                                                className="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                                                className="rounded border-border-secondary bg-bg-interactive text-blue-500 focus:ring-blue-500"
                                             />
-                                            {t.simple_id && <span className="font-mono text-xs text-gray-500">{t.simple_id}</span>}
+                                            {t.simple_id && <span className="font-mono text-xs text-text-muted">{t.simple_id}</span>}
                                             <span className="truncate">{t.title}</span>
                                         </label>
                                     ))}
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">Only tasks in Done status can be linked</p>
+                                <p className="text-xs text-text-muted mt-1">Only tasks in Done status can be linked</p>
                             </div>
                         )}
 
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-text-muted">
                             {selectedWorkflowId
                                 ? 'Task will be created in backlog with workflow ready to start'
-                                : <>Task will be created in <span className="font-medium text-gray-400">{formatStatus(defaultStatus)}</span></>
+                                : <>Task will be created in <span className="font-medium text-text-muted">{formatStatus(defaultStatus)}</span></>
                             }
                         </p>
 
@@ -256,7 +256,7 @@ export function TaskCreateDialog({ isOpen, onClose, defaultStatus }: TaskCreateD
                                 <button
                                     type="button"
                                     disabled={isPending}
-                                    className="px-4 py-2 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-4 py-2 text-sm text-text-secondary bg-bg-elevated border border-border-secondary rounded-md hover:bg-bg-interactive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Cancel
                                 </button>

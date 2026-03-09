@@ -64,16 +64,16 @@ export function WorkflowCreateDialog({ isOpen, onClose }: WorkflowCreateDialogPr
         <>
             <div className="fixed inset-0 bg-black/50 z-50" onClick={onClose} />
             <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-                <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-[400px] pointer-events-auto">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                        <h2 className="text-sm font-semibold text-gray-100">New Workflow</h2>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-200 p-1 rounded hover:bg-gray-800">
+                <div className="bg-bg-surface border border-border-primary rounded-lg shadow-xl w-[400px] pointer-events-auto">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+                        <h2 className="text-sm font-semibold text-text-primary">New Workflow</h2>
+                        <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-elevated">
                             <X className="w-4 h-4" />
                         </button>
                     </div>
                     <form onSubmit={handleSubmit} className="p-4 space-y-4">
                         <div>
-                            <label htmlFor="wf-name" className="block text-sm font-medium text-gray-300 mb-1">
+                            <label htmlFor="wf-name" className="block text-sm font-medium text-text-secondary mb-1">
                                 Workflow Name <span className="text-red-400">*</span>
                             </label>
                             <input
@@ -83,15 +83,15 @@ export function WorkflowCreateDialog({ isOpen, onClose }: WorkflowCreateDialogPr
                                 placeholder="e.g., Bug Fix, Refactoring"
                                 required
                                 autoFocus
-                                className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-text-muted mt-1">
                                 A starter workflow with Plan, Review, and Implement steps will be created. You can customize it after.
                             </p>
                         </div>
                         <div className="flex justify-end gap-2">
                             <button type="button" onClick={onClose}
-                                className="px-3 py-1.5 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700">
+                                className="px-3 py-1.5 text-sm text-text-secondary bg-bg-elevated border border-border-secondary rounded-md hover:bg-bg-interactive">
                                 Cancel
                             </button>
                             <button type="submit" disabled={!name.trim() || createWorkflow.isPending}

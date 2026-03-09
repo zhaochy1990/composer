@@ -31,21 +31,21 @@ function StepStatusIcon({ status }: { status: WorkflowStepStatus }) {
         case 'failed':
             return <AlertTriangle className="w-4 h-4 text-red-400" />;
         case 'skipped':
-            return <Ban className="w-4 h-4 text-gray-500" />;
+            return <Ban className="w-4 h-4 text-text-muted" />;
         default:
-            return <Circle className="w-4 h-4 text-gray-600" />;
+            return <Circle className="w-4 h-4 text-text-muted" />;
     }
 }
 
 function StepStatusBadge({ status }: { status: WorkflowStepStatus }) {
     const colors: Record<WorkflowStepStatus, string> = {
-        pending: 'bg-gray-700 text-gray-400',
-        running: 'bg-blue-900/40 text-blue-300 border-blue-700',
-        waiting_for_human: 'bg-yellow-900/40 text-yellow-300 border-yellow-700',
-        completed: 'bg-green-900/40 text-green-300 border-green-700',
-        rejected: 'bg-red-900/40 text-red-300 border-red-700',
-        failed: 'bg-red-900/40 text-red-300 border-red-700',
-        skipped: 'bg-gray-800 text-gray-500 border-gray-700',
+        pending: 'bg-bg-interactive text-text-muted',
+        running: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700',
+        waiting_for_human: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-300 dark:border-yellow-700',
+        completed: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700',
+        rejected: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700',
+        failed: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700',
+        skipped: 'bg-bg-elevated text-text-muted border-border-primary',
     };
 
     return (
@@ -154,7 +154,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
             {/* Run status header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
                         Workflow: {workflow.name}
                     </span>
                     <StepStatusBadge status={
@@ -164,7 +164,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                     } />
                 </div>
                 {workflowRun.iteration_count > 0 && (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-text-muted">
                         Iteration {workflowRun.iteration_count + 1}
                     </span>
                 )}
@@ -181,7 +181,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                         <div
                             key={step.id}
                             className={`flex items-start gap-3 px-3 py-2 rounded-md ${
-                                status === 'running' || status === 'waiting_for_human' ? 'bg-gray-800' : ''
+                                status === 'running' || status === 'waiting_for_human' ? 'bg-bg-elevated' : ''
                             } ${isSkipped ? 'opacity-50' : ''}`}
                         >
                             <div className="mt-0.5">
@@ -190,16 +190,16 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <span className={`text-sm font-medium ${
-                                        isSkipped ? 'text-gray-500 line-through' :
-                                        status === 'running' || status === 'waiting_for_human' ? 'text-gray-100' : 'text-gray-400'
+                                        isSkipped ? 'text-text-muted line-through' :
+                                        status === 'running' || status === 'waiting_for_human' ? 'text-text-primary' : 'text-text-muted'
                                     }`}>
                                         {getStepName(step)}
                                     </span>
-                                    <span className="text-xs text-gray-600">
+                                    <span className="text-xs text-text-muted">
                                         {STEP_TYPE_LABELS[step.step_type]}
                                     </span>
                                     {latestOutput && latestOutput.attempt > 1 && (
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-text-muted">
                                             (attempt {latestOutput.attempt})
                                         </span>
                                     )}
@@ -209,19 +209,19 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                                         </span>
                                     )}
                                     {step.loop_back_to != null && (
-                                        <span className="text-xs text-gray-500 flex items-center gap-0.5" title={`Loops back to ${step.loop_back_to}`}>
+                                        <span className="text-xs text-text-muted flex items-center gap-0.5" title={`Loops back to ${step.loop_back_to}`}>
                                             <RotateCcw className="w-3 h-3" />
                                         </span>
                                     )}
                                 </div>
                                 {step.step_type === 'human_gate' && step.on_approve && (
-                                    <p className="text-xs text-gray-600 mt-0.5">
+                                    <p className="text-xs text-text-muted mt-0.5">
                                         approve → {step.on_approve}
                                         {step.on_reject && ` | reject → ${step.on_reject}`}
                                     </p>
                                 )}
                                 {latestOutput?.output && status !== 'skipped' && (
-                                    <p className="text-xs text-gray-500 mt-1 truncate max-w-lg" title={latestOutput.output}>
+                                    <p className="text-xs text-text-muted mt-1 truncate max-w-lg" title={latestOutput.output}>
                                         {latestOutput.output.slice(0, 200)}
                                     </p>
                                 )}
@@ -251,7 +251,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                             {isFailed ? 'Workflow step failed' : 'Workflow interrupted (server restart)'}
                         </span>
                     </div>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-text-muted">
                         The workflow can be resumed from the current step. The agent session will be resumed with its full context.
                     </p>
                     <button
@@ -275,7 +275,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                             Retries exhausted: {steps.find(s => s.id === step.step_id)?.name ?? step.step_id}
                         </span>
                     </div>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-text-muted">
                         Automated review loop exceeded max retries. What would you like to do?
                     </p>
                     <div className="flex items-center gap-3">
@@ -292,7 +292,7 @@ export function WorkflowProgress({ workflowRun, workflow, onReviewData, onIntera
                             type="button"
                             onClick={() => handleRetryResume(step.step_id, 'skip_to_next')}
                             disabled={resumeRun.isPending}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-bg-interactive text-text-primary border border-border-secondary hover:bg-bg-elevated transition-colors disabled:opacity-50"
                         >
                             <SkipForward className="w-3.5 h-3.5" />
                             Stop loop & advance

@@ -64,15 +64,15 @@ export function SessionCreateDialog({
         <Dialog.Root open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6">
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-bg-surface border border-border-primary rounded-xl shadow-2xl p-6">
                     <div className="flex items-center justify-between mb-5">
-                        <Dialog.Title className="text-lg font-semibold text-gray-100">
+                        <Dialog.Title className="text-lg font-semibold text-text-primary">
                             New Session
                         </Dialog.Title>
                         <Dialog.Close asChild>
                             <button
                                 type="button"
-                                className="text-gray-500 hover:text-gray-300 transition-colors p-1 rounded hover:bg-gray-800"
+                                className="text-text-muted hover:text-text-secondary transition-colors p-1 rounded hover:bg-bg-elevated"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -84,7 +84,7 @@ export function SessionCreateDialog({
                         <div className="flex flex-col gap-1.5">
                             <label
                                 htmlFor="session-agent"
-                                className="text-sm font-medium text-gray-400"
+                                className="text-sm font-medium text-text-muted"
                             >
                                 Agent
                             </label>
@@ -93,7 +93,7 @@ export function SessionCreateDialog({
                                 value={agentId}
                                 onChange={(e) => setAgentId(e.target.value)}
                                 required
-                                className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                                className="bg-bg-elevated border border-border-primary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
                             >
                                 <option value="">
                                     {agentsLoading
@@ -121,7 +121,7 @@ export function SessionCreateDialog({
                         <div className="flex flex-col gap-1.5">
                             <label
                                 htmlFor="session-prompt"
-                                className="text-sm font-medium text-gray-400"
+                                className="text-sm font-medium text-text-muted"
                             >
                                 Prompt
                             </label>
@@ -132,7 +132,7 @@ export function SessionCreateDialog({
                                 required
                                 rows={4}
                                 placeholder="Describe the task for the agent..."
-                                className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent resize-y min-h-[80px]"
+                                className="bg-bg-elevated border border-border-primary rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent resize-y min-h-[80px]"
                             />
                         </div>
 
@@ -140,7 +140,7 @@ export function SessionCreateDialog({
                         <div className="flex flex-col gap-1.5">
                             <label
                                 htmlFor="session-repo"
-                                className="text-sm font-medium text-gray-400"
+                                className="text-sm font-medium text-text-muted"
                             >
                                 Repository Path
                             </label>
@@ -151,7 +151,7 @@ export function SessionCreateDialog({
                                 onChange={(e) => setRepoPath(e.target.value)}
                                 placeholder="/path/to/repo"
                                 required
-                                className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent font-mono"
+                                className="bg-bg-elevated border border-border-primary rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent font-mono"
                             />
                         </div>
 
@@ -163,9 +163,9 @@ export function SessionCreateDialog({
                                 onChange={(e) =>
                                     setAutoApprove(e.target.checked)
                                 }
-                                className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-0"
+                                className="w-4 h-4 rounded border-border-secondary bg-bg-elevated text-blue-600 focus:ring-blue-600 focus:ring-offset-0"
                             />
-                            <span className="text-sm text-gray-300">
+                            <span className="text-sm text-text-secondary">
                                 Auto-approve tool usage
                             </span>
                         </label>
@@ -183,7 +183,7 @@ export function SessionCreateDialog({
                             <Dialog.Close asChild>
                                 <button
                                     type="button"
-                                    className="px-4 py-2 rounded-md text-sm font-medium text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
+                                    className="px-4 py-2 rounded-md text-sm font-medium text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors"
                                 >
                                     Cancel
                                 </button>

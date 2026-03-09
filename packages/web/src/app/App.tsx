@@ -23,7 +23,7 @@ function AppContent() {
     useWebSocket();
 
     return (
-        <div className="flex h-screen bg-gray-950 text-gray-100">
+        <div className="flex h-screen bg-bg-app text-text-primary">
             <Sidebar currentPage={page} onNavigate={setPage} />
             <main className="flex-1 overflow-hidden">
                 {page === 'tasks' && <TaskBoard />}

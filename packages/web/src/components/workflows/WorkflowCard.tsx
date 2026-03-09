@@ -8,21 +8,21 @@ const STEP_TYPE_LABELS: Record<string, string> = {
 };
 
 const STEP_TYPE_COLORS: Record<string, string> = {
-    agentic: 'bg-blue-900/40 text-blue-300 border-blue-800',
-    human_gate: 'bg-yellow-900/40 text-yellow-300 border-yellow-800',
+    agentic: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800',
+    human_gate: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-300 dark:border-yellow-800',
 };
 
 const SESSION_MODE_COLORS: Record<string, string> = {
-    new: 'bg-purple-900/40 text-purple-300 border-purple-800',
-    resume: 'bg-blue-900/40 text-blue-300 border-blue-800',
-    separate: 'bg-cyan-900/40 text-cyan-300 border-cyan-800',
+    new: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-800',
+    resume: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800',
+    separate: 'bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-800',
 };
 
 function getStepColor(step: WorkflowStepDefinition): string {
     if (step.step_type === 'agentic' && step.session_mode) {
         return SESSION_MODE_COLORS[step.session_mode] ?? STEP_TYPE_COLORS.agentic;
     }
-    return STEP_TYPE_COLORS[step.step_type] ?? 'bg-gray-700 text-gray-400';
+    return STEP_TYPE_COLORS[step.step_type] ?? 'bg-bg-interactive text-text-muted';
 }
 
 interface WorkflowCardProps {
@@ -45,20 +45,20 @@ export function WorkflowCard({ workflow, onClick, compact, isSelected }: Workflo
             <button
                 type="button"
                 onClick={onClick}
-                className={`w-full text-left px-4 py-2.5 border-b border-gray-800 hover:bg-gray-800 transition-colors ${
-                    isSelected ? 'bg-gray-800 border-l-2 border-l-blue-500' : ''
+                className={`w-full text-left px-4 py-2.5 border-b border-border-primary hover:bg-bg-elevated transition-colors ${
+                    isSelected ? 'bg-bg-elevated border-l-2 border-l-blue-500' : ''
                 }`}
             >
                 <div className="flex items-center gap-2">
                     <WorkflowIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span className="text-sm font-medium text-gray-200 truncate">{workflow.name}</span>
+                    <span className="text-sm font-medium text-text-primary truncate">{workflow.name}</span>
                     {workflow.is_template && (
                         <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-400 border border-purple-800/50 shrink-0">
                             <Lock className="w-2.5 h-2.5" />
                             Built-in
                         </span>
                     )}
-                    <span className="text-xs text-gray-500 ml-auto shrink-0">
+                    <span className="text-xs text-text-muted ml-auto shrink-0">
                         {workflow.definition.steps.length}
                     </span>
                 </div>
@@ -70,18 +70,18 @@ export function WorkflowCard({ workflow, onClick, compact, isSelected }: Workflo
         <button
             type="button"
             onClick={onClick}
-            className="w-full text-left p-4 bg-gray-900 border border-gray-800 rounded-lg hover:border-gray-700 transition-colors"
+            className="w-full text-left p-4 bg-bg-surface border border-border-primary rounded-lg hover:border-border-primary transition-colors"
         >
             <div className="flex items-center gap-2 mb-3">
                 <WorkflowIcon className="w-4 h-4 text-purple-400" />
-                <h3 className="text-sm font-semibold text-gray-100">{workflow.name}</h3>
+                <h3 className="text-sm font-semibold text-text-primary">{workflow.name}</h3>
                 {workflow.is_template && (
                     <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-800">
                         <Lock className="w-3 h-3" />
                         Template
                     </span>
                 )}
-                <span className="text-xs text-gray-500 ml-auto">
+                <span className="text-xs text-text-muted ml-auto">
                     {workflow.definition.steps.length} steps
                 </span>
             </div>
@@ -101,7 +101,7 @@ export function WorkflowCard({ workflow, onClick, compact, isSelected }: Workflo
                         type="button"
                         onClick={handleClone}
                         disabled={cloneWorkflow.isPending}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-800 text-gray-300 rounded hover:bg-gray-700 border border-gray-700 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs bg-bg-elevated text-text-secondary rounded hover:bg-bg-interactive border border-border-primary transition-colors disabled:opacity-50"
                     >
                         <Copy className="w-3 h-3" />
                         {cloneWorkflow.isPending ? 'Cloning...' : 'Clone to edit'}

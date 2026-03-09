@@ -121,7 +121,7 @@ function StepNode({ data, selected }: NodeProps) {
                 <div className="flex items-center gap-1.5 mb-1">
                     <span className={`text-[10px] font-mono ${colors.text} opacity-70`}>{step.id}</span>
                 </div>
-                <div className="text-sm font-medium text-gray-100 truncate">
+                <div className="text-sm font-medium text-text-primary truncate">
                     {step.name || step.id}
                 </div>
                 <div className="flex items-center gap-1.5 mt-1">
@@ -139,7 +139,7 @@ function StepNode({ data, selected }: NodeProps) {
                         </span>
                     )}
                     {step.max_retries != null && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded text-gray-400 bg-black/20">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded text-text-muted bg-black/20">
                             max:{step.max_retries}
                         </span>
                     )}
@@ -297,11 +297,11 @@ function PropertyPanel({
     const otherIds = allStepIds.filter(id => id !== step.id);
 
     return (
-        <div className="w-[520px] shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto p-4 space-y-3">
+        <div className="w-[520px] shrink-0 border-l border-border-primary bg-bg-surface overflow-y-auto p-4 space-y-3">
             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-200">Step Properties</h3>
+                <h3 className="text-sm font-semibold text-text-primary">Step Properties</h3>
                 {!readOnly && (
-                    <button onClick={onDelete} className="text-gray-500 hover:text-red-400 p-1" title="Delete step">
+                    <button onClick={onDelete} className="text-text-muted hover:text-red-400 p-1" title="Delete step">
                         <Trash2 className="w-3.5 h-3.5" />
                     </button>
                 )}
@@ -309,33 +309,33 @@ function PropertyPanel({
 
             {/* ID */}
             <div>
-                <label className="block text-xs text-gray-400 mb-1">ID</label>
+                <label className="block text-xs text-text-muted mb-1">ID</label>
                 <input
                     value={step.id}
                     readOnly
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 font-mono"
+                    className="w-full bg-bg-elevated border border-border-primary rounded px-2 py-1 text-xs text-text-secondary font-mono"
                 />
             </div>
 
             {/* Name */}
             <div>
-                <label className="block text-xs text-gray-400 mb-1">Name</label>
+                <label className="block text-xs text-text-muted mb-1">Name</label>
                 <input
                     value={step.name}
                     onChange={e => onUpdate({ name: e.target.value })}
                     readOnly={readOnly}
-                    className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-100 ${readOnly ? 'cursor-default' : 'focus:outline-none focus:border-blue-500'}`}
+                    className={`w-full bg-bg-elevated border border-border-primary rounded px-2 py-1 text-xs text-text-primary ${readOnly ? 'cursor-default' : 'focus:outline-none focus:border-blue-500'}`}
                 />
             </div>
 
             {/* Type */}
             <div>
-                <label className="block text-xs text-gray-400 mb-1">Type</label>
+                <label className="block text-xs text-text-muted mb-1">Type</label>
                 <select
                     value={step.step_type}
                     onChange={e => onUpdate({ step_type: e.target.value as WorkflowStepType })}
                     disabled={readOnly}
-                    className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-100 ${readOnly ? 'cursor-default opacity-80' : 'focus:outline-none focus:border-blue-500'}`}
+                    className={`w-full bg-bg-elevated border border-border-primary rounded px-2 py-1 text-xs text-text-primary ${readOnly ? 'cursor-default opacity-80' : 'focus:outline-none focus:border-blue-500'}`}
                 >
                     {STEP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
@@ -343,16 +343,16 @@ function PropertyPanel({
 
             {/* Depends On */}
             <div>
-                <label className="block text-xs text-gray-400 mb-1">Depends On</label>
+                <label className="block text-xs text-text-muted mb-1">Depends On</label>
                 {step.depends_on.length > 0 ? (
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                         {readOnly ? (
                             step.depends_on.map(id => (
-                                <span key={id} className="text-xs text-gray-300 font-mono bg-gray-800 px-1.5 py-0.5 rounded">{id}</span>
+                                <span key={id} className="text-xs text-text-secondary font-mono bg-bg-elevated px-1.5 py-0.5 rounded">{id}</span>
                             ))
                         ) : (
                             otherIds.map(id => (
-                                <label key={id} className="flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                                <label key={id} className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={step.depends_on.includes(id)}
@@ -362,7 +362,7 @@ function PropertyPanel({
                                                 : step.depends_on.filter(d => d !== id);
                                             onUpdate({ depends_on: deps });
                                         }}
-                                        className="rounded border-gray-600"
+                                        className="rounded border-border-secondary"
                                     />
                                     <span className="font-mono">{id}</span>
                                 </label>
@@ -370,17 +370,17 @@ function PropertyPanel({
                         )}
                     </div>
                 ) : (
-                    <p className="text-xs text-gray-600">{readOnly ? 'None (entry step)' : 'No other steps to depend on'}</p>
+                    <p className="text-xs text-text-muted">{readOnly ? 'None (entry step)' : 'No other steps to depend on'}</p>
                 )}
                 {!readOnly && step.depends_on.length === 0 && otherIds.length > 0 && (
                     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                         {otherIds.map(id => (
-                            <label key={id} className="flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                            <label key={id} className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={false}
                                     onChange={() => onUpdate({ depends_on: [id] })}
-                                    className="rounded border-gray-600"
+                                    className="rounded border-border-secondary"
                                 />
                                 <span className="font-mono">{id}</span>
                             </label>
@@ -393,31 +393,31 @@ function PropertyPanel({
             {step.step_type === 'agentic' && (
                 <>
                     <div>
-                        <label className="block text-xs text-gray-400 mb-1">Session Mode</label>
+                        <label className="block text-xs text-text-muted mb-1">Session Mode</label>
                         <select
                             value={step.session_mode ?? 'resume'}
                             onChange={e => onUpdate({ session_mode: e.target.value as SessionMode })}
                             disabled={readOnly}
-                            className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-100 ${readOnly ? 'cursor-default opacity-80' : 'focus:outline-none focus:border-blue-500'}`}
+                            className={`w-full bg-bg-elevated border border-border-primary rounded px-2 py-1 text-xs text-text-primary ${readOnly ? 'cursor-default opacity-80' : 'focus:outline-none focus:border-blue-500'}`}
                         >
                             {SESSION_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                        <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer">
                             <input
                                 type="checkbox"
                                 checked={step.interactive ?? false}
                                 onChange={e => onUpdate({ interactive: e.target.checked || undefined })}
                                 disabled={readOnly}
-                                className="rounded border-gray-600"
+                                className="rounded border-border-secondary"
                             />
                             Interactive
-                            <span className="text-gray-600">— user can chat during this step</span>
+                            <span className="text-text-muted">— user can chat during this step</span>
                         </label>
                     </div>
                     <div>
-                        <label className="block text-xs text-gray-400 mb-1">
+                        <label className="block text-xs text-text-muted mb-1">
                             Prompt Template {!readOnly && <span className="text-red-400">*</span>}
                         </label>
                         <textarea
@@ -426,7 +426,7 @@ function PropertyPanel({
                             readOnly={readOnly}
                             placeholder="{{task}}, {{step:id}}, {{rejection}}"
                             rows={12}
-                            className={`w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-100 placeholder-gray-600 resize-y font-mono ${
+                            className={`w-full bg-bg-elevated border border-border-primary rounded px-2 py-1.5 text-xs text-text-primary placeholder-text-muted resize-y font-mono ${
                                 readOnly ? 'cursor-default' : `focus:outline-none focus:border-blue-500 ${!step.prompt_template?.trim() ? 'border-red-600' : ''}`
                             }`}
                         />
@@ -434,14 +434,14 @@ function PropertyPanel({
                     {(step.loop_back_to || step.max_retries != null) && (
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="block text-xs text-gray-400 mb-1">Loop Back To</label>
+                                <label className="block text-xs text-text-muted mb-1">Loop Back To</label>
                                 {readOnly ? (
-                                    <p className="text-xs text-gray-300 font-mono">{step.loop_back_to ?? 'None'}</p>
+                                    <p className="text-xs text-text-secondary font-mono">{step.loop_back_to ?? 'None'}</p>
                                 ) : (
                                     <select
                                         value={step.loop_back_to ?? ''}
                                         onChange={e => onUpdate({ loop_back_to: e.target.value || undefined })}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                        className="w-full bg-bg-elevated border border-border-secondary rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-blue-500"
                                     >
                                         <option value="">None</option>
                                         {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
@@ -449,16 +449,16 @@ function PropertyPanel({
                                 )}
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-400 mb-1">Max Retries</label>
+                                <label className="block text-xs text-text-muted mb-1">Max Retries</label>
                                 {readOnly ? (
-                                    <p className="text-xs text-gray-300">{step.max_retries ?? '∞'}</p>
+                                    <p className="text-xs text-text-secondary">{step.max_retries ?? '∞'}</p>
                                 ) : (
                                     <input
                                         type="number" min="1"
                                         value={step.max_retries ?? ''}
                                         onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value, 10) : undefined })}
                                         placeholder="∞"
-                                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                        className="w-full bg-bg-elevated border border-border-secondary rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-blue-500"
                                     />
                                 )}
                             </div>
@@ -467,24 +467,24 @@ function PropertyPanel({
                     {!readOnly && !step.loop_back_to && step.max_retries == null && (
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="block text-xs text-gray-400 mb-1">Loop Back To</label>
+                                <label className="block text-xs text-text-muted mb-1">Loop Back To</label>
                                 <select
                                     value=""
                                     onChange={e => onUpdate({ loop_back_to: e.target.value || undefined })}
-                                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                    className="w-full bg-bg-elevated border border-border-secondary rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-blue-500"
                                 >
                                     <option value="">None</option>
                                     {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-400 mb-1">Max Retries</label>
+                                <label className="block text-xs text-text-muted mb-1">Max Retries</label>
                                 <input
                                     type="number" min="1"
                                     value=""
                                     onChange={e => onUpdate({ max_retries: e.target.value ? parseInt(e.target.value, 10) : undefined })}
                                     placeholder="∞"
-                                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                    className="w-full bg-bg-elevated border border-border-secondary rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-blue-500"
                                 />
                             </div>
                         </div>
@@ -496,7 +496,7 @@ function PropertyPanel({
             {step.step_type === 'human_gate' && (
                 <div className="grid grid-cols-2 gap-2">
                     <div>
-                        <label className="block text-xs text-gray-400 mb-1">
+                        <label className="block text-xs text-text-muted mb-1">
                             On Approve → {!readOnly && <span className="text-red-400">*</span>}
                         </label>
                         {readOnly ? (
@@ -505,8 +505,8 @@ function PropertyPanel({
                             <select
                                 value={step.on_approve ?? ''}
                                 onChange={e => onUpdate({ on_approve: e.target.value || undefined })}
-                                className={`w-full bg-gray-800 border rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500 ${
-                                    !step.on_approve ? 'border-red-600' : 'border-gray-600'
+                                className={`w-full bg-bg-elevated border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-blue-500 ${
+                                    !step.on_approve ? 'border-red-600' : 'border-border-secondary'
                                 }`}
                             >
                                 <option value="">Select...</option>
@@ -515,14 +515,14 @@ function PropertyPanel({
                         )}
                     </div>
                     <div>
-                        <label className="block text-xs text-gray-400 mb-1">On Reject →</label>
+                        <label className="block text-xs text-text-muted mb-1">On Reject →</label>
                         {readOnly ? (
                             <p className="text-xs text-red-400 font-mono">{step.on_reject ?? 'None'}</p>
                         ) : (
                             <select
                                 value={step.on_reject ?? ''}
                                 onChange={e => onUpdate({ on_reject: e.target.value || undefined })}
-                                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
+                                className="w-full bg-bg-elevated border border-border-secondary rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-blue-500"
                             >
                                 <option value="">None</option>
                                 {otherIds.map(id => <option key={id} value={id}>{id}</option>)}
@@ -649,11 +649,11 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     if (workflow.is_template) {
         const templateSelectedStep = steps.find(s => s.id === selectedStepId);
         return (
-            <div className="h-full flex flex-col bg-gray-950">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900">
+            <div className="h-full flex flex-col bg-bg-app">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary bg-bg-surface">
                     <div className="flex items-center gap-2">
                         <Lock className="w-4 h-4 text-purple-400" />
-                        <h2 className="text-sm font-semibold text-gray-100">{workflow.name}</h2>
+                        <h2 className="text-sm font-semibold text-text-primary">{workflow.name}</h2>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-800">Template</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -665,7 +665,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                             <Copy className="w-3 h-3" />
                             {cloneWorkflow.isPending ? 'Cloning...' : 'Clone to edit'}
                         </button>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-200 p-1 rounded hover:bg-gray-800">
+                        <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-elevated">
                             <X className="w-4 h-4" />
                         </button>
                     </div>
@@ -703,18 +703,18 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     }
 
     return (
-        <div className="h-full flex flex-col bg-gray-950">
+        <div className="h-full flex flex-col bg-bg-app">
             {/* Top bar */}
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 bg-gray-900 shrink-0">
-                <label className="text-xs text-gray-400 shrink-0">Name</label>
+            <div className="flex items-center gap-3 px-4 py-2 border-b border-border-primary bg-bg-surface shrink-0">
+                <label className="text-xs text-text-muted shrink-0">Name</label>
                 <input
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-100 focus:outline-none focus:border-blue-500 min-w-0"
+                    className="flex-1 bg-bg-elevated border border-border-primary rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-blue-500 min-w-0"
                 />
                 <button
                     onClick={addStep}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs bg-gray-800 text-gray-300 rounded hover:bg-gray-700 border border-gray-700 shrink-0"
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs bg-bg-elevated text-text-secondary rounded hover:bg-bg-interactive border border-border-primary shrink-0"
                 >
                     <Plus className="w-3 h-3" />
                     Add Step
@@ -740,11 +740,11 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                             <button onClick={handleDelete} disabled={deleteWorkflow.isPending}
                                 className="px-2 py-0.5 text-xs text-white bg-red-600 rounded hover:bg-red-500 disabled:opacity-50">Yes</button>
                             <button onClick={() => setShowDeleteConfirm(false)}
-                                className="px-2 py-0.5 text-xs text-gray-300 bg-gray-800 rounded hover:bg-gray-700">No</button>
+                                className="px-2 py-0.5 text-xs text-text-secondary bg-bg-elevated rounded hover:bg-bg-interactive">No</button>
                         </>
                     )}
                     <button onClick={onClose}
-                        className="px-2.5 py-1 text-xs text-gray-300 bg-gray-800 border border-gray-600 rounded hover:bg-gray-700">
+                        className="px-2.5 py-1 text-xs text-text-secondary bg-bg-elevated border border-border-secondary rounded hover:bg-bg-interactive">
                         Cancel
                     </button>
                     <button
@@ -801,7 +801,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
             </div>
 
             {/* Edge legend */}
-            <div className="flex items-center gap-4 px-4 py-1.5 border-t border-gray-800 bg-gray-900 text-[10px] text-gray-500">
+            <div className="flex items-center gap-4 px-4 py-1.5 border-t border-border-primary bg-bg-surface text-[10px] text-text-muted">
                 <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-gray-500 inline-block" /> dependency</span>
                 <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-green-500 inline-block" /> approve</span>
                 <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-red-500 inline-block" /> reject</span>

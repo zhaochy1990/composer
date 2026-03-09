@@ -31,15 +31,15 @@ export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps)
         <Dialog.Root open={open} onOpenChange={(o) => { if (!o) { setName(''); onClose(); } }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6">
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-bg-surface border border-border-primary rounded-xl shadow-2xl p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <Dialog.Title className="text-lg font-bold text-gray-100">
+                        <Dialog.Title className="text-lg font-bold text-text-primary">
                             Register Agent
                         </Dialog.Title>
                         <Dialog.Close asChild>
                             <button
                                 type="button"
-                                className="text-gray-500 hover:text-gray-300 transition-colors p-1 rounded hover:bg-gray-800"
+                                className="text-text-muted hover:text-text-primary transition-colors p-1 rounded hover:bg-bg-elevated"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -48,7 +48,7 @@ export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps)
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label htmlFor="agent-name" className="block text-sm text-gray-400 mb-1">
+                            <label htmlFor="agent-name" className="block text-sm text-text-muted mb-1">
                                 Name
                             </label>
                             <input
@@ -58,13 +58,13 @@ export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps)
                                 onChange={e => setName(e.target.value)}
                                 placeholder="e.g. Agent 1"
                                 required
-                                className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                                className="w-full bg-bg-elevated border border-border-primary rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm text-gray-400 mb-1">Agent Type</label>
-                            <div className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-400">
+                            <label className="block text-sm text-text-muted mb-1">Agent Type</label>
+                            <div className="w-full bg-bg-elevated border border-border-primary rounded-md px-3 py-2 text-sm text-text-muted">
                                 Claude Code
                             </div>
                         </div>
@@ -79,7 +79,7 @@ export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps)
                             <Dialog.Close asChild>
                                 <button
                                     type="button"
-                                    className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-colors"
+                                    className="px-4 py-2 text-sm text-text-muted hover:text-text-primary rounded-md hover:bg-bg-elevated transition-colors"
                                 >
                                     Cancel
                                 </button>

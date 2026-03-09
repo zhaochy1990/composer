@@ -20,7 +20,7 @@ export function ProjectList() {
         <div className="h-full flex">
             <div className="flex-1 overflow-y-auto p-6">
                 <div className="flex items-center justify-between mb-6">
-                    <h1 className="text-xl font-bold text-gray-100">Projects</h1>
+                    <h1 className="text-xl font-bold text-text-primary">Projects</h1>
                     <button
                         onClick={() => setCreateOpen(true)}
                         className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -32,7 +32,7 @@ export function ProjectList() {
 
                 {isLoading && (
                     <div className="flex items-center justify-center h-64">
-                        <p className="text-sm text-gray-500">Loading projects...</p>
+                        <p className="text-sm text-text-muted">Loading projects...</p>
                     </div>
                 )}
 
@@ -44,8 +44,8 @@ export function ProjectList() {
 
                 {!isLoading && !isError && projects && projects.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-64 text-center">
-                        <FolderGit2 className="w-12 h-12 text-gray-700 mb-4" />
-                        <p className="text-sm text-gray-500">
+                        <FolderGit2 className="w-12 h-12 text-text-muted mb-4" />
+                        <p className="text-sm text-text-muted">
                             No projects yet. Create one to organize your repositories.
                         </p>
                     </div>

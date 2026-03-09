@@ -104,10 +104,10 @@ export function TaskBoard() {
     return (
         <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">
                 <div>
-                    <h1 className="text-lg font-semibold text-gray-100">Task Board</h1>
-                    <p className="text-sm text-gray-500">
+                    <h1 className="text-lg font-semibold text-text-primary">Task Board</h1>
+                    <p className="text-sm text-text-muted">
                         {tasks ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''}` : 'Loading...'}
                     </p>
                 </div>
@@ -121,12 +121,12 @@ export function TaskBoard() {
                             onChange={(sel, noProj) => { setProjectFilter(sel); setShowNoProject(noProj); }}
                         />
                     )}
-                    <div className="flex rounded-md border border-gray-700 overflow-hidden">
+                    <div className="flex rounded-md border border-border-primary overflow-hidden">
                         <button
                             type="button"
                             onClick={() => setViewMode('list')}
                             aria-pressed={viewMode === 'list'}
-                            className={`flex items-center px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}
+                            className={`flex items-center px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-bg-interactive text-text-primary' : 'text-text-muted hover:text-text-secondary'}`}
                             title="List view"
                         >
                             <LayoutList className="w-4 h-4" />
@@ -135,7 +135,7 @@ export function TaskBoard() {
                             type="button"
                             onClick={() => setViewMode('kanban')}
                             aria-pressed={viewMode === 'kanban'}
-                            className={`flex items-center px-2.5 py-1.5 transition-colors ${viewMode === 'kanban' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}
+                            className={`flex items-center px-2.5 py-1.5 transition-colors ${viewMode === 'kanban' ? 'bg-bg-interactive text-text-primary' : 'text-text-muted hover:text-text-secondary'}`}
                             title="Kanban view"
                         >
                             <Kanban className="w-4 h-4" />
@@ -144,7 +144,7 @@ export function TaskBoard() {
                     <button
                         type="button"
                         onClick={() => refetch()}
-                        className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700 transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm text-text-muted hover:text-text-primary bg-bg-elevated border border-border-primary rounded-md hover:bg-bg-interactive transition-colors"
                         title="Refresh tasks"
                     >
                         <RefreshCw className="w-3.5 h-3.5" />
@@ -164,7 +164,7 @@ export function TaskBoard() {
             <div className="flex-1 overflow-x-auto overflow-y-hidden">
                 {isLoading && (
                     <div className="flex items-center justify-center h-full">
-                        <p className="text-gray-500 text-sm">Loading tasks...</p>
+                        <p className="text-text-muted text-sm">Loading tasks...</p>
                     </div>
                 )}
 
@@ -172,11 +172,11 @@ export function TaskBoard() {
                     <div className="flex items-center justify-center h-full">
                         <div className="text-center">
                             <p className="text-red-400 text-sm mb-2">Failed to load tasks</p>
-                            <p className="text-gray-500 text-xs mb-3">{(error as Error)?.message}</p>
+                            <p className="text-text-muted text-xs mb-3">{(error as Error)?.message}</p>
                             <button
                                 type="button"
                                 onClick={() => refetch()}
-                                className="px-3 py-1.5 text-sm text-gray-300 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700 transition-colors"
+                                className="px-3 py-1.5 text-sm text-text-secondary bg-bg-elevated border border-border-primary rounded-md hover:bg-bg-interactive transition-colors"
                             >
                                 Retry
                             </button>

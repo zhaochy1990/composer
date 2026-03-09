@@ -80,7 +80,7 @@ export function UserQuestionPanel({ pendingQuestion }: UserQuestionPanelProps) {
                                 {item.header}
                             </span>
                         )}
-                        <span className="text-sm font-medium text-gray-200">{item.question}</span>
+                        <span className="text-sm font-medium text-text-primary">{item.question}</span>
                     </div>
                     <div className="space-y-1.5 pl-1">
                         {item.options.map((opt) => (
@@ -89,7 +89,7 @@ export function UserQuestionPanel({ pendingQuestion }: UserQuestionPanelProps) {
                                 className={`flex items-start gap-2.5 px-3 py-2 rounded-md cursor-pointer border transition-colors ${
                                     answers[item.question] === opt.label
                                         ? 'border-purple-600 bg-purple-900/30'
-                                        : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
+                                        : 'border-border-primary hover:border-border-secondary bg-bg-elevated/50'
                                 }`}
                             >
                                 <input
@@ -101,9 +101,9 @@ export function UserQuestionPanel({ pendingQuestion }: UserQuestionPanelProps) {
                                     className="mt-0.5 accent-purple-500"
                                 />
                                 <div>
-                                    <span className="text-sm text-gray-200">{opt.label}</span>
+                                    <span className="text-sm text-text-primary">{opt.label}</span>
                                     {opt.description && (
-                                        <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
+                                        <p className="text-xs text-text-muted mt-0.5">{opt.description}</p>
                                     )}
                                 </div>
                             </label>
@@ -113,7 +113,7 @@ export function UserQuestionPanel({ pendingQuestion }: UserQuestionPanelProps) {
                             className={`flex items-start gap-2.5 px-3 py-2 rounded-md cursor-pointer border transition-colors ${
                                 answers[item.question] === '__other__'
                                     ? 'border-purple-600 bg-purple-900/30'
-                                    : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
+                                    : 'border-border-primary hover:border-border-secondary bg-bg-elevated/50'
                             }`}
                         >
                             <input
@@ -125,7 +125,7 @@ export function UserQuestionPanel({ pendingQuestion }: UserQuestionPanelProps) {
                                 className="mt-0.5 accent-purple-500"
                             />
                             <div className="flex-1">
-                                <span className="text-sm text-gray-200">Other</span>
+                                <span className="text-sm text-text-primary">Other</span>
                                 {answers[item.question] === '__other__' && (
                                     <input
                                         type="text"
@@ -137,7 +137,7 @@ export function UserQuestionPanel({ pendingQuestion }: UserQuestionPanelProps) {
                                             }))
                                         }
                                         placeholder="Type your answer..."
-                                        className="mt-1.5 w-full bg-gray-800 border border-gray-600 rounded-md px-2 py-1 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                                        className="mt-1.5 w-full bg-bg-elevated border border-border-secondary rounded-md px-2 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                                         autoFocus
                                     />
                                 )}

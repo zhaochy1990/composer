@@ -43,8 +43,8 @@ export function TaskListView({
     return (
         <div className="flex h-full">
             {/* Left panel — task list */}
-            <div className="flex-1 min-w-0 border-r border-gray-800 overflow-y-auto">
-                <div className="border-b border-gray-800">
+            <div className="flex-1 min-w-0 border-r border-border-primary overflow-y-auto">
+                <div className="border-b border-border-primary">
                     {sections.map((section) => (
                         <TaskListSection
                             key={section.status}
@@ -70,8 +70,8 @@ export function TaskListView({
                         inline
                     />
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                        <LayoutList className="w-10 h-10 mb-3 text-gray-600" />
+                    <div className="flex flex-col items-center justify-center h-full text-text-muted">
+                        <LayoutList className="w-10 h-10 mb-3 text-text-muted" />
                         <p className="text-sm">Select a task to view details</p>
                     </div>
                 )}

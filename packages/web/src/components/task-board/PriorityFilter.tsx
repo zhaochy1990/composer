@@ -18,7 +18,7 @@ export function PriorityFilter({ selected, onChange }: PriorityFilterProps) {
 
     return (
         <div className="flex items-center gap-1.5">
-            <span className="text-xs text-gray-500 mr-0.5">Priority:</span>
+            <span className="text-xs text-text-muted mr-0.5">Priority:</span>
             {priorities.map(p => {
                 const config = priorityConfig[p];
                 const active = selected.includes(p);
@@ -30,7 +30,7 @@ export function PriorityFilter({ selected, onChange }: PriorityFilterProps) {
                         className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                             active
                                 ? config.className
-                                : 'bg-transparent text-gray-500 border-gray-700 hover:text-gray-300 hover:border-gray-500'
+                                : 'bg-transparent text-text-muted border-border-primary hover:text-text-secondary hover:border-border-secondary'
                         }`}
                     >
                         {config.label}
@@ -41,7 +41,7 @@ export function PriorityFilter({ selected, onChange }: PriorityFilterProps) {
                 <button
                     type="button"
                     onClick={() => onChange([])}
-                    className="px-1.5 py-0.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    className="px-1.5 py-0.5 text-xs text-text-muted hover:text-text-secondary transition-colors"
                 >
                     Clear
                 </button>

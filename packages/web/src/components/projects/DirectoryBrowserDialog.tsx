@@ -47,15 +47,15 @@ export function DirectoryBrowserDialog({ isOpen, onClose, onSelect, initialPath 
         <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
-                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[560px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6">
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[560px] bg-bg-surface border border-border-primary rounded-xl shadow-2xl p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <Dialog.Title className="text-lg font-semibold text-gray-100">
+                        <Dialog.Title className="text-lg font-semibold text-text-primary">
                             Browse Directory
                         </Dialog.Title>
                         <Dialog.Close asChild>
                             <button
                                 type="button"
-                                className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800"
+                                className="text-text-muted hover:text-text-primary transition-colors p-1 rounded hover:bg-bg-elevated"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -64,9 +64,9 @@ export function DirectoryBrowserDialog({ isOpen, onClose, onSelect, initialPath 
 
                     {/* Current path */}
                     {browseData && (
-                        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-md">
+                        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-bg-elevated border border-border-primary rounded-md">
                             <FolderOpen className="w-4 h-4 text-blue-400 shrink-0" />
-                            <span className="text-sm text-gray-200 font-mono truncate">
+                            <span className="text-sm text-text-primary font-mono truncate">
                                 {browseData.current_path}
                             </span>
                         </div>
@@ -78,7 +78,7 @@ export function DirectoryBrowserDialog({ isOpen, onClose, onSelect, initialPath 
                             type="button"
                             onClick={() => fetchDirectory(browseData.parent!)}
                             disabled={loading}
-                            className="flex items-center gap-2 w-full px-3 py-2 mb-1 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors disabled:opacity-50"
+                            className="flex items-center gap-2 w-full px-3 py-2 mb-1 text-sm text-text-secondary hover:bg-bg-elevated rounded-md transition-colors disabled:opacity-50"
                         >
                             <ArrowUp className="w-4 h-4" />
                             ..
@@ -86,10 +86,10 @@ export function DirectoryBrowserDialog({ isOpen, onClose, onSelect, initialPath 
                     )}
 
                     {/* Directory listing */}
-                    <div className="h-[300px] overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50">
+                    <div className="h-[300px] overflow-y-auto border border-border-primary rounded-md bg-bg-elevated/50">
                         {loading && (
                             <div className="flex items-center justify-center h-full">
-                                <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+                                <Loader2 className="w-5 h-5 text-text-muted animate-spin" />
                             </div>
                         )}
                         {error && (
@@ -99,7 +99,7 @@ export function DirectoryBrowserDialog({ isOpen, onClose, onSelect, initialPath 
                         )}
                         {!loading && !error && browseData && browseData.entries.length === 0 && (
                             <div className="flex items-center justify-center h-full">
-                                <span className="text-sm text-gray-500">No subdirectories</span>
+                                <span className="text-sm text-text-muted">No subdirectories</span>
                             </div>
                         )}
                         {!loading && !error && browseData?.entries.map((entry) => (
@@ -107,7 +107,7 @@ export function DirectoryBrowserDialog({ isOpen, onClose, onSelect, initialPath 
                                 key={entry.path}
                                 type="button"
                                 onClick={() => fetchDirectory(entry.path)}
-                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 transition-colors text-left"
+                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-primary hover:bg-bg-elevated transition-colors text-left"
                             >
                                 <FolderOpen className="w-4 h-4 text-yellow-500 shrink-0" />
                                 <span className="truncate">{entry.name}</span>
@@ -120,7 +120,7 @@ export function DirectoryBrowserDialog({ isOpen, onClose, onSelect, initialPath 
                         <Dialog.Close asChild>
                             <button
                                 type="button"
-                                className="px-4 py-2 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors"
+                                className="px-4 py-2 text-sm text-text-secondary bg-bg-elevated border border-border-secondary rounded-md hover:bg-bg-interactive transition-colors"
                             >
                                 Cancel
                             </button>

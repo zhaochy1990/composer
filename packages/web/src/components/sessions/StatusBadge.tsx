@@ -12,24 +12,24 @@ const statusConfig: Record<
 > = {
     created: {
         label: 'Created',
-        baseClass: 'bg-gray-700 text-gray-300 border-gray-600',
+        baseClass: 'bg-bg-interactive text-text-secondary border-border-secondary',
     },
     running: {
         label: 'Running',
-        baseClass: 'bg-blue-900/70 text-blue-300 border-blue-600',
+        baseClass: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/70 dark:text-blue-300 dark:border-blue-600',
         pulse: true,
     },
     paused: {
         label: 'Paused',
-        baseClass: 'bg-yellow-900/70 text-yellow-300 border-yellow-600',
+        baseClass: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/70 dark:text-yellow-300 dark:border-yellow-600',
     },
     completed: {
         label: 'Completed',
-        baseClass: 'bg-green-900/70 text-green-300 border-green-600',
+        baseClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/70 dark:text-green-300 dark:border-green-600',
     },
     failed: {
         label: 'Failed',
-        baseClass: 'bg-red-900/70 text-red-300 border-red-600',
+        baseClass: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/70 dark:text-red-300 dark:border-red-600',
     },
 };
 

@@ -93,21 +93,21 @@ export function WorkflowReviewSidePanel({ data, pendingQuestion, onClose }: Work
         : reviewMarkdown;
 
     return (
-        <div className="w-[800px] shrink-0 h-full bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden">
+        <div className="w-[800px] shrink-0 h-full bg-bg-surface border-r border-border-primary flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 shrink-0">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-border-primary shrink-0">
                 <div className="flex items-center gap-2">
                     {isPlanQuestion
                         ? <MessageCircle className="w-4 h-4 text-purple-400" />
                         : <FileText className="w-4 h-4 text-blue-400" />
                     }
-                    <h3 className="text-sm font-semibold text-gray-200">{activeGateName}</h3>
+                    <h3 className="text-sm font-semibold text-text-primary">{activeGateName}</h3>
                 </div>
                 <button
                     type="button"
                     onClick={onClose}
                     aria-label="Close review panel"
-                    className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800"
+                    className="text-text-muted hover:text-text-primary transition-colors p-1 rounded hover:bg-bg-elevated"
                 >
                     <X className="w-4 h-4" />
                 </button>
@@ -122,7 +122,7 @@ export function WorkflowReviewSidePanel({ data, pendingQuestion, onClose }: Work
                         </div>
                     </div>
                 ) : (
-                    <p className="text-sm text-gray-500 text-center py-8">No content to review</p>
+                    <p className="text-sm text-text-muted text-center py-8">No content to review</p>
                 )}
             </div>
 
@@ -139,13 +139,13 @@ export function WorkflowReviewSidePanel({ data, pendingQuestion, onClose }: Work
                 const stepComments = comments[gateOutput.step_id] ?? '';
 
                 return (
-                    <div key={gateOutput.id} className="shrink-0 border-t border-gray-800 px-6 py-4 space-y-3">
+                    <div key={gateOutput.id} className="shrink-0 border-t border-border-primary px-6 py-4 space-y-3">
                         <textarea
                             value={stepComments}
                             onChange={(e) => setComments(prev => ({ ...prev, [gateOutput.step_id]: e.target.value }))}
                             placeholder="Optional comments or feedback..."
                             rows={3}
-                            className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 resize-none"
+                            className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 resize-none"
                         />
 
                         <div className="flex items-center gap-3">
@@ -170,7 +170,7 @@ export function WorkflowReviewSidePanel({ data, pendingQuestion, onClose }: Work
                                 </button>
                             )}
                             {gateDef?.on_reject && !stepComments.trim() && (
-                                <span className="text-xs text-gray-500">Add comments to reject</span>
+                                <span className="text-xs text-text-muted">Add comments to reject</span>
                             )}
                         </div>
                     </div>

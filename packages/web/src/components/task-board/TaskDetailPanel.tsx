@@ -194,12 +194,12 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const panelContent = (
         <>
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-border-primary">
                 <div className="flex items-center gap-3">
                     {task.simple_id && (
-                        <span className="font-mono text-sm text-gray-400 bg-gray-800 px-2 py-0.5 rounded">{task.simple_id}</span>
+                        <span className="font-mono text-sm text-text-muted bg-bg-elevated px-2 py-0.5 rounded">{task.simple_id}</span>
                     )}
-                    <h2 className="text-lg font-semibold text-gray-100">{task.title}</h2>
+                    <h2 className="text-lg font-semibold text-text-primary">{task.title}</h2>
                 </div>
                 <div className="flex items-center gap-2">
                     {(task.status === 'in_progress' || task.status === 'waiting') && (
@@ -224,7 +224,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                         <button
                             type="button"
                             onClick={onClose}
-                            className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800"
+                            className="text-text-muted hover:text-text-secondary transition-colors p-1 rounded hover:bg-bg-elevated"
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -234,7 +234,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
 
             {/* PR Links */}
             {task.pr_urls.length > 0 && (
-                <div className="px-6 py-2 border-b border-gray-800 shrink-0 flex items-center gap-2 flex-wrap">
+                <div className="px-6 py-2 border-b border-border-primary shrink-0 flex items-center gap-2 flex-wrap">
                     <GitPullRequest className="w-3.5 h-3.5 text-green-400 shrink-0" />
                     {task.pr_urls.map((url) => (
                         <a
@@ -253,10 +253,10 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
 
             {/* Related Tasks */}
             {task.related_task_ids.length > 0 && (
-                <div className="px-6 py-2 border-b border-gray-800 shrink-0">
+                <div className="px-6 py-2 border-b border-border-primary shrink-0">
                     <div className="flex items-center gap-1.5 mb-1.5">
                         <Link2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Related Tasks</h3>
+                        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Related Tasks</h3>
                     </div>
                     <div className="flex flex-col gap-0.5">
                         {task.related_task_ids.map(linkedId => {
@@ -264,10 +264,10 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                             return (
                                 <div
                                     key={linkedId}
-                                    className="flex items-center gap-2 px-2 py-1 text-sm text-gray-300 rounded-md text-left"
+                                    className="flex items-center gap-2 px-2 py-1 text-sm text-text-secondary rounded-md text-left"
                                 >
                                     {linkedTask?.simple_id && (
-                                        <span className="font-mono text-xs text-gray-500">{linkedTask.simple_id}</span>
+                                        <span className="font-mono text-xs text-text-muted">{linkedTask.simple_id}</span>
                                     )}
                                     <span className="truncate">{linkedTask?.title ?? shortId(linkedId)}</span>
                                 </div>
@@ -279,17 +279,17 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
 
             {/* Workflow Progress */}
             {workflowRun && workflow && (
-                <div className="px-6 py-3 border-b border-gray-800 shrink-0">
+                <div className="px-6 py-3 border-b border-border-primary shrink-0">
                     <WorkflowProgress workflowRun={workflowRun} workflow={workflow} onReviewData={setReviewPanelData} onInteractiveSession={handleInteractiveSession} />
                 </div>
             )}
 
             {/* Collapsible Task Edit Form */}
-            <div className="border-b border-gray-800 shrink-0">
+            <div className="border-b border-border-primary shrink-0">
                 <button
                     type="button"
                     onClick={() => setFormCollapsed(!formCollapsed)}
-                    className="flex items-center gap-2 w-full px-6 py-2.5 text-left text-sm font-semibold text-gray-400 uppercase tracking-wider hover:bg-gray-800/50 transition-colors"
+                    className="flex items-center gap-2 w-full px-6 py-2.5 text-left text-sm font-semibold text-text-muted uppercase tracking-wider hover:bg-bg-elevated transition-colors"
                 >
                     {formCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     Task Details
@@ -298,7 +298,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                     <form onSubmit={handleSubmit} className="px-6 pb-4">
                         <div className="space-y-3">
                             <div>
-                                <label htmlFor="edit-title" className="block text-sm font-medium text-gray-300 mb-1">
+                                <label htmlFor="edit-title" className="block text-sm font-medium text-text-secondary mb-1">
                                     Title <span className="text-red-400">*</span>
                                 </label>
                                 <input
@@ -308,12 +308,12 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                     onChange={e => setTitle(e.target.value)}
                                     placeholder="Task title"
                                     required
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 />
                             </div>
 
                             <div>
-                                <label htmlFor="edit-description" className="block text-sm font-medium text-gray-300 mb-1">
+                                <label htmlFor="edit-description" className="block text-sm font-medium text-text-secondary mb-1">
                                     Description
                                 </label>
                                 <textarea
@@ -322,20 +322,20 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                     onChange={e => setDescription(e.target.value)}
                                     placeholder="Optional description"
                                     rows={6}
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
+                                    className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
                                 />
                             </div>
 
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
-                                    <label htmlFor="edit-priority" className="block text-sm font-medium text-gray-300 mb-1">
+                                    <label htmlFor="edit-priority" className="block text-sm font-medium text-text-secondary mb-1">
                                         Priority
                                     </label>
                                     <select
                                         id="edit-priority"
                                         value={priority}
                                         onChange={e => setPriority(Number(e.target.value))}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                        className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     >
                                         <option value={0}>None</option>
                                         <option value={1}>Low</option>
@@ -345,14 +345,14 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                 </div>
 
                                 <div>
-                                    <label htmlFor="edit-agent" className="block text-sm font-medium text-gray-300 mb-1">
+                                    <label htmlFor="edit-agent" className="block text-sm font-medium text-text-secondary mb-1">
                                         Agent
                                     </label>
                                     <select
                                         id="edit-agent"
                                         value={assignedAgentId}
                                         onChange={e => setAssignedAgentId(e.target.value)}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                        className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     >
                                         <option value="">None</option>
                                         {agents?.map(agent => (
@@ -362,14 +362,14 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                 </div>
 
                                 <div>
-                                    <label htmlFor="edit-project" className="block text-sm font-medium text-gray-300 mb-1">
+                                    <label htmlFor="edit-project" className="block text-sm font-medium text-text-secondary mb-1">
                                         Project
                                     </label>
                                     <select
                                         id="edit-project"
                                         value={projectId}
                                         onChange={e => setProjectId(e.target.value)}
-                                        className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                        className="w-full bg-bg-elevated border border-border-secondary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     >
                                         <option value="">None</option>
                                         {projects?.map(p => (
@@ -404,17 +404,17 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                             <button
                                                 type="button"
                                                 onClick={() => setShowDeleteConfirm(false)}
-                                                className="px-3 py-1 text-sm text-gray-300 bg-gray-800 rounded-md hover:bg-gray-700 transition-colors"
+                                                className="px-3 py-1 text-sm text-text-secondary bg-bg-elevated rounded-md hover:bg-bg-interactive transition-colors"
                                             >
                                                 No
                                             </button>
                                         </div>
                                     )}
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-xs text-text-muted">
                                         Created {new Date(task.created_at).toLocaleString()}
                                     </span>
                                     {task.status === 'done' && task.completed_at && (
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-text-muted">
                                             Completed {new Date(task.completed_at).toLocaleString()}
                                         </span>
                                     )}
@@ -425,7 +425,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                         <button
                                             type="button"
                                             onClick={onClose}
-                                            className="px-3 py-1.5 text-sm text-gray-300 bg-gray-800 border border-gray-600 rounded-md hover:bg-gray-700 transition-colors"
+                                            className="px-3 py-1.5 text-sm text-text-secondary bg-bg-elevated border border-border-secondary rounded-md hover:bg-bg-interactive transition-colors"
                                         >
                                             Cancel
                                         </button>
@@ -445,9 +445,9 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
             </div>
 
             {/* Sessions list (compact) */}
-            <div className="px-6 py-2.5 border-b border-gray-800 shrink-0">
+            <div className="px-6 py-2.5 border-b border-border-primary shrink-0">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sessions</h3>
+                    <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Sessions</h3>
                     {task.status === 'backlog' && (() => {
                         const missingAgent = !task.assigned_agent_id;
                         const missingProject = !task.project_id;
@@ -465,7 +465,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                         <select
                                             value={selectedWorkflowId}
                                             onChange={(e) => setSelectedWorkflowId(e.target.value)}
-                                            className="bg-gray-800 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-purple-500"
+                                            className="bg-bg-elevated border border-border-secondary rounded-md px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-purple-500"
                                         >
                                             <option value="">No workflow</option>
                                             {allWorkflows.map(wf => (
@@ -517,7 +517,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                 </div>
 
                 {sortedSessions.length === 0 ? (
-                    <p className="text-sm text-gray-500 py-2 text-center">
+                    <p className="text-sm text-text-muted py-2 text-center">
                         No sessions yet{task.status === 'backlog' ? ' — click Start to begin' : ''}
                     </p>
                 ) : (
@@ -532,17 +532,17 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                 }}
                                 className={`flex items-center gap-3 px-3 py-1.5 rounded-md text-sm text-left transition-colors ${
                                     selectedSessionId === session.id
-                                        ? 'bg-gray-700 text-gray-100'
-                                        : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                                        ? 'bg-bg-interactive text-text-primary'
+                                        : 'text-text-muted hover:bg-bg-elevated hover:text-text-secondary'
                                 }`}
                             >
                                 <span className={`text-xs truncate max-w-[160px] ${session.name ? 'font-medium' : 'font-mono'}`}>{session.name ?? shortId(session.id)}</span>
                                 <StatusBadge status={session.status} />
                                 <span className="truncate">{agentNameMap[session.agent_id] ?? shortId(session.agent_id)}</span>
-                                <span className="ml-auto text-xs text-gray-500">
+                                <span className="ml-auto text-xs text-text-muted">
                                     {formatDuration(session.started_at, session.completed_at)}
                                 </span>
-                                <span className="text-xs text-gray-600">{formatTime(session.created_at)}</span>
+                                <span className="text-xs text-text-muted">{formatTime(session.created_at)}</span>
                             </button>
                         ))}
                     </div>
@@ -552,13 +552,13 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
             {/* Session Output — takes all remaining space */}
             {selectedSessionId && selectedSessionLoading && (
                 <div className="flex-1 flex items-center justify-center">
-                    <p className="text-sm text-gray-500">Loading session...</p>
+                    <p className="text-sm text-text-muted">Loading session...</p>
                 </div>
             )}
             {selectedSessionId && selectedSession && (
                 <div className="flex-1 flex flex-col min-h-0">
                     {/* Session action bar + metadata */}
-                    <div className="px-6 py-2 flex items-center gap-3 border-b border-gray-800 shrink-0">
+                    <div className="px-6 py-2 flex items-center gap-3 border-b border-border-primary shrink-0">
                         {isRunning && (
                             <button
                                 type="button"
@@ -609,7 +609,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                             </button>
                         )}
                         {selectedSession.prompt && (
-                            <span className="text-xs text-gray-500 truncate max-w-md" title={selectedSession.prompt}>
+                            <span className="text-xs text-text-muted truncate max-w-md" title={selectedSession.prompt}>
                                 Prompt: {selectedSession.prompt}
                             </span>
                         )}
@@ -629,7 +629,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                     {isRunning && (() => {
                         const isInteractive = interactiveSessionId === selectedSession.id;
                         return (
-                            <div className={`px-6 py-3 border-t shrink-0 ${isInteractive ? 'border-purple-700 bg-purple-900/10' : 'border-gray-800'}`}>
+                            <div className={`px-6 py-3 border-t shrink-0 ${isInteractive ? 'border-purple-700 bg-purple-900/10' : 'border-border-primary'}`}>
                                 {isInteractive && (
                                     <p className="text-xs text-purple-400 mb-2">
                                         The agent may ask you questions. Type your answer below.
@@ -652,10 +652,10 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                         value={messageInput}
                                         onChange={(e) => setMessageInput(e.target.value)}
                                         placeholder={isInteractive ? "Answer the agent's question..." : "Send a message to the session..."}
-                                        className={`flex-1 bg-gray-800 border rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 ${
+                                        className={`flex-1 bg-bg-elevated border rounded-md px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 ${
                                             isInteractive
                                                 ? 'border-purple-600 focus:border-purple-500 focus:ring-purple-500'
-                                                : 'border-gray-600 focus:border-green-500 focus:ring-green-500'
+                                                : 'border-border-secondary focus:border-green-500 focus:ring-green-500'
                                         }`}
                                     />
                                     <button
@@ -674,7 +674,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
             )}
             {!selectedSessionId && sortedSessions.length > 0 && (
                 <div className="flex-1 flex items-center justify-center">
-                    <p className="text-sm text-gray-500">Select a session above to view its output</p>
+                    <p className="text-sm text-text-muted">Select a session above to view its output</p>
                 </div>
             )}
         </>
@@ -690,7 +690,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                         onClose={() => setReviewPanelData(null)}
                     />
                 )}
-                <div className="flex-1 flex flex-col min-w-0 bg-gray-900 overflow-hidden">
+                <div className="flex-1 flex flex-col min-w-0 bg-bg-surface overflow-hidden">
                     {panelContent}
                 </div>
             </div>
@@ -714,7 +714,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                         onClose={() => setReviewPanelData(null)}
                     />
                 )}
-                <div className="w-[900px] max-w-full bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
+                <div className="w-[900px] max-w-full bg-bg-surface border-l border-border-primary shadow-2xl flex flex-col overflow-hidden">
                     {panelContent}
                 </div>
             </div>

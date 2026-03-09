@@ -14,12 +14,12 @@ export function WorkflowList() {
     return (
         <div className="h-full flex">
             {/* Left sidebar — compact workflow list */}
-            <div className="w-[280px] shrink-0 border-r border-gray-800 flex flex-col bg-gray-900">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                    <h1 className="text-sm font-semibold text-gray-100">Workflows</h1>
+            <div className="w-[280px] shrink-0 border-r border-border-primary flex flex-col bg-bg-surface">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+                    <h1 className="text-sm font-semibold text-text-primary">Workflows</h1>
                     <button
                         onClick={() => setCreateOpen(true)}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded"
+                        className="p-1.5 text-text-muted hover:text-white hover:bg-bg-elevated rounded"
                         title="New Workflow"
                     >
                         <Plus className="w-4 h-4" />
@@ -28,7 +28,7 @@ export function WorkflowList() {
 
                 <div className="flex-1 overflow-y-auto">
                     {isLoading && (
-                        <p className="text-xs text-gray-500 p-4 text-center">Loading...</p>
+                        <p className="text-xs text-text-muted p-4 text-center">Loading...</p>
                     )}
 
                     {isError && (
@@ -37,8 +37,8 @@ export function WorkflowList() {
 
                     {!isLoading && !isError && workflows && workflows.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-                            <WorkflowIcon className="w-8 h-8 text-gray-700 mb-3" />
-                            <p className="text-xs text-gray-500">
+                            <WorkflowIcon className="w-8 h-8 text-text-muted mb-3" />
+                            <p className="text-xs text-text-muted">
                                 No workflows yet.
                             </p>
                         </div>
@@ -68,8 +68,8 @@ export function WorkflowList() {
                         onClose={() => setSelectedWorkflow(null)}
                     />
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                        <WorkflowIcon className="w-10 h-10 mb-3 text-gray-600" />
+                    <div className="flex flex-col items-center justify-center h-full text-text-muted">
+                        <WorkflowIcon className="w-10 h-10 mb-3 text-text-muted" />
                         <p className="text-sm">Select a workflow to edit</p>
                     </div>
                 )}

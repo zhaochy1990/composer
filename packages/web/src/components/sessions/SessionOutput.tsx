@@ -136,15 +136,15 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
     return (
         <div
             ref={scrollRef}
-            className="h-full overflow-y-auto bg-gray-950 rounded-lg p-4 font-mono text-sm border border-gray-800"
+            className="h-full overflow-y-auto bg-bg-app rounded-lg p-4 font-mono text-sm border border-border-primary"
         >
             {hasNextPage && (
-                <div className="text-center text-gray-500 text-xs py-2">
+                <div className="text-center text-text-muted text-xs py-2">
                     Loading older messages...
                 </div>
             )}
             {parsedEntries.length === 0 && !hasNextPage && (
-                <p className="text-gray-600 italic">
+                <p className="text-text-muted italic">
                     Waiting for output...
                 </p>
             )}
@@ -173,7 +173,7 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
                             line.log_type === 'user_input' && 'text-green-400',
                             !['stderr', 'control', 'status', 'user_input'].includes(
                                 line.log_type,
-                            ) && 'text-gray-300',
+                            ) && 'text-text-secondary',
                         )}
                     >
                         {line.log_type === 'user_input' && <span className="text-green-600 mr-1">&gt;</span>}

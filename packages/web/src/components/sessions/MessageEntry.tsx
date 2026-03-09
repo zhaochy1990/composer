@@ -23,7 +23,7 @@ export function MessageEntry({ message }: MessageEntryProps) {
     switch (message.kind) {
         case 'assistant_text':
             return (
-                <div className="py-1 text-gray-200 leading-relaxed">
+                <div className="py-1 text-text-primary leading-relaxed">
                     <MarkdownContent content={message.text} />
                 </div>
             );
@@ -37,7 +37,7 @@ export function MessageEntry({ message }: MessageEntryProps) {
         case 'tool_result':
             return (
                 <div className={`py-0.5 pl-4 border-l-2 text-xs whitespace-pre-wrap break-all ${
-                    message.isError ? 'border-red-700 text-red-400' : 'border-gray-700 text-gray-400'
+                    message.isError ? 'border-red-700 text-red-400' : 'border-border-primary text-text-muted'
                 }`}>
                     {message.content.slice(0, 2000)}
                     {message.content.length > 2000 && '... (truncated)'}
@@ -70,7 +70,7 @@ export function MessageEntry({ message }: MessageEntryProps) {
 
         case 'raw':
             return (
-                <div className="py-0.5 text-gray-400 whitespace-pre-wrap break-all text-xs">
+                <div className="py-0.5 text-text-muted whitespace-pre-wrap break-all text-xs">
                     {message.text}
                 </div>
             );
@@ -124,10 +124,10 @@ function ToolUseBlock({ tool, summary, input }: { tool: string; summary: string;
             {expanded && (
                 <div className="pl-6 pt-1">
                     {tool === 'Bash' && typeof input.command === 'string' ? (
-                        <pre className="text-xs text-gray-300 bg-gray-900 rounded px-2 py-1 overflow-x-auto">{input.command}</pre>
+                        <pre className="text-xs text-text-secondary bg-bg-surface rounded px-2 py-1 overflow-x-auto">{input.command}</pre>
                     ) : tool === 'Edit' && typeof input.file_path === 'string' ? (
                         <div className="text-xs space-y-1">
-                            <div className="text-gray-400">{input.file_path as string}</div>
+                            <div className="text-text-muted">{input.file_path as string}</div>
                             {typeof input.old_string === 'string' && (
                                 <pre className="text-red-400/70 bg-red-950/30 rounded px-2 py-1 overflow-x-auto">- {(input.old_string as string).slice(0, 500)}</pre>
                             )}
@@ -136,7 +136,7 @@ function ToolUseBlock({ tool, summary, input }: { tool: string; summary: string;
                             )}
                         </div>
                     ) : (
-                        <pre className="text-xs text-gray-400 bg-gray-900 rounded px-2 py-1 overflow-x-auto max-h-40 overflow-y-auto">
+                        <pre className="text-xs text-text-muted bg-bg-surface rounded px-2 py-1 overflow-x-auto max-h-40 overflow-y-auto">
                             {JSON.stringify(input, null, 2)}
                         </pre>
                     )}
