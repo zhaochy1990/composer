@@ -6,7 +6,7 @@ use command_group::{AsyncCommandGroup, AsyncGroupChild};
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::process::Command;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -44,19 +44,34 @@ pub struct AgentProcess {
     pub plan_file_path: Arc<std::sync::Mutex<Option<String>>>,
 }
 
+/// Sends events to both the broadcast channel (WebSocket fan-out) and the
+/// mpsc persist channel (DB persistence + workflow advancement).
+#[derive(Clone)]
+struct DualSender {
+    broadcast: broadcast::Sender<WsEvent>,
+    persist: mpsc::UnboundedSender<WsEvent>,
+}
+
+impl DualSender {
+    fn send(&self, event: WsEvent) {
+        let _ = self.broadcast.send(event.clone());
+        let _ = self.persist.send(event);
+    }
+}
+
 pub struct AgentProcessManager {
     processes: Arc<DashMap<Uuid, AgentProcess>>,
-    event_tx: broadcast::Sender<WsEvent>,
+    event_tx: DualSender,
     /// Per-session message queue: if a user sends input while Claude is mid-turn,
     /// the message is queued here and sent when the process is ready.
     pending_messages: Arc<DashMap<Uuid, String>>,
 }
 
 impl AgentProcessManager {
-    pub fn new(event_tx: broadcast::Sender<WsEvent>) -> Self {
+    pub fn new(event_tx: broadcast::Sender<WsEvent>, persist_tx: mpsc::UnboundedSender<WsEvent>) -> Self {
         Self {
             processes: Arc::new(DashMap::new()),
-            event_tx,
+            event_tx: DualSender { broadcast: event_tx, persist: persist_tx },
             pending_messages: Arc::new(DashMap::new()),
         }
     }

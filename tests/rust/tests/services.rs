@@ -79,7 +79,7 @@ mod task_service_tests {
         let (event_bus, persist_rx) = EventBus::new();
         let rx = event_bus.subscribe();
         let db = Arc::new(db);
-        let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let process_manager = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
         let session_service = SessionService::new(db.clone(), event_bus.clone(), process_manager, persist_rx);
         let svc = TaskService::new(db, event_bus, session_service);
         (svc, rx)
@@ -246,7 +246,7 @@ mod agent_service_tests {
         db.run_migrations().await.unwrap();
         let (event_bus, _persist_rx) = EventBus::new();
         let rx = event_bus.subscribe();
-        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
         let svc = AgentService::new(Arc::new(db), event_bus, pm);
         (svc, rx)
     }
@@ -310,7 +310,7 @@ mod session_service_tests {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         db.run_migrations().await.unwrap();
         let (event_bus, persist_rx) = EventBus::new();
-        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
         SessionService::new(Arc::new(db), event_bus, pm, persist_rx)
     }
 
@@ -320,7 +320,7 @@ mod session_service_tests {
         db.run_migrations().await.unwrap();
         let db = Arc::new(db);
         let (event_bus, persist_rx) = EventBus::new();
-        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
         let svc = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
         (svc, db, event_bus)
     }
@@ -631,7 +631,7 @@ mod workflow_tests {
         db.run_migrations().await.unwrap();
         let db = Arc::new(db);
         let (event_bus, persist_rx) = EventBus::new();
-        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
         let session_service = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
         let engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service);
         (engine, db, event_bus)
@@ -899,7 +899,7 @@ mod workflow_tests {
         task::update_status(&db.pool, &task_id, &TaskStatus::InProgress).await.unwrap();
 
         // Create the WorkflowEngine — triggers startup recovery
-        let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+        let pm = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
         let session_service = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
         let _engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service);
 

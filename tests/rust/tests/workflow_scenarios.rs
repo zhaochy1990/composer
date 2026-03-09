@@ -43,7 +43,7 @@ async fn setup() -> TestHarness {
     let db = Arc::new(db);
     let (event_bus, persist_rx) = EventBus::new();
     let rx = event_bus.subscribe();
-    let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+    let pm = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
     let session_service = SessionService::new(db.clone(), event_bus.clone(), pm, persist_rx);
     let engine = WorkflowEngine::new(db.clone(), event_bus.clone(), session_service.clone());
     session_service.set_workflow_engine(engine.clone());
@@ -505,7 +505,7 @@ async fn scenario_plan_rejection_loops_back() {
 async fn scenario_exit_on_result_completes_session() {
     let (event_bus, _persist_rx) = EventBus::new();
     let mut rx = event_bus.subscribe();
-    let pm = Arc::new(AgentProcessManager::new(event_bus.sender()));
+    let pm = Arc::new(AgentProcessManager::new(event_bus.sender(), event_bus.persist_sender()));
 
     let session_id = uuid::Uuid::new_v4();
     let agent_id = uuid::Uuid::new_v4();

@@ -26,4 +26,8 @@ impl EventBus {
     pub fn sender(&self) -> broadcast::Sender<WsEvent> {
         self.tx.clone()
     }
+
+    pub fn persist_sender(&self) -> mpsc::UnboundedSender<WsEvent> {
+        self.persist_tx.clone()
+    }
 }

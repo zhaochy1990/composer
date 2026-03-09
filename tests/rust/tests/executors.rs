@@ -219,7 +219,8 @@ fn sdk_control_response_error_serialization() {
 
 fn make_manager() -> AgentProcessManager {
     let (tx, _) = broadcast::channel(16);
-    AgentProcessManager::new(tx)
+    let (persist_tx, _persist_rx) = tokio::sync::mpsc::unbounded_channel();
+    AgentProcessManager::new(tx, persist_tx)
 }
 
 #[test]
@@ -314,7 +315,8 @@ async fn collect_events_until(
 #[ignore] // Requires real Claude Code + API key
 async fn e2e_spawn_send_message_and_receive_output() {
     let (tx, mut rx) = broadcast::channel(1024);
-    let mgr = AgentProcessManager::new(tx);
+    let (persist_tx, _persist_rx) = tokio::sync::mpsc::unbounded_channel();
+    let mgr = AgentProcessManager::new(tx, persist_tx);
     let session_id = Uuid::new_v4();
 
     // Spawn Claude Code against the test repo
@@ -378,7 +380,8 @@ async fn e2e_spawn_send_message_and_receive_output() {
 #[ignore] // Requires real Claude Code + API key
 async fn e2e_multi_turn_send_follow_up_message() {
     let (tx, mut rx) = broadcast::channel(1024);
-    let mgr = AgentProcessManager::new(tx);
+    let (persist_tx, _persist_rx) = tokio::sync::mpsc::unbounded_channel();
+    let mgr = AgentProcessManager::new(tx, persist_tx);
     let session_id = Uuid::new_v4();
 
     // Spawn with initial prompt
