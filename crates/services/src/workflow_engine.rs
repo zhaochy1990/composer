@@ -1276,7 +1276,7 @@ impl WorkflowEngine {
                     task_id: task.id,
                     prompt,
                     repo_path,
-                    name: Some(format!("Workflow: {}", step_def.name)),
+                    name: Some("main".to_string()),
                     auto_approve: Some(task.auto_approve),
                     exit_on_result,
                 })
@@ -1307,7 +1307,7 @@ impl WorkflowEngine {
                             task_id: task.id,
                             prompt,
                             repo_path,
-                            name: Some(format!("Workflow: {}", step_def.name)),
+                            name: Some("main".to_string()),
                             auto_approve: Some(task.auto_approve),
                             exit_on_result,
                         })
