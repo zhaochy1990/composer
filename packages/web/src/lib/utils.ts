@@ -48,3 +48,12 @@ export function formatTime(isoString?: string): string {
 export function shortId(id: string): string {
     return id.slice(0, 8);
 }
+
+/**
+ * Extract a PR number from a URL (GitHub, Azure DevOps, GitLab).
+ * Returns e.g. "#13" or falls back to "PR" if no number found.
+ */
+export function extractPrId(url: string): string {
+    const match = url.match(/\/(?:pull|pullrequest|merge_requests)\/(\d+)/);
+    return match ? `#${match[1]}` : 'PR';
+}

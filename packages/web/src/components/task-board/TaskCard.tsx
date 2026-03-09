@@ -1,6 +1,6 @@
 import { GripVertical, GitPullRequest, Link2 } from 'lucide-react';
 import type { Task } from '@/types/generated';
-import { shortId, formatTime } from '@/lib/utils';
+import { shortId, formatTime, extractPrId } from '@/lib/utils';
 import { priorityConfig } from './priority-config';
 
 interface TaskCardProps {
@@ -51,12 +51,19 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCa
                                 {projectNameMap?.[task.project_id] ?? shortId(task.project_id)}
                             </span>
                         )}
-                        {task.pr_urls.length > 0 && (
-                            <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700">
+                        {task.pr_urls.map((url) => (
+                            <a
+                                key={url}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700 hover:bg-green-900/70 transition-colors"
+                            >
                                 <GitPullRequest className="w-3 h-3" />
-                                {task.pr_urls.length === 1 ? 'PR' : `${task.pr_urls.length} PRs`}
-                            </span>
-                        )}
+                                {extractPrId(url)}
+                            </a>
+                        ))}
                         {task.related_task_ids.length > 0 && (
                             <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300 border border-blue-700">
                                 <Link2 className="w-3 h-3" />
