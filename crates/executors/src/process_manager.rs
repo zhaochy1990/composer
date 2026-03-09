@@ -42,6 +42,10 @@ pub struct AgentProcess {
     pub last_message_id: Arc<std::sync::Mutex<Option<String>>>,
     /// Path to the plan file written during plan mode (`.claude/plans/*.md`).
     pub plan_file_path: Arc<std::sync::Mutex<Option<String>>>,
+    /// Content of the plan file, captured from the Write tool_use input.
+    pub plan_content: Arc<std::sync::Mutex<Option<String>>>,
+    /// Working directory of the session (for globbing plan files).
+    pub working_dir: String,
 }
 
 /// Sends events to both the broadcast channel (WebSocket fan-out) and the
@@ -157,6 +161,8 @@ impl AgentProcessManager {
             Arc::new(std::sync::Mutex::new(None));
         let plan_file_path: Arc<std::sync::Mutex<Option<String>>> =
             Arc::new(std::sync::Mutex::new(None));
+        let plan_content: Arc<std::sync::Mutex<Option<String>>> =
+            Arc::new(std::sync::Mutex::new(None));
 
         let cancel_token = CancellationToken::new();
         let cancel_clone = cancel_token.clone();
@@ -181,6 +187,7 @@ impl AgentProcessManager {
         let last_result_capture = last_result.clone();
         let last_msg_id_capture = last_message_id.clone();
         let plan_file_capture = plan_file_path.clone();
+        let plan_content_capture = plan_content.clone();
         let exit_on_result = opts.exit_on_result;
         let result_received = Arc::new(tokio::sync::Notify::new());
         let result_received_signal = result_received.clone();
@@ -216,7 +223,7 @@ impl AgentProcessManager {
                         content: raw_line.to_string(),
                     });
 
-                    // Detect AskUserQuestion control requests
+                    // Detect tool control requests (CanUseTool)
                     if let CliMessage::ControlRequest {
                         ref request_id,
                         ref request,
@@ -228,12 +235,81 @@ impl AgentProcessManager {
                             ..
                         } = request
                         {
+                            tracing::debug!(
+                                "Session {} CanUseTool: {}",
+                                session_id,
+                                tool_name
+                            );
+
                             if tool_name == "AskUserQuestion" {
                                 let _ = event_tx.send(WsEvent::UserQuestionRequested {
                                     session_id,
                                     request_id: request_id.clone(),
                                     questions: input.clone(),
                                     plan_content: None, // populated by session service
+                                });
+                            }
+
+                            // Track Write to .claude/plans/*.md via CanUseTool path
+                            if tool_name == "Write" {
+                                if let Some(file_path) =
+                                    input.get("file_path").and_then(|p| p.as_str())
+                                {
+                                    if file_path.contains(".claude/plans/")
+                                        && file_path.ends_with(".md")
+                                    {
+                                        tracing::info!(
+                                            "Session {} CanUseTool Write plan file: {}",
+                                            session_id,
+                                            file_path
+                                        );
+                                        *plan_file_capture.lock().unwrap() =
+                                            Some(file_path.to_string());
+                                        if let Some(content) =
+                                            input.get("content").and_then(|c| c.as_str())
+                                        {
+                                            tracing::info!(
+                                                "Session {} captured plan content from CanUseTool ({} bytes)",
+                                                session_id,
+                                                content.len()
+                                            );
+                                            *plan_content_capture.lock().unwrap() =
+                                                Some(content.to_string());
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Detect ExitPlanMode via CanUseTool path
+                            if tool_name == "ExitPlanMode" {
+                                tracing::info!(
+                                    "Session {} ExitPlanMode via CanUseTool. input keys: {:?}",
+                                    session_id,
+                                    input.as_object().map(|o| o.keys().collect::<Vec<_>>())
+                                );
+                                // ExitPlanMode input contains plan under "plan" key
+                                let plan_from_input = input
+                                    .get("plan")
+                                    .or_else(|| input.get("plan_content"))
+                                    .and_then(|c| c.as_str())
+                                    .map(|s| s.to_string());
+                                let plan = plan_from_input
+                                    .or_else(|| plan_content_capture.lock().unwrap().clone())
+                                    .or_else(|| {
+                                        plan_file_capture
+                                            .lock()
+                                            .unwrap()
+                                            .as_ref()
+                                            .and_then(|path| std::fs::read_to_string(path).ok())
+                                    });
+                                tracing::info!(
+                                    "Session {} ExitPlanMode (CanUseTool) plan len: {}",
+                                    session_id,
+                                    plan.as_ref().map(|c| c.len()).unwrap_or(0)
+                                );
+                                let _ = event_tx.send(WsEvent::PlanCompleted {
+                                    session_id,
+                                    plan_content: plan,
                                 });
                             }
                         }
@@ -245,37 +321,102 @@ impl AgentProcessManager {
                         if let Some(content) = a.message.get("content") {
                             if let Some(blocks) = content.as_array() {
                                 for block in blocks {
-                                    if block.get("type").and_then(|t| t.as_str())
-                                        == Some("tool_use")
-                                    {
+                                    let block_type = block.get("type").and_then(|t| t.as_str());
+                                    if block_type == Some("tool_use") {
                                         let tool_name = block.get("name").and_then(|n| n.as_str());
+                                        tracing::debug!(
+                                            "Session {} assistant tool_use: {:?}",
+                                            session_id,
+                                            tool_name
+                                        );
 
-                                        // Track Write to .claude/plans/*.md for plan file path
+                                        // Track Write to .claude/plans/*.md — capture both the
+                                        // file path and the content from the tool_use input so
+                                        // we have the plan text before the tool actually executes.
                                         if tool_name == Some("Write") {
                                             if let Some(input) = block.get("input") {
-                                                if let Some(file_path) =
-                                                    input.get("file_path").and_then(|p| p.as_str())
+                                                let file_path_val = input.get("file_path").and_then(|p| p.as_str());
+                                                tracing::info!(
+                                                    "Session {} Write tool_use: file_path={:?}, input_keys={:?}",
+                                                    session_id,
+                                                    file_path_val,
+                                                    input.as_object().map(|o| o.keys().collect::<Vec<_>>())
+                                                );
+                                                if let Some(file_path) = file_path_val
                                                 {
-                                                    if file_path.contains(".claude/plans/")
+                                                    if (file_path.contains(".claude/plans/")
+                                                            || file_path.contains(".claude\\plans\\"))
                                                         && file_path.ends_with(".md")
                                                     {
+                                                        tracing::info!(
+                                                            "Session {} captured plan file path: {}",
+                                                            session_id,
+                                                            file_path
+                                                        );
                                                         *plan_file_capture.lock().unwrap() =
                                                             Some(file_path.to_string());
+                                                        // Capture plan content directly from Write input
+                                                        if let Some(content) = input
+                                                            .get("content")
+                                                            .and_then(|c| c.as_str())
+                                                        {
+                                                            tracing::info!(
+                                                                "Session {} captured plan content ({} bytes)",
+                                                                session_id,
+                                                                content.len()
+                                                            );
+                                                            *plan_content_capture
+                                                                .lock()
+                                                                .unwrap() =
+                                                                Some(content.to_string());
+                                                        } else {
+                                                            tracing::warn!(
+                                                                "Session {} Write to plan file has no content field. Input keys: {:?}",
+                                                                session_id,
+                                                                input.as_object().map(|o| o.keys().collect::<Vec<_>>())
+                                                            );
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
 
-                                        // Detect ExitPlanMode — signals plan is finalized
+                                        // Detect ExitPlanMode — signals plan is finalized.
+                                        // Use captured content from Write input (available even
+                                        // before the tool executes), with disk read as fallback.
                                         if tool_name == Some("ExitPlanMode") {
-                                            // Read plan file content eagerly to avoid race with
-                                            // DashMap entry removal on process exit.
-                                            let plan = plan_file_capture
-                                                .lock()
-                                                .unwrap()
-                                                .as_ref()
-                                                .and_then(|path| {
-                                                    std::fs::read_to_string(path).ok()
+                                            // Extract plan from ExitPlanMode input ("plan" key),
+                                            // then try captured Write content, then disk read.
+                                            let exit_input = block.get("input");
+                                            let plan_from_input = exit_input
+                                                .and_then(|i| {
+                                                    i.get("plan")
+                                                        .or_else(|| i.get("plan_content"))
+                                                })
+                                                .and_then(|c| c.as_str())
+                                                .map(|s| s.to_string());
+                                            tracing::info!(
+                                                "Session {} ExitPlanMode detected. plan_from_input len: {}, captured_content: {}, captured_path: {}",
+                                                session_id,
+                                                plan_from_input.as_ref().map(|s| s.len()).unwrap_or(0),
+                                                plan_content_capture.lock().unwrap().is_some(),
+                                                plan_file_capture.lock().unwrap().is_some(),
+                                            );
+                                            let plan = plan_from_input
+                                                .or_else(|| {
+                                                    plan_content_capture
+                                                        .lock()
+                                                        .unwrap()
+                                                        .clone()
+                                                })
+                                                .or_else(|| {
+                                                    plan_file_capture
+                                                        .lock()
+                                                        .unwrap()
+                                                        .as_ref()
+                                                        .and_then(|path| {
+                                                            std::fs::read_to_string(path).ok()
+                                                        })
                                                 });
                                             let _ = event_tx.send(WsEvent::PlanCompleted {
                                                 session_id,
@@ -390,6 +531,8 @@ impl AgentProcessManager {
         let last_result_monitor = last_result.clone();
         let claude_sid_monitor = claude_session_id.clone();
         let plan_file_monitor = plan_file_path.clone();
+        let plan_content_monitor = plan_content.clone();
+        let working_dir_monitor = opts.working_dir.clone();
 
         // If exit_on_result is set, spawn a task that waits for the Result signal
         // and then drops stdin to make the process exit. Uses the cancel token
@@ -447,11 +590,48 @@ impl AgentProcessManager {
             let captured_claude_sid = claude_sid_monitor.lock().unwrap().clone();
             let captured_plan_file = plan_file_monitor.lock().unwrap().clone();
 
-            // If a plan file was written, read its content and use it as the result summary
-            // so that the workflow step output contains the full plan (not a truncated summary).
-            let plan_content = captured_plan_file
-                .as_ref()
-                .and_then(|path| std::fs::read_to_string(path).ok());
+            // Use plan content captured from Write tool_use input if available,
+            // otherwise read from disk, otherwise glob for newest plan file.
+            let plan_content = plan_content_monitor
+                .lock()
+                .unwrap()
+                .clone()
+                .or_else(|| {
+                    captured_plan_file
+                        .as_ref()
+                        .and_then(|path| std::fs::read_to_string(path).ok())
+                })
+                .or_else(|| {
+                    let plans_dir = std::path::Path::new(&working_dir_monitor)
+                        .join(".claude")
+                        .join("plans");
+                    if !plans_dir.is_dir() {
+                        return None;
+                    }
+                    let mut newest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+                    if let Ok(entries) = std::fs::read_dir(&plans_dir) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                                if let Ok(meta) = path.metadata() {
+                                    if let Ok(modified) = meta.modified() {
+                                        if newest.as_ref().map_or(true, |(t, _)| modified > *t) {
+                                            newest = Some((modified, path));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some((_, ref path)) = newest {
+                        tracing::info!(
+                            "Session {} found plan file via glob: {:?}",
+                            session_id,
+                            path
+                        );
+                    }
+                    newest.and_then(|(_, path)| std::fs::read_to_string(path).ok())
+                });
 
             // Emit completion/failure now that the process has actually exited.
             // If cancelled (interrupted), the session_service handles the Paused state.
@@ -499,6 +679,8 @@ impl AgentProcessManager {
                 claude_session_id,
                 last_message_id,
                 plan_file_path,
+                plan_content,
+                working_dir: opts.working_dir.clone(),
             },
         );
 
@@ -583,6 +765,46 @@ impl AgentProcessManager {
         } else {
             None
         }
+    }
+
+    /// Get the plan content captured from a Write tool_use input.
+    pub fn get_plan_content(&self, session_id: &Uuid) -> Option<String> {
+        if let Some(entry) = self.processes.get(session_id) {
+            entry.plan_content.lock().unwrap().clone()
+        } else {
+            None
+        }
+    }
+
+    /// Find the most recently modified plan file in the session's working directory.
+    /// Searches `.claude/plans/*.md` as a fallback when plan content wasn't captured
+    /// from tool_use events.
+    pub fn find_plan_file(&self, session_id: &Uuid) -> Option<String> {
+        let working_dir = self
+            .processes
+            .get(session_id)
+            .map(|e| e.working_dir.clone())?;
+        let plans_dir = std::path::Path::new(&working_dir).join(".claude").join("plans");
+        if !plans_dir.is_dir() {
+            return None;
+        }
+        // Find the most recently modified .md file
+        let mut newest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+        if let Ok(entries) = std::fs::read_dir(&plans_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                    if let Ok(meta) = path.metadata() {
+                        if let Ok(modified) = meta.modified() {
+                            if newest.as_ref().map_or(true, |(t, _)| modified > *t) {
+                                newest = Some((modified, path));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        newest.and_then(|(_, path)| std::fs::read_to_string(path).ok())
     }
 
     /// Send a control response back to Claude Code's stdin (e.g., AskUserQuestion answers).

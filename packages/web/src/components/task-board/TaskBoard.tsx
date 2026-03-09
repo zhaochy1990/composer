@@ -9,6 +9,7 @@ import { TaskListView } from './TaskListView';
 import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { PriorityFilter } from './PriorityFilter';
+import { ProjectFilter } from './ProjectFilter';
 
 const columns: { status: TaskStatus; title: string }[] = [
     { status: 'backlog', title: 'Backlog' },
@@ -27,6 +28,8 @@ export function TaskBoard() {
     );
     useEffect(() => { localStorage.setItem('taskBoardViewMode', viewMode); }, [viewMode]);
     const [priorityFilter, setPriorityFilter] = useState<number[]>([]);
+    const [projectFilter, setProjectFilter] = useState<string[]>([]);
+    const [showNoProject, setShowNoProject] = useState(false);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -70,9 +73,16 @@ export function TaskBoard() {
             done: [],
         };
         if (tasks) {
-            const filtered = priorityFilter.length > 0
-                ? tasks.filter(t => priorityFilter.includes(t.priority))
-                : tasks;
+            let filtered: Task[] = tasks;
+            if (priorityFilter.length > 0) {
+                filtered = filtered.filter(t => priorityFilter.includes(t.priority));
+            }
+            if (projectFilter.length > 0 || showNoProject) {
+                filtered = filtered.filter(t => {
+                    if (!t.project_id) return showNoProject;
+                    return projectFilter.includes(t.project_id);
+                });
+            }
             for (const task of filtered) {
                 const bucket = grouped[task.status];
                 if (bucket) {
@@ -85,7 +95,7 @@ export function TaskBoard() {
             }
         }
         return grouped;
-    }, [tasks, priorityFilter]);
+    }, [tasks, priorityFilter, projectFilter, showNoProject]);
 
     function handleEditTask(task: Task) {
         setEditingTask(task);
@@ -103,6 +113,14 @@ export function TaskBoard() {
                 </div>
                 <div className="flex items-center gap-3">
                     <PriorityFilter selected={priorityFilter} onChange={setPriorityFilter} />
+                    {projects && projects.length > 0 && (
+                        <ProjectFilter
+                            projects={projects}
+                            selected={projectFilter}
+                            includeNoProject={showNoProject}
+                            onChange={(sel, noProj) => { setProjectFilter(sel); setShowNoProject(noProj); }}
+                        />
+                    )}
                     <div className="flex rounded-md border border-gray-700 overflow-hidden">
                         <button
                             type="button"

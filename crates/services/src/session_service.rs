@@ -223,13 +223,18 @@ impl SessionService {
                             continue;
                         }
 
-                        // Read plan file and re-emit enriched event.
-                        // Always wrap in Some to prevent infinite loop — if the file
-                        // doesn't exist, use empty string so the event is still marked
-                        // as enriched and skipped on re-receipt.
+                        // Try multiple sources for plan content:
+                        // 1. Captured content from Write tool_use input
+                        // 2. Plan file path from Write detection → read from disk
+                        // 3. Glob .claude/plans/*.md in working directory
                         let plan = process_manager
-                            .get_plan_file_path(&session_id)
-                            .and_then(|path| std::fs::read_to_string(&path).ok())
+                            .get_plan_content(&session_id)
+                            .or_else(|| {
+                                process_manager
+                                    .get_plan_file_path(&session_id)
+                                    .and_then(|path| std::fs::read_to_string(&path).ok())
+                            })
+                            .or_else(|| process_manager.find_plan_file(&session_id))
                             .unwrap_or_default();
                         event_bus.broadcast(WsEvent::UserQuestionRequested {
                             session_id,
@@ -317,15 +322,36 @@ impl SessionService {
                         session_id,
                         ref plan_content,
                     } => {
-                        // Plan content is included directly from the executor (read
-                        // eagerly when ExitPlanMode is detected). Fallback to disk
-                        // read via process manager if not present.
+                        tracing::info!(
+                            "Session {} PlanCompleted event received. plan_content present: {}, len: {}",
+                            session_id,
+                            plan_content.is_some(),
+                            plan_content.as_ref().map(|c| c.len()).unwrap_or(0)
+                        );
+                        // Plan content from executor, with multiple fallbacks.
                         let plan = match plan_content {
                             Some(content) if !content.is_empty() => Some(content.clone()),
-                            _ => process_manager
-                                .get_plan_file_path(&session_id)
-                                .and_then(|path| std::fs::read_to_string(&path).ok()),
+                            _ => {
+                                tracing::info!(
+                                    "Session {} PlanCompleted: trying fallbacks",
+                                    session_id
+                                );
+                                process_manager
+                                    .get_plan_content(&session_id)
+                                    .or_else(|| {
+                                        process_manager
+                                            .get_plan_file_path(&session_id)
+                                            .and_then(|path| std::fs::read_to_string(&path).ok())
+                                    })
+                                    .or_else(|| process_manager.find_plan_file(&session_id))
+                            }
                         };
+
+                        tracing::info!(
+                            "Session {} PlanCompleted final plan len: {}",
+                            session_id,
+                            plan.as_ref().map(|c| c.len()).unwrap_or(0)
+                        );
 
                         if let Some(ref content) = plan {
                             // Eagerly store plan content in the workflow step output
