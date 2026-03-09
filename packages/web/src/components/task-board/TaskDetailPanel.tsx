@@ -38,6 +38,8 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
         setProjectId(task.project_id ?? '');
         setSelectedWorkflowId(task.workflow_id ?? '');
         setShowDeleteConfirm(false);
+        setInteractiveSessionId(null);
+        hasAutoSelected.current = false;
     }, [task.id, task.updated_at]);
 
     const updateTask = useUpdateTask();
@@ -238,8 +240,8 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                                     value={description}
                                     onChange={e => setDescription(e.target.value)}
                                     placeholder="Optional description"
-                                    rows={2}
-                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                                    rows={6}
+                                    className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
                                 />
                             </div>
 
