@@ -8,7 +8,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Result of evaluating whether a workflow step should loop back.
-enum LoopDecision {
+#[derive(Debug, PartialEq)]
+pub enum LoopDecision {
     /// Continue looping — re-run the loop target step.
     Loop,
     /// No issues found in the loop target output — advance to the next step.
@@ -1279,6 +1280,61 @@ impl WorkflowEngine {
                     anyhow::anyhow!("Step '{}' not found in workflow definition", step_id)
                 })?;
 
+            // If this step has loop_back_to, check whether the loop target already
+            // reported no issues.  When the review step found nothing to fix we
+            // should skip the fix step entirely instead of running it and then
+            // having should_loop decide — that avoids an unnecessary agent session
+            // and prevents looping when [NO_ISSUES_FOUND] detection is unreliable.
+            if let Some(ref loop_target) = step_def.loop_back_to {
+                let target_latest = step_outputs.iter()
+                    .filter(|o| o.step_id == *loop_target && matches!(o.status, WorkflowStepStatus::Completed))
+                    .max_by_key(|o| o.attempt);
+                let should_skip = target_latest
+                    .and_then(|o| o.output.as_ref())
+                    .map(|out| out.contains("[NO_ISSUES_FOUND]"))
+                    .unwrap_or(false);
+                if should_skip {
+                    tracing::info!(
+                        "Workflow run {}: skipping step '{}' because loop target '{}' reported [NO_ISSUES_FOUND]",
+                        run_id, step_id, loop_target
+                    );
+                    // Mark as Completed so downstream deps are satisfied
+                    composer_db::models::workflow_step_output::create(
+                        &self.db.pool,
+                        run_id,
+                        &step_id,
+                        &step_def.step_type,
+                        &WorkflowStepStatus::Completed,
+                        None,
+                    ).await?;
+                    // Update the output to indicate it was skipped
+                    let latest = composer_db::models::workflow_step_output::latest_for_step(
+                        &self.db.pool, run_id, &step_id,
+                    ).await?;
+                    if let Some(out) = latest {
+                        composer_db::models::workflow_step_output::update_output(
+                            &self.db.pool,
+                            &out.id.to_string(),
+                            "Skipped — loop target reported no issues",
+                        ).await?;
+                        let refreshed = composer_db::models::workflow_step_output::find_by_id(
+                            &self.db.pool,
+                            &out.id.to_string(),
+                        ).await?;
+                        if let Some(step) = refreshed {
+                            self.event_bus.broadcast(WsEvent::WorkflowStepChanged {
+                                workflow_run_id: run_id.parse()?,
+                                step,
+                            });
+                        }
+                    }
+                    // Re-advance frontier to pick up downstream steps
+                    // (use Box::pin to allow recursive async call)
+                    Box::pin(self.advance_frontier(run_id, workflow, task, agent_id)).await?;
+                    return Ok(());
+                }
+            }
+
             match step_def.step_type {
                 WorkflowStepType::Agentic => {
                     let mode = step_def.session_mode.clone().unwrap_or(SessionMode::Resume);
@@ -1832,7 +1888,7 @@ impl WorkflowEngine {
     // Loop logic
     // -----------------------------------------------------------------------
 
-    async fn should_loop(
+    pub async fn should_loop(
         &self,
         run_id: &str,
         step_def: &WorkflowStepDefinition,

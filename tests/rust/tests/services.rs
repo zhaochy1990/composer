@@ -624,7 +624,7 @@ mod worktree_service_tests {
 mod workflow_tests {
     use super::*;
     use composer_db::models::{project, task, workflow, workflow_run, workflow_step_output};
-    use composer_services::workflow_engine::{self, WorkflowEngine, FEAT_COMMON_NAME};
+    use composer_services::workflow_engine::{self, LoopDecision, WorkflowEngine, FEAT_COMMON_NAME};
 
     async fn setup() -> (WorkflowEngine, Arc<Database>, EventBus) {
         let db = Database::connect("sqlite::memory:").await.unwrap();
@@ -1242,9 +1242,9 @@ mod workflow_tests {
         assert_eq!(step_def.loop_back_to, Some("auto_review".to_string()));
         assert_eq!(step_def.max_retries, Some(3));
 
-        // No completions of target step yet → should NOT loop (crash recovery guard)
+        // No completions of target step yet → should loop (first run)
         let result = engine.should_loop(&run_id, step_def, "auto_review").await.unwrap();
-        assert!(!result, "should not loop when target has no completions");
+        assert_eq!(result, LoopDecision::Loop, "should loop when target has no completions (first run)");
 
         // Simulate completions
         for _ in 0..3 {
@@ -1254,15 +1254,15 @@ mod workflow_tests {
             ).await.unwrap();
         }
         let result = engine.should_loop(&run_id, step_def, "auto_review").await.unwrap();
-        assert!(result, "should loop after 3 completions (2 retries done, max is 3)");
+        assert_eq!(result, LoopDecision::Loop, "should loop after 3 completions (2 retries done, max is 3)");
 
-        // 4th completion → should NOT loop
+        // 4th completion → max retries exhausted
         workflow_step_output::create(
             &db.pool, &run_id, "auto_review", &WorkflowStepType::Agentic,
             &WorkflowStepStatus::Completed, None,
         ).await.unwrap();
         let result = engine.should_loop(&run_id, step_def, "auto_review").await.unwrap();
-        assert!(!result, "should stop looping after 4 completions (3 retries = max)");
+        assert_eq!(result, LoopDecision::MaxRetriesExhausted, "should stop looping after 4 completions (3 retries = max)");
     }
 
     #[tokio::test]
