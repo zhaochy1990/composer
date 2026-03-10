@@ -97,8 +97,9 @@ impl SessionService {
                         {
                             tracing::warn!("Failed to persist session log: {}", e);
                         }
-                        // Detect PR URLs in session output
-                        Self::extract_and_save_pr_urls(&db, &session_id_str, content).await;
+                        // PR URL extraction moved to SessionCompleted handler only,
+                        // to avoid capturing spurious URLs from git history/diffs
+                        // during review steps.
                     }
                     WsEvent::SessionCompleted {
                         session_id,
