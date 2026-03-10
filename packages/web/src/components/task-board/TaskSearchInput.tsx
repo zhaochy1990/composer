@@ -15,7 +15,7 @@ export function TaskSearchInput({ value, onChange }: TaskSearchInputProps) {
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={(e) => {
                     if (e.key === 'Escape') {
-                        e.stopImmediatePropagation();
+                        e.nativeEvent.stopImmediatePropagation();
                         onChange('');
                         (e.target as HTMLInputElement).blur();
                     }

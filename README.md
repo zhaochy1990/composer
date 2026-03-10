@@ -14,24 +14,30 @@ Composer pairs a Rust backend (Axum + SQLite) with a React frontend, shipping as
 ### Prerequisites
 
 - **Rust** (stable toolchain) — [install via rustup](https://rustup.rs/)
-- **Node.js** (v18+) — [download](https://nodejs.org/)
-- **pnpm** (v8+) — `npm install -g pnpm`
-- **SQLite** — included via SQLx, no separate install needed
-- **Playwright** (for E2E tests only) — `pnpm exec playwright install`
+- **Node.js** (v20+) — [download](https://nodejs.org/)
+- **pnpm** (v9+) — `npm install -g pnpm`
 
-### Install dependencies
+### Setup and run
 
 ```bash
-pnpm install
+pnpm install        # Install all dependencies (Rust crates + frontend packages)
+pnpm run build      # Build the full project
+pnpm start          # Start the production server
 ```
 
-### Development
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Contributing
+
+### Development environment
+
+After running `pnpm install`, start the dev servers:
 
 ```bash
 pnpm run dev
 ```
 
-This starts both the Vite dev server (port 5173) and the Cargo watch server (port 3000) concurrently. Open [http://localhost:5173](http://localhost:5173) in your browser.
+This starts both the Vite dev server (port 5173) and the Cargo watch server (port 3000) concurrently. Open [http://localhost:5173](http://localhost:5173) in your browser. The Vite server proxies API requests to the Rust backend.
 
 You can also run them separately:
 
@@ -40,21 +46,20 @@ pnpm run dev:web       # Vite dev server only (proxies /api to :3000)
 pnpm run dev:server    # Cargo watch on Rust crates only
 ```
 
-### Production Build
+### Development workflow
 
-```bash
-pnpm run build
-```
+When adding a new feature, the typical flow is:
 
-This builds the React app into `packages/web/dist/` and compiles the Rust server into `target/release/composer-server`. The production binary embeds the SPA and serves everything from a single executable.
+1. Define types in `crates/api-types/` (with `#[derive(TS)]`)
+2. Add migration in `crates/db/migrations/`
+3. Add DB model methods in `crates/db/src/models/`
+4. Implement service logic in `crates/services/src/`
+5. Add route handlers in `crates/server/src/routes/`
+6. Run `pnpm run generate-types` to sync Rust types to the frontend
+7. Build React components in `packages/web/src/components/`
+8. Add TanStack Query hooks in `packages/web/src/hooks/`
 
-### Run production server
-
-```bash
-npm start
-```
-
-### Run Tests
+### Testing
 
 ```bash
 cargo test                # Rust unit tests
@@ -62,12 +67,24 @@ pnpm run test:e2e         # Playwright E2E tests (headless)
 pnpm run test:e2e:headed  # Playwright with visible browser
 ```
 
-### Lint & Format
+To run E2E tests, install Playwright browsers first: `pnpm exec playwright install`
+
+### Lint & format
 
 ```bash
 pnpm run lint      # ESLint
 pnpm run format    # Prettier + cargo fmt
 ```
+
+### Building
+
+```bash
+pnpm run build:web     # React app → packages/web/dist/
+pnpm run build:server  # Rust binary → target/release/composer-server
+pnpm run build         # Both of the above
+```
+
+The production binary embeds the SPA via rust-embed and serves everything from a single executable.
 
 ## Project Structure
 
@@ -77,6 +94,7 @@ composer/
 │   ├── api-types/    # Shared Rust ↔ TS types (ts-rs codegen)
 │   ├── db/           # SQLx + SQLite (migrations, models)
 │   ├── git/          # Git worktree management for agent isolation
+│   ├── config/       # Layered configuration system (~/.composer/)
 │   ├── executors/    # Agent process spawning & stream-JSON protocol
 │   ├── services/     # Business logic (tasks, agents, sessions, workflows)
 │   └── server/       # Axum HTTP server, WebSocket hub, route handlers
