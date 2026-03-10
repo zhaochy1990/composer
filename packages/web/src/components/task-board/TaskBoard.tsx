@@ -10,6 +10,7 @@ import { TaskCreateDialog } from './TaskCreateDialog';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { PriorityFilter } from './PriorityFilter';
 import { ProjectFilter } from './ProjectFilter';
+import { TaskSearchInput } from './TaskSearchInput';
 
 const columns: { status: TaskStatus; title: string }[] = [
     { status: 'backlog', title: 'Backlog' },
@@ -30,6 +31,7 @@ export function TaskBoard() {
     const [priorityFilter, setPriorityFilter] = useState<number[]>([]);
     const [projectFilter, setProjectFilter] = useState<string[]>([]);
     const [showNoProject, setShowNoProject] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -74,6 +76,14 @@ export function TaskBoard() {
         };
         if (tasks) {
             let filtered: Task[] = tasks;
+            if (searchQuery.trim()) {
+                const q = searchQuery.trim().toLowerCase();
+                filtered = filtered.filter(t =>
+                    t.title.toLowerCase().includes(q) ||
+                    (t.description && t.description.toLowerCase().includes(q)) ||
+                    t.simple_id.toLowerCase().includes(q)
+                );
+            }
             if (priorityFilter.length > 0) {
                 filtered = filtered.filter(t => priorityFilter.includes(t.priority));
             }
@@ -95,7 +105,12 @@ export function TaskBoard() {
             }
         }
         return grouped;
-    }, [tasks, priorityFilter, projectFilter, showNoProject]);
+    }, [tasks, searchQuery, priorityFilter, projectFilter, showNoProject]);
+
+    const filteredCount = useMemo(() =>
+        Object.values(tasksByStatus).reduce((sum, arr) => sum + arr.length, 0),
+        [tasksByStatus]
+    );
 
     function handleEditTask(task: Task) {
         setEditingTask(task);
@@ -108,10 +123,15 @@ export function TaskBoard() {
                 <div>
                     <h1 className="text-lg font-semibold text-text-primary">Task Board</h1>
                     <p className="text-sm text-text-muted">
-                        {tasks ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''}` : 'Loading...'}
+                        {tasks
+                            ? filteredCount < tasks.length
+                                ? `${filteredCount} of ${tasks.length} task${tasks.length !== 1 ? 's' : ''}`
+                                : `${tasks.length} task${tasks.length !== 1 ? 's' : ''}`
+                            : 'Loading...'}
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <TaskSearchInput value={searchQuery} onChange={setSearchQuery} />
                     <PriorityFilter selected={priorityFilter} onChange={setPriorityFilter} />
                     {projects && projects.length > 0 && (
                         <ProjectFilter
