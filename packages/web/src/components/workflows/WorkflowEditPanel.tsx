@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { X, Plus, Trash2, AlertCircle, Lock, Copy } from 'lucide-react';
 import type { Workflow, WorkflowStepDefinition, WorkflowStepType, SessionMode } from '@/types/generated';
 import { useUpdateWorkflow, useDeleteWorkflow, useCloneWorkflow } from '@/hooks/use-workflows';
+import { RoutableEdge, type EdgeRouting, type HandleSide } from './RoutableEdge';
 import {
     ReactFlow,
     Background,
@@ -114,9 +115,25 @@ function StepNode({ data, selected }: NodeProps) {
         ? SESSION_MODES.find(m => m.value === step.session_mode)?.label ?? ''
         : '';
 
+    const primaryHandle = "!w-2.5 !h-2.5 !bg-gray-500 !border-gray-400";
+    const sideHandle = "!w-1.5 !h-1.5 !bg-gray-600 !border-gray-500 !opacity-40 hover:!opacity-100";
+
     return (
         <>
-            <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !bg-gray-500 !border-gray-400" />
+            {/* Primary vertical handles */}
+            <Handle type="target" position={Position.Top} id="top-target" className={primaryHandle} />
+            <Handle type="source" position={Position.Bottom} id="bottom-source" className={primaryHandle} />
+
+            {/* Side handles for backward/lateral edges */}
+            <Handle type="source" position={Position.Right} id="right-source" className={sideHandle} />
+            <Handle type="target" position={Position.Right} id="right-target" className={sideHandle} />
+            <Handle type="source" position={Position.Left} id="left-source" className={sideHandle} />
+            <Handle type="target" position={Position.Left} id="left-target" className={sideHandle} />
+
+            {/* Extra handles for edge cases */}
+            <Handle type="target" position={Position.Bottom} id="bottom-target" className={sideHandle} />
+            <Handle type="source" position={Position.Top} id="top-source" className={sideHandle} />
+
             <div className={`px-4 py-3 rounded-lg border-2 min-w-[160px] max-w-[220px] ${colors.bg} ${selected ? 'border-white' : colors.border} shadow-lg`}>
                 <div className="flex items-center gap-1.5 mb-1">
                     <span className={`text-[10px] font-mono ${colors.text} opacity-70`}>{step.id}</span>
@@ -145,12 +162,12 @@ function StepNode({ data, selected }: NodeProps) {
                     )}
                 </div>
             </div>
-            <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-gray-500 !border-gray-400" />
         </>
     );
 }
 
 const nodeTypes = { stepNode: StepNode };
+const edgeTypes = { routable: RoutableEdge };
 
 // ---------------------------------------------------------------------------
 // Layout helper — simple top-down layered layout
@@ -217,60 +234,81 @@ function layoutNodes(steps: WorkflowStepDefinition[], existingPositions?: Map<st
     });
 }
 
-function buildEdges(steps: WorkflowStepDefinition[]): Edge[] {
+const HANDLE_DEFAULTS: Record<string, { sourceHandle: string; targetHandle: string }> = {
+    dependency: { sourceHandle: 'bottom-source', targetHandle: 'top-target' },
+    approve: { sourceHandle: 'bottom-source', targetHandle: 'top-target' },
+    reject: { sourceHandle: 'right-source', targetHandle: 'right-target' },
+    loop: { sourceHandle: 'left-source', targetHandle: 'left-target' },
+};
+
+function resolveHandles(
+    edgeId: string,
+    category: string,
+    overrides: Map<string, EdgeRouting>,
+): { sourceHandle: string; targetHandle: string } {
+    const override = overrides.get(edgeId);
+    const defaults = HANDLE_DEFAULTS[category] ?? HANDLE_DEFAULTS.dependency;
+    return {
+        sourceHandle: override?.sourceSide ? `${override.sourceSide}-source` : defaults.sourceHandle,
+        targetHandle: override?.targetSide ? `${override.targetSide}-target` : defaults.targetHandle,
+    };
+}
+
+function buildEdges(steps: WorkflowStepDefinition[], overrides: Map<string, EdgeRouting>): Edge[] {
     const edges: Edge[] = [];
     for (const step of steps) {
         for (const dep of step.depends_on) {
+            const edgeId = `dep-${dep}-${step.id}`;
             edges.push({
-                id: `dep-${dep}-${step.id}`,
+                id: edgeId,
                 source: dep,
                 target: step.id,
-                type: 'smoothstep',
-                style: { stroke: '#6b7280', strokeWidth: 2 },
+                type: 'routable',
+                ...resolveHandles(edgeId, 'dependency', overrides),
+                data: { edgeCategory: 'dependency', color: '#6b7280' },
                 markerEnd: { type: MarkerType.ArrowClosed, color: '#6b7280', width: 16, height: 16 },
             });
         }
         if (step.on_approve) {
+            const edgeId = `approve-${step.id}-${step.on_approve}`;
             edges.push({
-                id: `approve-${step.id}-${step.on_approve}`,
+                id: edgeId,
                 source: step.id,
                 target: step.on_approve,
-                type: 'smoothstep',
-                label: 'approve',
-                labelStyle: { fill: '#4ade80', fontSize: 10, fontWeight: 600 },
-                labelBgStyle: { fill: '#111827', fillOpacity: 0.9 },
-                labelBgPadding: [4, 2] as [number, number],
-                style: { stroke: '#22c55e', strokeWidth: 2 },
+                type: 'routable',
+                ...resolveHandles(edgeId, 'approve', overrides),
+                data: { edgeCategory: 'approve', label: 'approve', color: '#22c55e' },
                 markerEnd: { type: MarkerType.ArrowClosed, color: '#22c55e', width: 16, height: 16 },
             });
         }
         if (step.on_reject) {
+            const edgeId = `reject-${step.id}-${step.on_reject}`;
             edges.push({
-                id: `reject-${step.id}-${step.on_reject}`,
+                id: edgeId,
                 source: step.id,
                 target: step.on_reject,
-                type: 'smoothstep',
-                label: 'reject',
-                labelStyle: { fill: '#f87171', fontSize: 10, fontWeight: 600 },
-                labelBgStyle: { fill: '#111827', fillOpacity: 0.9 },
-                labelBgPadding: [4, 2] as [number, number],
-                style: { stroke: '#ef4444', strokeWidth: 2 },
+                type: 'routable',
+                ...resolveHandles(edgeId, 'reject', overrides),
+                data: { edgeCategory: 'reject', label: 'reject', color: '#ef4444' },
                 markerEnd: { type: MarkerType.ArrowClosed, color: '#ef4444', width: 16, height: 16 },
             });
         }
         if (step.loop_back_to) {
+            const edgeId = `loop-${step.id}-${step.loop_back_to}`;
             edges.push({
-                id: `loop-${step.id}-${step.loop_back_to}`,
+                id: edgeId,
                 source: step.id,
                 target: step.loop_back_to,
-                type: 'smoothstep',
-                label: `loop${step.max_retries != null ? ` (max ${step.max_retries})` : ''}`,
-                labelStyle: { fill: '#fb923c', fontSize: 10, fontWeight: 600 },
-                labelBgStyle: { fill: '#111827', fillOpacity: 0.9 },
-                labelBgPadding: [4, 2] as [number, number],
-                style: { stroke: '#f97316', strokeWidth: 2, strokeDasharray: '6 3' },
-                markerEnd: { type: MarkerType.ArrowClosed, color: '#f97316', width: 16, height: 16 },
+                type: 'routable',
+                ...resolveHandles(edgeId, 'loop', overrides),
+                data: {
+                    edgeCategory: 'loop',
+                    label: `loop${step.max_retries != null ? ` (max ${step.max_retries})` : ''}`,
+                    color: '#f97316',
+                    strokeDasharray: '6 3',
+                },
                 animated: true,
+                markerEnd: { type: MarkerType.ArrowClosed, color: '#f97316', width: 16, height: 16 },
             });
         }
     }
@@ -536,6 +574,116 @@ function PropertyPanel({
 }
 
 // ---------------------------------------------------------------------------
+// Edge Routing Context Menu
+// ---------------------------------------------------------------------------
+
+const SIDE_OPTIONS: { value: HandleSide; label: string }[] = [
+    { value: 'top', label: 'Top' },
+    { value: 'bottom', label: 'Bottom' },
+    { value: 'left', label: 'Left' },
+    { value: 'right', label: 'Right' },
+];
+
+function EdgeRoutingMenu({
+    x,
+    y,
+    edgeId,
+    category,
+    currentRouting,
+    onSetSide,
+    onReset,
+    onClose,
+}: {
+    x: number;
+    y: number;
+    edgeId: string;
+    category: string;
+    currentRouting: EdgeRouting;
+    onSetSide: (edgeId: string, side: 'sourceSide' | 'targetSide', value: HandleSide) => void;
+    onReset: (edgeId: string) => void;
+    onClose: () => void;
+}) {
+    const menuRef = useRef<HTMLDivElement>(null);
+    const defaults = HANDLE_DEFAULTS[category] ?? HANDLE_DEFAULTS.dependency;
+    const currentSource = currentRouting.sourceSide ?? (defaults.sourceHandle.split('-')[0] as HandleSide);
+    const currentTarget = currentRouting.targetSide ?? (defaults.targetHandle.split('-')[0] as HandleSide);
+
+    // Clamp to viewport so menu doesn't render offscreen
+    const clampedX = Math.min(x, window.innerWidth - 200);
+    const clampedY = Math.min(y, window.innerHeight - 160);
+
+    useEffect(() => {
+        function handleClickOutside(e: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(e.target as HTMLElement)) onClose();
+        }
+        function handleEscape(e: KeyboardEvent) {
+            if (e.key === 'Escape') onClose();
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [onClose]);
+
+    return (
+        <div
+            ref={menuRef}
+            className="fixed z-50 bg-bg-surface border border-border-primary rounded-lg shadow-xl p-3 min-w-[180px]"
+            style={{ left: clampedX, top: clampedY }}
+        >
+            <div className="text-xs font-semibold text-text-primary mb-2">Edge Routing</div>
+
+            <div className="mb-2">
+                <div className="text-[10px] text-text-muted mb-1">Source side (exit)</div>
+                <div className="flex gap-1">
+                    {SIDE_OPTIONS.map(opt => (
+                        <button
+                            key={opt.value}
+                            onClick={() => onSetSide(edgeId, 'sourceSide', opt.value)}
+                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                                currentSource === opt.value
+                                    ? 'bg-blue-600 border-blue-500 text-white'
+                                    : 'bg-bg-elevated border-border-secondary text-text-secondary hover:bg-bg-interactive'
+                            }`}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="mb-2">
+                <div className="text-[10px] text-text-muted mb-1">Target side (enter)</div>
+                <div className="flex gap-1">
+                    {SIDE_OPTIONS.map(opt => (
+                        <button
+                            key={opt.value}
+                            onClick={() => onSetSide(edgeId, 'targetSide', opt.value)}
+                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                                currentTarget === opt.value
+                                    ? 'bg-blue-600 border-blue-500 text-white'
+                                    : 'bg-bg-elevated border-border-secondary text-text-secondary hover:bg-bg-interactive'
+                            }`}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <button
+                onClick={() => onReset(edgeId)}
+                className="w-full text-[10px] text-text-muted hover:text-text-secondary py-1 rounded hover:bg-bg-elevated transition-colors"
+            >
+                Reset to default
+            </button>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
@@ -550,6 +698,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [nodePositions, setNodePositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+    const [edgeRoutingOverrides, setEdgeRoutingOverrides] = useState<Map<string, EdgeRouting>>(new Map());
 
     const updateWorkflow = useUpdateWorkflow();
     const deleteWorkflow = useDeleteWorkflow();
@@ -566,8 +715,8 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
     // Sync steps → nodes/edges
     useEffect(() => {
         setNodes(layoutNodes(steps, nodePositions));
-        setEdges(buildEdges(steps));
-    }, [steps, nodePositions]);
+        setEdges(buildEdges(steps, edgeRoutingOverrides));
+    }, [steps, nodePositions, edgeRoutingOverrides]);
 
     // Reset on workflow change
     useEffect(() => {
@@ -576,6 +725,7 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
         setSelectedStepId(null);
         setShowDeleteConfirm(false);
         setNodePositions(new Map());
+        setEdgeRoutingOverrides(new Map());
     }, [workflow.id]);
 
     // Track node positions from dragging
@@ -597,8 +747,51 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
         setSelectedStepId(node.id);
     }, []);
 
+    // Edge context menu for route customization
+    const [edgeContextMenu, setEdgeContextMenu] = useState<{
+        edgeId: string;
+        x: number;
+        y: number;
+        currentRouting: EdgeRouting;
+        category: string;
+    } | null>(null);
+
     const handlePaneClick = useCallback(() => {
         setSelectedStepId(null);
+        setEdgeContextMenu(null);
+    }, []);
+
+    const handleEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+        event.preventDefault();
+        const routing = edgeRoutingOverrides.get(edge.id) ?? {};
+        const category = (edge.data as { edgeCategory?: string })?.edgeCategory ?? 'dependency';
+        setEdgeContextMenu({
+            edgeId: edge.id,
+            x: event.clientX,
+            y: event.clientY,
+            currentRouting: routing,
+            category,
+        });
+    }, [edgeRoutingOverrides]);
+
+    const updateEdgeRouting = useCallback((edgeId: string, side: 'sourceSide' | 'targetSide', value: HandleSide) => {
+        setEdgeRoutingOverrides(prev => {
+            const next = new Map(prev);
+            const existing = next.get(edgeId) ?? {};
+            next.set(edgeId, { ...existing, [side]: value });
+            return next;
+        });
+        // Keep menu open and update its displayed routing state
+        setEdgeContextMenu(prev => prev ? { ...prev, currentRouting: { ...prev.currentRouting, [side]: value } } : null);
+    }, []);
+
+    const resetEdgeRouting = useCallback((edgeId: string) => {
+        setEdgeRoutingOverrides(prev => {
+            const next = new Map(prev);
+            next.delete(edgeId);
+            return next;
+        });
+        setEdgeContextMenu(null);
     }, []);
 
     function updateStep(id: string, updates: Partial<WorkflowStepDefinition>) {
@@ -674,8 +867,9 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                     <div className="flex-1 min-w-0">
                         <ReactFlow
                             nodes={layoutNodes(steps)}
-                            edges={buildEdges(steps)}
+                            edges={buildEdges(steps, new Map())}
                             nodeTypes={nodeTypes}
+                            edgeTypes={edgeTypes}
                             onNodeClick={handleNodeClick}
                             onPaneClick={handlePaneClick}
                             fitView
@@ -779,7 +973,9 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                         onEdgesChange={onEdgesChange}
                         onNodeClick={handleNodeClick}
                         onPaneClick={handlePaneClick}
+                        onEdgeContextMenu={handleEdgeContextMenu}
                         nodeTypes={nodeTypes}
+                        edgeTypes={edgeTypes}
                         fitView
                         proOptions={{ hideAttribution: true }}
                         deleteKeyCode={null}
@@ -800,12 +996,27 @@ export function WorkflowEditPanel({ workflow, onClose }: WorkflowEditPanelProps)
                 )}
             </div>
 
+            {/* Edge routing context menu */}
+            {edgeContextMenu && (
+                <EdgeRoutingMenu
+                    x={edgeContextMenu.x}
+                    y={edgeContextMenu.y}
+                    edgeId={edgeContextMenu.edgeId}
+                    category={edgeContextMenu.category}
+                    currentRouting={edgeContextMenu.currentRouting}
+                    onSetSide={updateEdgeRouting}
+                    onReset={resetEdgeRouting}
+                    onClose={() => setEdgeContextMenu(null)}
+                />
+            )}
+
             {/* Edge legend */}
             <div className="flex items-center gap-4 px-4 py-1.5 border-t border-border-primary bg-bg-surface text-[10px] text-text-muted">
                 <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-gray-500 inline-block" /> dependency</span>
                 <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-green-500 inline-block" /> approve</span>
                 <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-red-500 inline-block" /> reject</span>
                 <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-orange-500 inline-block border-dashed" style={{ borderTop: '2px dashed #f97316', height: 0 }} /> loop</span>
+                <span className="text-text-muted/50 ml-2">Right-click edge to change routing</span>
             </div>
         </div>
     );
