@@ -635,7 +635,7 @@ export function TaskDetailPanel({ task, onClose, onCloneSuccess, inline = false 
 
                     {/* Output — fills remaining space */}
                     <div className="flex-1 min-h-0">
-                        <SessionOutput sessionId={selectedSessionId} />
+                        <SessionOutput sessionId={selectedSessionId} claudeSessionId={selectedSession?.resume_session_id} />
                     </div>
 
                     {/* Message input pinned at bottom */}

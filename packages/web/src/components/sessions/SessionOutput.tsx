@@ -9,9 +9,10 @@ const EMPTY_OUTPUT: SessionLogEntry[] = [];
 
 interface SessionOutputProps {
     sessionId: string;
+    claudeSessionId?: string;
 }
 
-export function SessionOutput({ sessionId }: SessionOutputProps) {
+export function SessionOutput({ sessionId, claudeSessionId }: SessionOutputProps) {
     const output = useSessionOutputStore(
         (state) => state.outputs[sessionId] ?? EMPTY_OUTPUT,
     );
@@ -129,9 +130,9 @@ export function SessionOutput({ sessionId }: SessionOutputProps) {
     const parsedEntries = useMemo(() => {
         return output.map((line) => ({
             ...line,
-            parsed: line.log_type === 'stdout' ? parseClaudeMessage(line.content) : null,
+            parsed: line.log_type === 'stdout' ? parseClaudeMessage(line.content, claudeSessionId) : null,
         }));
-    }, [output]);
+    }, [output, claudeSessionId]);
 
     return (
         <div

@@ -158,7 +158,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
                 <p className="text-xs font-semibold text-text-muted uppercase mb-2">
                     Output
                 </p>
-                <SessionOutput sessionId={session.id} />
+                <SessionOutput sessionId={session.id} claudeSessionId={session.resume_session_id} />
             </div>
         </div>
     );

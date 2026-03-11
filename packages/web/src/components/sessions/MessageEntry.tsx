@@ -46,8 +46,12 @@ export function MessageEntry({ message }: MessageEntryProps) {
 
         case 'user_text':
             return (
-                <div className="py-1 text-green-400 whitespace-pre-wrap break-words">
-                    <span className="text-green-600 mr-1">&gt;</span>
+                <div className={`py-1 whitespace-pre-wrap break-words ${
+                    message.isSubagent ? 'text-blue-400' : 'text-green-400'
+                }`}>
+                    <span className={`mr-1 ${message.isSubagent ? 'text-blue-600' : 'text-green-600'}`}>
+                        {message.isSubagent ? '\u2192' : '>'}
+                    </span>
                     {message.text}
                 </div>
             );

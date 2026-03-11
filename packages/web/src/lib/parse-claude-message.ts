@@ -7,7 +7,7 @@ export type ParsedMessage =
     | { kind: 'thinking'; text: string }
     | { kind: 'tool_use'; tool: string; summary: string; input: Record<string, unknown> }
     | { kind: 'tool_result'; content: string; isError: boolean }
-    | { kind: 'user_text'; text: string }
+    | { kind: 'user_text'; text: string; isSubagent: boolean }
     | { kind: 'system'; text: string }
     | { kind: 'result'; summary: string; isError: boolean }
     | { kind: 'raw'; text: string };
@@ -68,7 +68,7 @@ function extractTextFromContent(content: unknown): string | null {
  * Parse a raw JSON line from Claude Code's stream-json stdout into structured messages.
  * A single line can produce multiple entries (e.g., assistant text + tool_use blocks).
  */
-export function parseClaudeMessage(raw: string): ParsedMessage[] {
+export function parseClaudeMessage(raw: string, claudeSessionId?: string): ParsedMessage[] {
     let json: Record<string, unknown>;
     try {
         json = JSON.parse(raw);
@@ -117,7 +117,15 @@ export function parseClaudeMessage(raw: string): ParsedMessage[] {
         case 'user': {
             const message = json.message as { content?: unknown } | undefined;
             const text = extractTextFromContent(message?.content);
-            if (text) results.push({ kind: 'user_text', text });
+            if (text) {
+                const msgSessionId = json.session_id as string | undefined;
+                const isSubagent = !!(
+                    claudeSessionId &&
+                    msgSessionId &&
+                    msgSessionId !== claudeSessionId
+                );
+                results.push({ kind: 'user_text', text, isSubagent });
+            }
             break;
         }
 
