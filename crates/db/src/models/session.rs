@@ -143,6 +143,17 @@ pub async fn list_by_task(pool: &SqlitePool, task_id: &str) -> anyhow::Result<Ve
     rows.into_iter().map(Session::try_from).collect()
 }
 
+/// Delete all sessions belonging to a task.
+/// Session logs are automatically cascade-deleted.
+pub async fn delete_by_task(pool: &SqlitePool, task_id: &str) -> anyhow::Result<u64> {
+    tracing::debug!(task_id = %task_id, "DB: deleting sessions for task");
+    let result = sqlx::query("DELETE FROM sessions WHERE task_id = ?")
+        .bind(task_id)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
 pub async fn update_status(
     pool: &SqlitePool,
     id: &str,

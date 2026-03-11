@@ -122,6 +122,53 @@ impl TaskService {
     pub async fn delete(&self, id: &str) -> anyhow::Result<()> {
         tracing::info!(task_id = %id, "Deleting task");
         let uuid: uuid::Uuid = id.parse()?;
+
+        // Fetch task before deletion — needed for cancel_task_runtime
+        let task = composer_db::models::task::find_by_id(&self.db.pool, id).await?;
+
+        if let Some(ref task) = task {
+            // List sessions BEFORE cleanup (need task_id intact)
+            let sessions = composer_db::models::session::list_by_task(&self.db.pool, id)
+                .await
+                .unwrap_or_default();
+            let session_ids: Vec<String> =
+                sessions.iter().map(|s| s.id.to_string()).collect();
+
+            // Cancel runtime: interrupt processes, remove worktree dirs + branches
+            if let Err(e) = self.cancel_task_runtime(id, task).await {
+                tracing::warn!(
+                    task_id = %id,
+                    "Failed to cancel task runtime during delete: {}", e
+                );
+            }
+
+            // Delete worktree DB records (must be before session deletion)
+            if !session_ids.is_empty() {
+                if let Err(e) = composer_db::models::worktree::delete_by_session_ids(
+                    &self.db.pool,
+                    &session_ids,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        task_id = %id,
+                        "Failed to delete worktree records during task delete: {}", e
+                    );
+                }
+            }
+
+            // Delete session records (cascades to session_logs)
+            if let Err(e) =
+                composer_db::models::session::delete_by_task(&self.db.pool, id).await
+            {
+                tracing::warn!(
+                    task_id = %id,
+                    "Failed to delete session records during task delete: {}", e
+                );
+            }
+        }
+
+        // Delete task (cascades to workflow_runs → step_outputs, task_links)
         composer_db::models::task::delete(&self.db.pool, id).await?;
         self.event_bus
             .broadcast(WsEvent::TaskDeleted { task_id: uuid });

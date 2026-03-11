@@ -82,6 +82,25 @@ pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<Worktree>> {
     rows.into_iter().map(Worktree::try_from).collect()
 }
 
+/// Delete worktree records for a set of session IDs.
+pub async fn delete_by_session_ids(pool: &SqlitePool, session_ids: &[String]) -> anyhow::Result<u64> {
+    if session_ids.is_empty() {
+        return Ok(0);
+    }
+    tracing::debug!(count = session_ids.len(), "DB: deleting worktree records for sessions");
+    let placeholders: Vec<&str> = session_ids.iter().map(|_| "?").collect();
+    let query_str = format!(
+        "DELETE FROM worktrees WHERE session_id IN ({})",
+        placeholders.join(", ")
+    );
+    let mut query = sqlx::query(&query_str);
+    for id in session_ids {
+        query = query.bind(id);
+    }
+    let result = query.execute(pool).await?;
+    Ok(result.rows_affected())
+}
+
 pub async fn update_status(pool: &SqlitePool, id: &str, status: &WorktreeStatus) -> anyhow::Result<()> {
     tracing::debug!(worktree_id = %id, status = ?status, "DB: updating worktree status");
     let status_str = serde_json::to_value(status)?
