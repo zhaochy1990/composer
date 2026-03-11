@@ -116,6 +116,10 @@ export function TaskBoard() {
         setEditingTask(task);
     }
 
+    function handleCloneSuccess(newTask: Task) {
+        setEditingTask(newTask);
+    }
+
     return (
         <div className="flex flex-col h-full">
             {/* Header */}
@@ -225,6 +229,7 @@ export function TaskBoard() {
                         onEditTask={handleEditTask}
                         selectedTask={editingTask}
                         onCloseTask={() => setEditingTask(null)}
+                        onCloneSuccess={handleCloneSuccess}
                         agentNameMap={agentNameMap}
                         projectNameMap={projectNameMap}
                     />
@@ -243,6 +248,7 @@ export function TaskBoard() {
                     key={editingTask.id}
                     task={editingTask}
                     onClose={() => setEditingTask(null)}
+                    onCloneSuccess={handleCloneSuccess}
                 />
             )}
         </div>

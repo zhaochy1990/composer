@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon, Link2, Undo2 } from 'lucide-react';
+import { X, Trash2, Square, Play, Send, RotateCcw, ChevronDown, ChevronRight, ExternalLink, GitPullRequest, Workflow as WorkflowIcon, Link2, Undo2, Copy } from 'lucide-react';
 import type { Task } from '@/types/generated';
-import { useUpdateTask, useDeleteTask, useStartTask, useTasks, useMoveTask } from '@/hooks/use-tasks';
+import { useUpdateTask, useDeleteTask, useStartTask, useTasks, useMoveTask, useCloneTask } from '@/hooks/use-tasks';
 import { useTaskSessions } from '@/hooks/use-task-sessions';
 import { useSession, useInterruptSession, useResumeSession, useSendSessionInput, useRetrySession } from '@/hooks/use-sessions';
 import { useUserQuestionStore } from '@/stores/user-question-store';
@@ -17,10 +17,11 @@ import { shortId, formatDuration, formatTime } from '@/lib/utils';
 interface TaskDetailPanelProps {
     task: Task;
     onClose: () => void;
+    onCloneSuccess?: (newTask: Task) => void;
     inline?: boolean;
 }
 
-export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPanelProps) {
+export function TaskDetailPanel({ task, onClose, onCloneSuccess, inline = false }: TaskDetailPanelProps) {
     // --- Task edit form state ---
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description ?? '');
@@ -47,6 +48,7 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
     const deleteTask = useDeleteTask();
     const startTask = useStartTask();
     const moveTask = useMoveTask();
+    const cloneTask = useCloneTask();
 
     // --- All tasks (for resolving related task links) ---
     const { data: allTasks } = useTasks();
@@ -217,8 +219,19 @@ export function TaskDetailPanel({ task, onClose, inline = false }: TaskDetailPan
                             {moveTask.isPending ? 'Cancelling...' : 'Move to Backlog'}
                         </button>
                     )}
-                    {moveTask.isError && (
-                        <span className="text-xs text-red-400">{(moveTask.error as Error).message}</span>
+                    <button
+                        type="button"
+                        onClick={() => cloneTask.mutate(task, {
+                            onSuccess: (newTask) => onCloneSuccess?.(newTask),
+                        })}
+                        disabled={cloneTask.isPending}
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-bg-elevated text-text-secondary border border-border-secondary hover:bg-bg-interactive transition-colors disabled:opacity-50"
+                    >
+                        <Copy className="w-3 h-3" />
+                        {cloneTask.isPending ? 'Cloning...' : 'Clone'}
+                    </button>
+                    {(moveTask.isError || cloneTask.isError) && (
+                        <span className="text-xs text-red-400">{((moveTask.error || cloneTask.error) as Error).message}</span>
                     )}
                     {!inline && (
                         <button

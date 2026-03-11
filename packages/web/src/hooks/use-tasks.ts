@@ -20,6 +20,27 @@ export function useCreateTask() {
     });
 }
 
+export function useCloneTask() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (sourceTask: Task) =>
+            apiFetch<Task>('/tasks', {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: `${sourceTask.title} (Copy)`,
+                    description: sourceTask.description || undefined,
+                    priority: sourceTask.priority,
+                    status: 'backlog',
+                    project_id: sourceTask.project_id || undefined,
+                    assigned_agent_id: sourceTask.assigned_agent_id || undefined,
+                    workflow_id: sourceTask.workflow_id || undefined,
+                }),
+            }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        onError: (error: Error) => logger.error('Failed to clone task', { error: error.message }),
+    });
+}
+
 export function useUpdateTask() {
     const queryClient = useQueryClient();
     return useMutation({

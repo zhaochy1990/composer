@@ -17,6 +17,7 @@ interface TaskListViewProps {
     onEditTask: (task: Task) => void;
     selectedTask: Task | null;
     onCloseTask: () => void;
+    onCloneSuccess?: (newTask: Task) => void;
     agentNameMap: Record<string, string>;
     projectNameMap: Record<string, string>;
 }
@@ -26,6 +27,7 @@ export function TaskListView({
     onEditTask,
     selectedTask,
     onCloseTask,
+    onCloneSuccess,
     agentNameMap,
     projectNameMap,
 }: TaskListViewProps) {
@@ -67,6 +69,7 @@ export function TaskListView({
                         key={selectedTask.id}
                         task={selectedTask}
                         onClose={onCloseTask}
+                        onCloneSuccess={onCloneSuccess}
                         inline
                     />
                 ) : (
