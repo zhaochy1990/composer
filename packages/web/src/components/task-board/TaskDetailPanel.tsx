@@ -12,7 +12,9 @@ import { SessionOutput } from '@/components/sessions/SessionOutput';
 import { StatusBadge } from '@/components/sessions/StatusBadge';
 import { WorkflowProgress } from '@/components/workflows/WorkflowProgress';
 import { WorkflowReviewSidePanel, type ReviewPanelData } from '@/components/workflows/WorkflowReviewSidePanel';
-import { shortId, formatDuration, formatTime } from '@/lib/utils';
+import { ResizeHandle } from './ResizeHandle';
+import { useResizablePanel } from '@/hooks/use-resizable-panel';
+import { shortId, formatDuration, formatTime, cn } from '@/lib/utils';
 
 interface TaskDetailPanelProps {
     task: Task;
@@ -22,6 +24,8 @@ interface TaskDetailPanelProps {
 }
 
 export function TaskDetailPanel({ task, onClose, onCloneSuccess, inline = false }: TaskDetailPanelProps) {
+    const { width, isDragging, handleMouseDown, handleDoubleClick } = useResizablePanel();
+
     // --- Task edit form state ---
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description ?? '');
@@ -714,12 +718,12 @@ export function TaskDetailPanel({ task, onClose, onCloneSuccess, inline = false 
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/40 z-40"
+                className={cn('fixed inset-0 bg-black/40 z-40', isDragging && 'cursor-col-resize')}
                 onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
             />
 
             {/* Panel container — flex row with optional review side panel */}
-            <div className="fixed inset-y-0 right-0 z-50 flex max-w-full">
+            <div className={cn('fixed inset-y-0 right-0 z-50 flex max-w-full', isDragging && 'select-none')}>
                 {reviewPanelData && (
                     <WorkflowReviewSidePanel
                         data={reviewPanelData}
@@ -727,7 +731,11 @@ export function TaskDetailPanel({ task, onClose, onCloneSuccess, inline = false 
                         onClose={() => setReviewPanelData(null)}
                     />
                 )}
-                <div className="w-[900px] max-w-full bg-bg-surface border-l border-border-primary shadow-2xl flex flex-col overflow-hidden">
+                <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} isDragging={isDragging} />
+                <div
+                    className="max-w-full bg-bg-surface border-l border-border-primary shadow-2xl flex flex-col overflow-hidden"
+                    style={{ width }}
+                >
                     {panelContent}
                 </div>
             </div>

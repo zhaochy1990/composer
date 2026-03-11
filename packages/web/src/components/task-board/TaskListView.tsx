@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import type { Task, TaskStatus } from '@/types/generated';
 import { TaskListSection } from './TaskListSection';
 import { TaskDetailPanel } from './TaskDetailPanel';
+import { ResizeHandle } from './ResizeHandle';
+import { useResizablePanel } from '@/hooks/use-resizable-panel';
+import { cn } from '@/lib/utils';
 import { LayoutList } from 'lucide-react';
 
 // Ordered by urgency: Waiting (needs human action) first, then active work, then backlog, done last
@@ -31,6 +34,8 @@ export function TaskListView({
     agentNameMap,
     projectNameMap,
 }: TaskListViewProps) {
+    const { width, isDragging, handleMouseDown, handleDoubleClick } = useResizablePanel();
+
     // Escape key deselects the current task
     useEffect(() => {
         function handleKeyDown(e: KeyboardEvent) {
@@ -43,7 +48,7 @@ export function TaskListView({
     }, [selectedTask, onCloseTask]);
 
     return (
-        <div className="flex h-full">
+        <div className={cn('flex h-full', isDragging && 'cursor-col-resize select-none')}>
             {/* Left panel — task list */}
             <div className="flex-1 min-w-0 border-r border-border-primary overflow-y-auto">
                 <div className="border-b border-border-primary">
@@ -62,8 +67,11 @@ export function TaskListView({
                 </div>
             </div>
 
+            {/* Resize handle */}
+            <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} isDragging={isDragging} />
+
             {/* Right panel — task detail (always visible) */}
-            <div className="w-[900px] shrink-0 overflow-hidden">
+            <div className="shrink-0 overflow-hidden" style={{ width }}>
                 {selectedTask ? (
                     <TaskDetailPanel
                         key={selectedTask.id}
