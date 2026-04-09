@@ -87,18 +87,21 @@ struct LogsQuery {
 }
 
 async fn get_session_logs(State(state): State<Arc<AppState>>, Path(id): Path<String>, Query(query): Query<LogsQuery>) -> Result<Json<PaginatedSessionLogs>, ServiceError> {
-    let limit = query.limit.unwrap_or(500).min(2000);
-    let logs = state.services.sessions.get_logs_cursor(&id, query.before, limit).await?;
-    let total_count = state.services.sessions.get_log_count(&id).await?;
-    let oldest_id = logs.first().map(|l| l.id);
-    let has_more = match oldest_id {
-        Some(oid) => state.services.sessions.has_logs_before(&id, oid).await?,
-        None => false,
-    };
-    Ok(Json(PaginatedSessionLogs {
-        logs,
-        has_more,
-        oldest_id,
-        total_count,
-    }))
+    if query.limit.is_some() || query.before.is_some() {
+        // Paginated path (backward compatible)
+        let limit = query.limit.unwrap_or(500).min(2000);
+        let logs = state.services.sessions.get_logs_cursor(&id, query.before, limit).await?;
+        let total_count = state.services.sessions.get_log_count(&id).await?;
+        let oldest_id = logs.first().map(|l| l.id);
+        let has_more = match oldest_id {
+            Some(oid) => state.services.sessions.has_logs_before(&id, oid).await?,
+            None => false,
+        };
+        Ok(Json(PaginatedSessionLogs { logs, has_more, oldest_id, total_count }))
+    } else {
+        // Default: return ALL logs
+        let logs = state.services.sessions.get_all_logs(&id).await?;
+        let total_count = logs.len() as i64;
+        Ok(Json(PaginatedSessionLogs { logs, has_more: false, oldest_id: None, total_count }))
+    }
 }

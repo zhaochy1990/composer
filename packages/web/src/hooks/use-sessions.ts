@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import type { Session, CreateSessionRequest, PaginatedSessionLogs } from '@/types/generated';
@@ -125,16 +125,9 @@ export function useAnswerQuestion() {
 }
 
 export function useSessionLogs(id: string | undefined) {
-    return useInfiniteQuery({
+    return useQuery({
         queryKey: ['sessions', id, 'logs'],
-        queryFn: ({ pageParam }: { pageParam: number | undefined }) => {
-            const params = new URLSearchParams({ limit: '500' });
-            if (pageParam != null) params.set('before', String(pageParam));
-            return apiFetch<PaginatedSessionLogs>(`/sessions/${id}/logs?${params}`);
-        },
-        initialPageParam: undefined as number | undefined,
-        getNextPageParam: (lastPage: PaginatedSessionLogs) =>
-            lastPage.has_more ? lastPage.oldest_id ?? undefined : undefined,
+        queryFn: () => apiFetch<PaginatedSessionLogs>(`/sessions/${id}/logs`),
         enabled: !!id,
         staleTime: Infinity,
     });

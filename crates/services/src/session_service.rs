@@ -1015,6 +1015,10 @@ impl SessionService {
         composer_db::models::session_log::count_by_session(&self.db.pool, session_id).await
     }
 
+    pub async fn get_all_logs(&self, session_id: &str) -> anyhow::Result<Vec<SessionLog>> {
+        composer_db::models::session_log::list_all_by_session(&self.db.pool, session_id).await
+    }
+
     pub async fn has_logs_before(&self, session_id: &str, before_id: i64) -> anyhow::Result<bool> {
         composer_db::models::session_log::has_logs_before(&self.db.pool, session_id, before_id)
             .await

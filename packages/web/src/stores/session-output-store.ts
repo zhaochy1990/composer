@@ -13,7 +13,6 @@ interface SessionOutputStore {
     _seqCounters: Record<string, number>;
     _hydrated: Record<string, boolean>;
     append: (sessionId: string, log: { session_id: string; log_type: string; content: string }) => void;
-    prepend: (sessionId: string, logs: SessionLogEntry[]) => void;
     hydrate: (sessionId: string, logs: SessionLogEntry[]) => void;
     isHydrated: (sessionId: string) => boolean;
     clear: (sessionId: string) => void;
@@ -31,18 +30,6 @@ export const useSessionOutputStore = create<SessionOutputStore>((set, get) => ({
             return {
                 outputs: { ...state.outputs, [sessionId]: [...existing, entry] },
                 _seqCounters: { ...state._seqCounters, [sessionId]: nextSeq },
-            };
-        }),
-    prepend: (sessionId, logs) =>
-        set((state) => {
-            const existing = state.outputs[sessionId] ?? [];
-            // Renumber: prepended logs get seq 1..N, existing get N+1..
-            const prepended = logs.map((log, i) => ({ ...log, seq: i + 1 }));
-            const shifted = existing.map((e, i) => ({ ...e, seq: logs.length + i + 1 }));
-            const merged = [...prepended, ...shifted];
-            return {
-                outputs: { ...state.outputs, [sessionId]: merged },
-                _seqCounters: { ...state._seqCounters, [sessionId]: merged.length },
             };
         }),
     hydrate: (sessionId, logs) =>

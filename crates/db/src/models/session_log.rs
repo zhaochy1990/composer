@@ -117,6 +117,20 @@ pub async fn list_by_session_cursor(
     rows.into_iter().map(SessionLog::try_from).collect()
 }
 
+/// Fetch ALL logs for a session in chronological order (no limit).
+pub async fn list_all_by_session(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> anyhow::Result<Vec<SessionLog>> {
+    let rows = sqlx::query_as::<_, SessionLogRow>(
+        "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter().map(SessionLog::try_from).collect()
+}
+
 /// Check if there are logs with id < before_id for a session.
 pub async fn has_logs_before(
     pool: &SqlitePool,
