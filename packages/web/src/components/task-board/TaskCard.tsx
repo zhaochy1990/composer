@@ -10,7 +10,7 @@ interface TaskCardProps {
     projectNameMap?: Record<string, string>;
 }
 
-export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCardProps) {
+export function TaskCard({ task, onClick, projectNameMap }: TaskCardProps) {
     const priority = priorityConfig[task.priority] ?? priorityConfig[0];
 
     return (
@@ -41,11 +41,6 @@ export function TaskCard({ task, onClick, agentNameMap, projectNameMap }: TaskCa
                         >
                             {priority.label}
                         </span>
-                        {task.assigned_agent_id && (
-                            <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-700">
-                                {agentNameMap?.[task.assigned_agent_id] ?? shortId(task.assigned_agent_id)}
-                            </span>
-                        )}
                         {task.project_id && (
                             <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-300 dark:bg-teal-900/50 dark:text-teal-300 dark:border-teal-700">
                                 {projectNameMap?.[task.project_id] ?? shortId(task.project_id)}
