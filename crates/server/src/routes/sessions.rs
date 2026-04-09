@@ -99,8 +99,9 @@ async fn get_session_logs(State(state): State<Arc<AppState>>, Path(id): Path<Str
         };
         Ok(Json(PaginatedSessionLogs { logs, has_more, oldest_id, total_count }))
     } else {
-        // Default: return ALL logs
+        // Default: return all logs (safety-capped at 50k rows in DB layer)
         let logs = state.services.sessions.get_all_logs(&id).await?;
+        // All rows returned in one shot, so len == total
         let total_count = logs.len() as i64;
         Ok(Json(PaginatedSessionLogs { logs, has_more: false, oldest_id: None, total_count }))
     }

@@ -117,13 +117,14 @@ pub async fn list_by_session_cursor(
     rows.into_iter().map(SessionLog::try_from).collect()
 }
 
-/// Fetch ALL logs for a session in chronological order (no limit).
+/// Fetch all logs for a session in chronological order.
+/// Safety limit of 50 000 rows prevents OOM on pathologically long sessions.
 pub async fn list_all_by_session(
     pool: &SqlitePool,
     session_id: &str,
 ) -> anyhow::Result<Vec<SessionLog>> {
     let rows = sqlx::query_as::<_, SessionLogRow>(
-        "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC",
+        "SELECT * FROM session_logs WHERE session_id = ? ORDER BY id ASC LIMIT 50000",
     )
     .bind(session_id)
     .fetch_all(pool)
