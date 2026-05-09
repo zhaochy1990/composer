@@ -271,6 +271,7 @@ name = "composer-executors"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "command-group",
  "composer-api-types",
  "dashmap",

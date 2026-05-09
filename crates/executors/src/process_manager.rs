@@ -1,8 +1,9 @@
+use crate::adapters::AdapterRegistry;
 use crate::error::ExecutorError;
 use crate::protocol::{read_stdout_lines, ProtocolPeer};
 use crate::types::{CliMessage, SDKControlResponse, UserMessage};
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
-use composer_api_types::{LogType, WsEvent};
+use composer_api_types::{AgentType, LogType, WsEvent};
 use dashmap::DashMap;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -19,6 +20,7 @@ pub struct SpawnOptions {
     pub session_id: Uuid,
     pub agent_id: Uuid,
     pub task_id: Option<Uuid>,
+    pub agent_type: AgentType,
     pub prompt: String,
     pub working_dir: String,
     pub auto_approve: bool,
@@ -33,6 +35,7 @@ pub struct SpawnOptions {
 pub struct AgentProcess {
     pub session_id: Uuid,
     pub agent_id: Uuid,
+    pub agent_type: AgentType,
     pub cancel_token: CancellationToken,
     pub join_handle: JoinHandle<()>,
     pub peer: Arc<ProtocolPeer>,
@@ -69,6 +72,8 @@ pub struct AgentProcessManager {
     /// Per-session message queue: if a user sends input while Claude is mid-turn,
     /// the message is queued here and sent when the process is ready.
     pending_messages: Arc<DashMap<Uuid, String>>,
+    /// Registry of CLI adapters for different agent types.
+    registry: AdapterRegistry,
 }
 
 impl AgentProcessManager {
@@ -83,10 +88,21 @@ impl AgentProcessManager {
                 persist: persist_tx,
             },
             pending_messages: Arc::new(DashMap::new()),
+            registry: AdapterRegistry::new(),
         }
     }
 
+    /// Get a reference to the adapter registry (used by discovery).
+    pub fn registry(&self) -> &AdapterRegistry {
+        &self.registry
+    }
+
     pub async fn spawn(&self, opts: SpawnOptions) -> Result<(), ExecutorError> {
+        // Dispatch non-Claude CLI types to the generic spawn path
+        if opts.agent_type != AgentType::ClaudeCode {
+            return self.spawn_generic(opts).await;
+        }
+
         let session_id = opts.session_id;
         let agent_id = opts.agent_id;
         let task_id = opts.task_id;
@@ -673,6 +689,7 @@ impl AgentProcessManager {
             AgentProcess {
                 session_id,
                 agent_id,
+                agent_type: AgentType::ClaudeCode,
                 cancel_token,
                 join_handle: monitor_handle,
                 peer,
@@ -681,6 +698,190 @@ impl AgentProcessManager {
                 plan_file_path,
                 plan_content,
                 working_dir: opts.working_dir.clone(),
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Spawn a non-Claude Code CLI agent using a simplified process lifecycle.
+    /// The prompt is passed as a CLI argument. Stdout/stderr are captured as raw
+    /// text. Completion is determined by process exit code.
+    async fn spawn_generic(&self, opts: SpawnOptions) -> Result<(), ExecutorError> {
+        let session_id = opts.session_id;
+        let agent_id = opts.agent_id;
+        let task_id = opts.task_id;
+
+        let adapter = self.registry.get(&opts.agent_type).ok_or_else(|| {
+            ExecutorError::SpawnFailed(format!("No adapter for agent type {:?}", opts.agent_type))
+        })?;
+        let config = adapter.build_spawn_config(
+            &opts.prompt,
+            &opts.working_dir,
+            opts.auto_approve,
+            None,
+            None,
+        )?;
+
+        let mut cmd = Command::new(&config.command);
+        cmd.args(&config.args)
+            .current_dir(&opts.working_dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        for key in &config.env_removes {
+            cmd.env_remove(key);
+        }
+
+        let mut child = cmd
+            .group_spawn()
+            .map_err(|e| ExecutorError::SpawnFailed(e.to_string()))?;
+
+        let stdin = child
+            .inner()
+            .stdin
+            .take()
+            .ok_or_else(|| ExecutorError::SpawnFailed("Failed to capture stdin".into()))?;
+        let stdout = child
+            .inner()
+            .stdout
+            .take()
+            .ok_or_else(|| ExecutorError::SpawnFailed("Failed to capture stdout".into()))?;
+        let stderr = child
+            .inner()
+            .stderr
+            .take()
+            .ok_or_else(|| ExecutorError::SpawnFailed("Failed to capture stderr".into()))?;
+
+        let peer = Arc::new(ProtocolPeer::new(stdin));
+        let cancel_token = CancellationToken::new();
+        let cancel_clone = cancel_token.clone();
+        let event_tx = self.event_tx.clone();
+        let event_tx2 = self.event_tx.clone();
+        let event_tx3 = self.event_tx.clone();
+        let processes = self.processes.clone();
+
+        let _ = event_tx.send(WsEvent::SessionStarted {
+            session_id,
+            agent_id,
+            task_id,
+        });
+
+        // For non-stdin-protocol CLIs, prompt is in args; close stdin.
+        peer.close_stdin().await;
+
+        // Buffer to capture the last chunk of stdout for result_summary
+        // (used by workflow engine for {{step_N}} template interpolation).
+        let stdout_buffer: Arc<std::sync::Mutex<Vec<String>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let stdout_buf_capture = stdout_buffer.clone();
+
+        // Stdout reader (raw text — no JSON parsing)
+        let stdout_handle = tokio::spawn(async move {
+            let reader = tokio::io::BufReader::new(stdout);
+            let mut lines = tokio::io::AsyncBufReadExt::lines(reader);
+            while let Ok(Some(line)) = lines.next_line().await {
+                if !line.trim().is_empty() {
+                    let _ = event_tx.send(WsEvent::SessionOutput {
+                        session_id,
+                        log_type: LogType::Stdout,
+                        content: line.clone(),
+                    });
+                    let mut buf = stdout_buf_capture.lock().unwrap();
+                    buf.push(line);
+                    // Keep only last 50 lines to bound memory
+                    let len = buf.len();
+                    if len > 50 {
+                        buf.drain(..len - 50);
+                    }
+                }
+            }
+        });
+
+        // Stderr reader
+        let stderr_handle = tokio::spawn(async move {
+            let reader = tokio::io::BufReader::new(stderr);
+            let mut lines = tokio::io::AsyncBufReadExt::lines(reader);
+            while let Ok(Some(line)) = lines.next_line().await {
+                let _ = event_tx2.send(WsEvent::SessionOutput {
+                    session_id,
+                    log_type: LogType::Stderr,
+                    content: line,
+                });
+            }
+        });
+
+        // Monitor: wait for completion or cancellation
+        let monitor_handle = tokio::spawn(async move {
+            let was_cancelled = tokio::select! {
+                _ = cancel_clone.cancelled() => {
+                    tracing::info!("Session {} cancelled, killing process", session_id);
+                    kill_process_group(&mut child).await;
+                    true
+                }
+                _ = stdout_handle => {
+                    tracing::info!("Session {} stdout closed, waiting for process exit", session_id);
+                    false
+                }
+            };
+
+            let exit_status = child.wait().await;
+            let _ = stderr_handle.await;
+
+            if !was_cancelled {
+                // Build result_summary from captured stdout tail
+                let summary = {
+                    let buf = stdout_buffer.lock().unwrap();
+                    if buf.is_empty() {
+                        None
+                    } else {
+                        Some(buf.join("\n"))
+                    }
+                };
+
+                match exit_status {
+                    Ok(status) if status.success() => {
+                        let _ = event_tx3.send(WsEvent::SessionCompleted {
+                            session_id,
+                            result_summary: summary,
+                            claude_session_id: None,
+                        });
+                    }
+                    Ok(status) => {
+                        let _ = event_tx3.send(WsEvent::SessionFailed {
+                            session_id,
+                            error: format!("Process exited with code {:?}", status.code()),
+                            claude_session_id: None,
+                        });
+                    }
+                    Err(e) => {
+                        let _ = event_tx3.send(WsEvent::SessionFailed {
+                            session_id,
+                            error: format!("Failed to wait for process: {}", e),
+                            claude_session_id: None,
+                        });
+                    }
+                }
+            }
+
+            cancel_clone.cancel();
+            processes.remove(&session_id);
+        });
+
+        self.processes.insert(
+            session_id,
+            AgentProcess {
+                session_id,
+                agent_id,
+                agent_type: opts.agent_type,
+                cancel_token,
+                join_handle: monitor_handle,
+                peer,
+                claude_session_id: Arc::new(std::sync::Mutex::new(None)),
+                last_message_id: Arc::new(std::sync::Mutex::new(None)),
+                plan_file_path: Arc::new(std::sync::Mutex::new(None)),
+                plan_content: Arc::new(std::sync::Mutex::new(None)),
+                working_dir: opts.working_dir,
             },
         );
 
@@ -714,6 +915,11 @@ impl AgentProcessManager {
             .processes
             .get(&session_id)
             .ok_or_else(|| ExecutorError::NotRunning(session_id.to_string()))?;
+        if entry.agent_type != AgentType::ClaudeCode {
+            return Err(ExecutorError::UnsupportedOperation(
+                "interactive stdin input is only supported for Claude Code sessions".into(),
+            ));
+        }
         entry.peer.send_message(&UserMessage::new(message)).await
     }
 
@@ -817,6 +1023,11 @@ impl AgentProcessManager {
             .processes
             .get(&session_id)
             .ok_or_else(|| ExecutorError::NotRunning(session_id.to_string()))?;
+        if entry.agent_type != AgentType::ClaudeCode {
+            return Err(ExecutorError::UnsupportedOperation(
+                "control protocol is only supported for Claude Code sessions".into(),
+            ));
+        }
         entry.peer.send_message(&response).await
     }
 }

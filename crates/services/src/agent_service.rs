@@ -47,7 +47,7 @@ impl AgentService {
 
     pub async fn discover(&self) -> anyhow::Result<Vec<Agent>> {
         tracing::info!("Starting agent discovery");
-        let discovered = discovery::discover_agents().await;
+        let discovered = discovery::discover_agents(self.process_manager.registry()).await;
         let mut agents = Vec::new();
         for d in discovered {
             tracing::debug!(agent_type = ?d.agent_type, name = %d.name, "Discovered agent");

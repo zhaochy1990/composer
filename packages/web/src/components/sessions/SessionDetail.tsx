@@ -1,5 +1,7 @@
 import { ArrowLeft, Square, Play, Clock, Terminal, Bot, FileText, FolderGit2 } from 'lucide-react';
 import { useSession, useInterruptSession, useResumeSession } from '@/hooks/use-sessions';
+import { useAgents } from '@/hooks/use-agents';
+import { getAgentCapabilities } from '@/lib/agent-capabilities';
 import { SessionOutput } from './SessionOutput';
 import { StatusBadge } from './StatusBadge';
 import { shortId, formatDuration, formatTime } from '@/lib/utils';
@@ -13,6 +15,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
     const { data: session, isLoading, error } = useSession(sessionId);
     const interruptMutation = useInterruptSession();
     const resumeMutation = useResumeSession();
+    const { data: agents } = useAgents();
 
     if (isLoading) {
         return (
@@ -38,6 +41,9 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
             </div>
         );
     }
+
+    const agent = agents?.find((a) => a.id === session.agent_id);
+    const caps = agent ? getAgentCapabilities(agent.agent_type) : null;
 
     const isRunning = session.status === 'running';
     const isPaused = session.status === 'paused';
@@ -110,7 +116,7 @@ export function SessionDetail({ sessionId, onBack }: SessionDetailProps) {
                                     : 'Interrupt'}
                             </button>
                         )}
-                        {isPaused && (
+                        {isPaused && caps?.supportsResume && (
                             <button
                                 type="button"
                                 onClick={() =>

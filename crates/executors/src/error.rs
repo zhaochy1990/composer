@@ -10,6 +10,8 @@ pub enum ExecutorError {
     ProcessNotFound(String),
     #[error("no running process for session: {0}")]
     NotRunning(String),
+    #[error("operation not supported by this agent type: {0}")]
+    UnsupportedOperation(String),
     #[error("protocol error: {0}")]
     ProtocolError(String),
     #[error("io error: {0}")]

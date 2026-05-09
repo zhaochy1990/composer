@@ -11,11 +11,14 @@ pub use events::*;
 // Enums
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
 pub enum AgentType {
     ClaudeCode,
+    Codex,
+    GeminiCli,
+    CopilotCli,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, sqlx::Type)]

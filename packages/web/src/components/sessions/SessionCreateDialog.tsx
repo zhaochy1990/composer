@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { X, Plus } from 'lucide-react';
 import { useAgents } from '@/hooks/use-agents';
 import { useCreateSession } from '@/hooks/use-sessions';
+import { AGENT_TYPE_LABELS } from '@/lib/agent-capabilities';
 
 interface SessionCreateDialogProps {
     open: boolean;
@@ -102,7 +103,7 @@ export function SessionCreateDialog({
                                 </option>
                                 {availableAgents.map((agent) => (
                                     <option key={agent.id} value={agent.id}>
-                                        {agent.name} ({agent.agent_type})
+                                        {agent.name} ({AGENT_TYPE_LABELS[agent.agent_type] ?? agent.agent_type})
                                         {agent.status === 'busy'
                                             ? ' - busy'
                                             : ''}
