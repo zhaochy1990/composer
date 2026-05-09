@@ -518,6 +518,7 @@ async fn scenario_exit_on_result_completes_session() {
         session_id,
         agent_id,
         task_id: None,
+        agent_type: composer_api_types::AgentType::ClaudeCode,
         prompt: "Reply with exactly: EXIT_TEST. Nothing else.".to_string(),
         working_dir: test_repo_path(),
         auto_approve: true,

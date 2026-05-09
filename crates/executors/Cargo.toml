@@ -15,6 +15,7 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 which = { workspace = true }
 command-group = { workspace = true }
+async-trait = "0.1"
 composer-api-types = { path = "../api-types" }
 
 [target.'cfg(unix)'.dependencies]

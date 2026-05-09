@@ -5,7 +5,7 @@
 // Enums
 // ---------------------------------------------------------------------------
 
-export type AgentType = "claude_code";
+export type AgentType = "claude_code" | "codex" | "gemini_cli" | "copilot_cli";
 export type AgentStatus = "idle" | "busy" | "error" | "offline";
 export type AuthStatus = "unknown" | "authenticated" | "unauthenticated";
 export type TaskStatus = "backlog" | "in_progress" | "waiting" | "done";

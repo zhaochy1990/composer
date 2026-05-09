@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import type { Agent, AgentStatus, AuthStatus } from '@/types/generated';
 import { useDeleteAgent, useAgentHealth } from '@/hooks/use-agents';
+import { AGENT_TYPE_LABELS } from '@/lib/agent-capabilities';
 
 const statusColors: Record<AgentStatus, string> = {
     idle: 'bg-green-500',
@@ -72,7 +73,7 @@ export function AgentCard({ agent }: AgentCardProps) {
 
             <div className="flex items-center gap-2 mb-3">
                 <span className="text-xs px-2 py-0.5 rounded bg-bg-elevated text-text-secondary">
-                    {agent.agent_type}
+                    {AGENT_TYPE_LABELS[agent.agent_type] ?? agent.agent_type}
                 </span>
                 <span className={`text-xs px-2 py-0.5 rounded ${authBadgeClass(currentAuth)}`}>
                     {authBadgeLabel(currentAuth)}

@@ -2,6 +2,10 @@ import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useCreateAgent } from '@/hooks/use-agents';
+import { AGENT_TYPE_LABELS } from '@/lib/agent-capabilities';
+import type { AgentType } from '@/types/generated';
+
+const AGENT_TYPE_OPTIONS = Object.entries(AGENT_TYPE_LABELS) as [AgentType, string][];
 
 interface AgentRegisterDialogProps {
     open: boolean;
@@ -10,6 +14,7 @@ interface AgentRegisterDialogProps {
 
 export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps) {
     const [name, setName] = useState('');
+    const [agentType, setAgentType] = useState<AgentType>('claude_code');
     const createAgent = useCreateAgent();
 
     function handleSubmit(e: React.FormEvent) {
@@ -17,10 +22,11 @@ export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps)
         if (!name.trim()) return;
 
         createAgent.mutate(
-            { name: name.trim(), agent_type: 'claude_code' },
+            { name: name.trim(), agent_type: agentType },
             {
                 onSuccess: () => {
                     setName('');
+                    setAgentType('claude_code');
                     onClose();
                 },
             },
@@ -28,7 +34,7 @@ export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps)
     }
 
     return (
-        <Dialog.Root open={open} onOpenChange={(o) => { if (!o) { setName(''); onClose(); } }}>
+        <Dialog.Root open={open} onOpenChange={(o) => { if (!o) { setName(''); setAgentType('claude_code'); onClose(); } }}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
                 <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-bg-surface border border-border-primary rounded-xl shadow-2xl p-6">
@@ -63,10 +69,19 @@ export function AgentRegisterDialog({ open, onClose }: AgentRegisterDialogProps)
                         </div>
 
                         <div>
-                            <label className="block text-sm text-text-muted mb-1">Agent Type</label>
-                            <div className="w-full bg-bg-elevated border border-border-primary rounded-md px-3 py-2 text-sm text-text-muted">
-                                Claude Code
-                            </div>
+                            <label htmlFor="agent-type" className="block text-sm text-text-muted mb-1">
+                                Agent Type
+                            </label>
+                            <select
+                                id="agent-type"
+                                value={agentType}
+                                onChange={e => setAgentType(e.target.value as AgentType)}
+                                className="w-full bg-bg-elevated border border-border-primary rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                            >
+                                {AGENT_TYPE_OPTIONS.map(([value, label]) => (
+                                    <option key={value} value={value}>{label}</option>
+                                ))}
+                            </select>
                         </div>
 
                         {createAgent.isError && (
