@@ -126,11 +126,17 @@ export function SessionOutput({ sessionId, claudeSessionId }: SessionOutputProps
         }
     }, [output.length]);
 
-    // Parse stdout lines into structured messages, memoized to avoid re-parsing
+    // Parse stdout lines into structured messages, memoized to avoid re-parsing.
+    // Filter out tool_use and tool_result messages — they are noisy and not useful
+    // for end users watching the output window.
     const parsedEntries = useMemo(() => {
         return output.map((line) => ({
             ...line,
-            parsed: line.log_type === 'stdout' ? parseClaudeMessage(line.content, claudeSessionId) : null,
+            parsed: line.log_type === 'stdout'
+                ? parseClaudeMessage(line.content, claudeSessionId).filter(
+                    (msg) => msg.kind !== 'tool_use' && msg.kind !== 'tool_result',
+                )
+                : null,
         }));
     }, [output, claudeSessionId]);
 
